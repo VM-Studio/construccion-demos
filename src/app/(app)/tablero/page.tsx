@@ -1,8 +1,8 @@
-export default function TableroPage() {
-  return (
-    <main className="p-6">
-      <h1 className="text-title font-semibold">Tablero</h1>
-      <p className="text-muted">Próximamente</p>
-    </main>
-  );
+import type { Metadata } from "next";
+import { EnConstruccion } from "@/components/modulos/en-construccion";
+
+export const metadata: Metadata = { title: "Tablero" };
+
+export default function Page() {
+  return <EnConstruccion titulo="Tablero" descripcion="Resumen del negocio" permiso="tablero.ver" />;
 }

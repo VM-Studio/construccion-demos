@@ -98,30 +98,34 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Impresión: sólo se imprime el portal del documento (ver PrintPreview). */
+.print-portal {
+  display: none;
+}
 @media print {
   @page {
     size: A4;
-    margin: 14mm;
+    margin: 12mm;
   }
+  html,
   body {
     background: #fff !important;
+  }
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+  .print-portal {
+    display: block !important;
+  }
+  .print-area {
+    max-width: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
   }
   .no-print {
     display: none !important;
   }
-  .print-only {
-    display: block !important;
-  }
-  .print-area {
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
-  }
   tr {
     break-inside: avoid;
   }
-}
-
-.print-only {
-  display: none;
 }

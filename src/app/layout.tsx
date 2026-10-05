@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import { BRAND } from "@/config/brand";
+import { Providers } from "@/components/layout/providers";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -18,7 +19,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es-AR" className={inter.variable}>
       <body className="font-sans antialiased">
-        {children}
+        <Providers>{children}</Providers>
         <Toaster
           position="bottom-right"
           toastOptions={{

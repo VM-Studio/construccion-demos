@@ -96,6 +96,7 @@
 
 @utility tnum {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Impresión: sólo se imprime el portal del documento (ver PrintPreview). */

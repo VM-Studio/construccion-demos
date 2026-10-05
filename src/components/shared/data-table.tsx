@@ -235,7 +235,7 @@ export function DataTable<T>({
                   {columns.map((c) => (
                     <td
                       key={c.key}
-                      className={cn("px-3 py-1.5 align-middle text-ink", alignClass(c.align), c.hideOnMobile && "hidden md:table-cell", c.className)}
+                      className={cn("px-3 py-1.5 align-middle text-ink", alignClass(c.align), c.align === "right" && "whitespace-nowrap", c.hideOnMobile && "hidden md:table-cell", c.className)}
                     >
                       {c.cell(row)}
                     </td>

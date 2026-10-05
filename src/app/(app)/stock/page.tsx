@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { StockView } from "@/components/modulos/stock/stock-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Stock" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Stock" descripcion="Posición por depósito, movimientos, transferencias y ajustes" permiso="stock.ver" />;
+  return (
+    <RequierePermiso permiso="stock.ver">
+      <Suspense>
+        <StockView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

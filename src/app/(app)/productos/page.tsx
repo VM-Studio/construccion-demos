@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { ProductosView } from "@/components/modulos/productos/productos-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Productos" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Productos" descripcion="Catálogo y listas de precios" permiso="productos.ver" />;
+  return (
+    <RequierePermiso permiso="productos.ver">
+      <Suspense>
+        <ProductosView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

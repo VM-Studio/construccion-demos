@@ -67,3 +67,18 @@ export function variacion(actual: number, anterior: number): number | null {
   if (!anterior) return actual ? null : 0;
   return (actual - anterior) / Math.abs(anterior);
 }
+
+/** Día local `yyyy-MM-dd` de una fecha ISO (para comparar por día calendario). */
+export function diaLocal(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function esHoy(iso: string): boolean {
+  return diaLocal(iso) === diaLocal(new Date());
+}
+
+/** Diferencia en días calendario entre una fecha y hoy (negativo = pasado). */
+export function diasDesdeHoy(iso: string): number {
+  return differenceInCalendarDays(new Date(iso), new Date());
+}

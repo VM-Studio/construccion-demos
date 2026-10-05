@@ -16,12 +16,21 @@ import { cn } from "@/lib/utils";
 import { SidebarNav } from "./sidebar";
 import { CommandPalette } from "./command-palette";
 
+const REDIRECCION: Record<string, string> = {
+  "/compras/oc": "/compras",
+  "/ventas/pedidos": "/ventas?tab=pedidos",
+  "/ventas/presupuestos": "/ventas?tab=presupuestos",
+  "/cuentas-corrientes/clientes": "/cuentas-corrientes",
+  "/cuentas-corrientes/proveedores": "/cuentas-corrientes?tab=proveedores",
+};
+
 function useBreadcrumb() {
   const pathname = usePathname();
   const db = useDb();
   const partes = pathname.split("/").filter(Boolean);
   return partes.map((seg, i) => {
-    const href = "/" + partes.slice(0, i + 1).join("/");
+    const ruta = "/" + partes.slice(0, i + 1).join("/");
+    const href = REDIRECCION[ruta] ?? ruta;
     let label = SEGMENTOS[seg];
     if (!label) {
       const ent =
@@ -105,7 +114,7 @@ export function Header() {
       </Button>
       <nav aria-label="Ubicación" className="hidden min-w-0 flex-1 items-center gap-1 text-[13px] sm:flex">
         {crumbs.map((c, i) => (
-          <React.Fragment key={c.href}>
+          <React.Fragment key={`${i}-${c.href}`}>
             {i > 0 && <ChevronRight className="size-3.5 shrink-0 text-disabled" />}
             {i === crumbs.length - 1 ? (
               <span className="truncate font-medium text-ink">{c.label}</span>

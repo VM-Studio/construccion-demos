@@ -50,7 +50,8 @@ export function ActualizacionMasivaDialog({
     if (inicial?.modo) setModo(inicial.modo);
     if (inicial?.pct !== undefined) setPct(inicial.pct);
     setValorAlcance("");
-  }, [open, inicial, seleccionados]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const marcas = React.useMemo(() => [...new Set(db.productos.map((p) => p.marca).filter(Boolean) as string[])].sort(), [db.productos]);
 

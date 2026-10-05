@@ -105,7 +105,7 @@ export function ItemsGrid<T extends LineaBase>({
                 <tr key={i.id} className="border-t border-border align-top">
                   <td className="px-3 py-2">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-[11px] text-muted">{p.codigo}</span>
+                      <span className="whitespace-nowrap font-mono text-[11px] text-muted">{p.codigo}</span>
                       <span className="text-ink">{p.nombre}</span>
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted">

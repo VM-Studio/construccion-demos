@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { DesacopioView } from "@/components/modulos/acopios/desacopio-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Estado de desacopio" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Estado de desacopio" descripcion="Detalle del acopio con descarga en PDF y Excel" permiso="acopios.ver" />;
+  return (
+    <RequierePermiso permiso="acopios.ver">
+      <Suspense>
+        <DesacopioView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

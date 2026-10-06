@@ -30,6 +30,7 @@ import { EditarClienteDialog } from "@/components/modulos/ventas/cliente-form";
 import { PendientesTabla } from "@/components/modulos/ventas/pendientes-tabla";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { EstadoCuenta } from "@/components/modulos/cuentas/estado-cuenta";
+import { DescargarDesacopio } from "@/components/modulos/acopios/descargar-desacopio";
 
 export function ClienteFicha({ id }: { id: string }) {
   const db = useDb();
@@ -271,6 +272,7 @@ function AcopiosCliente({ id }: { id: string }) {
       cell: (f) => (
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <Button size="sm" variant="ghost" onClick={() => router.push(`/acopios/desacopio?acopio=${f.acopio.id}`)}>Estado de desacopio</Button>
+          <DescargarDesacopio acopioId={f.acopio.id} size="sm" />
         </div>
       ),
     },

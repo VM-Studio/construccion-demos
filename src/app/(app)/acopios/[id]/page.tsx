@@ -1,8 +1,17 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { AcopioDetalle } from "@/components/modulos/acopios/acopio-detalle";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Acopio" };
 
-export default function Page() {
-  return <EnConstruccion titulo="Acopio" descripcion="Detalle del acopio" permiso="acopios.ver" actualizacion />;
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return (
+    <RequierePermiso permiso="acopios.ver">
+      <Suspense>
+        <AcopioDetalle key={id} id={id} />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

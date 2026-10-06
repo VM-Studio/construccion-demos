@@ -5,6 +5,7 @@ import { RequierePermiso } from "@/components/shared/requiere-permiso";
 import { REPORTES } from "./catalogo";
 import { ReporteRentabilidadClientes, ReporteRentabilidadPedidos, ReporteRentabilidadProductos, ReporteVentas } from "./reportes-ventas";
 import { ReporteDeudaMercaderia, ReporteMovimientos, ReporteStockCritico, ReporteValorizacion } from "./reportes-stock";
+import { ReporteAcopiosProveedores, ReportePendientes, ReporteRemitosPendientes, ReporteTiemposDespacho } from "./reportes-m7";
 import { ReporteAuditoria, ReporteCobranzas, ReporteCompras, ReporteDespachos } from "./reportes-otros";
 
 const COMPONENTES: Record<string, () => React.ReactNode> = {
@@ -14,6 +15,10 @@ const COMPONENTES: Record<string, () => React.ReactNode> = {
   "rentabilidad-clientes": ReporteRentabilidadClientes,
   valorizacion: ReporteValorizacion,
   "deuda-mercaderia": ReporteDeudaMercaderia,
+  "pendientes-entrega": ReportePendientes,
+  "acopios-proveedores": ReporteAcopiosProveedores,
+  "tiempos-despacho": ReporteTiemposDespacho,
+  "remitos-pendientes": ReporteRemitosPendientes,
   compras: ReporteCompras,
   "stock-critico": ReporteStockCritico,
   cobranzas: ReporteCobranzas,

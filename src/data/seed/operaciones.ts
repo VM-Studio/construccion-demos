@@ -120,8 +120,13 @@ export function generarOperaciones(e: EntradaOps): SalidaOps {
   const obrasDe = (clienteId: string) => obras.filter((o) => o.clienteId === clienteId);
   const ahoraIso = ahora.toISOString();
   const inicioHoy = new Date(cal.hoy);
-  /** ISO de hace `m` minutos (nunca antes de las 7:00 de hoy). */
-  const hace = (m: number) => new Date(Math.max(ahora.getTime() - m * 60000, inicioHoy.getTime() + 7 * 3600000 + (300 - m) * 1000)).toISOString();
+  /**
+   * ISO de hace `m` minutos para los despachos de hoy. Si el seed se genera temprano (poco
+   * margen desde las 6:30), los tiempos se escalan para que todo quede dentro del día.
+   */
+  const margen = Math.max(20, (ahora.getTime() - (inicioHoy.getTime() + 6.5 * 3600000)) / 60000);
+  const escala = Math.min(1, margen / 215);
+  const hace = (m: number) => new Date(ahora.getTime() - Math.round(m * escala) * 60000).toISOString();
   const sumarMin = (iso: string, m: number) => new Date(Date.parse(iso) + m * 60000).toISOString();
   const sumarDias = (iso: string, d: number) => new Date(Date.parse(iso) + d * 86400000).toISOString();
   const offDe = (iso: string) => Math.round((Date.parse(iso) - cal.hoy.getTime()) / 86400000);

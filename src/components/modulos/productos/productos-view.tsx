@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Download, FileUp, Package, Plus, TrendingUp } from "lucide-react";
-import { useDb, usePosiciones, usePuede, useDepositoActivo } from "@/store/selectors";
+import { useDb, usePosiciones, usePuede, useDepositoActivo, useUnidadNegocio } from "@/store/selectors";
 import { obtenerPrecio } from "@/domain/precios";
 import { UNIDAD_LABEL } from "@/domain/estados";
 import type { Producto } from "@/domain/types";
@@ -29,7 +29,7 @@ export function ProductosView() {
   const verCostos = usePuede("margenes.ver");
   const puedeEditar = usePuede("productos.editar");
   const puedePrecios = usePuede("precios.editar");
-  const [lista, setLista] = React.useState("lst_cor");
+  const [lista, setLista] = React.useState("lst_gen");
   const [rubro, setRubro] = React.useState("");
   const [proveedor, setProveedor] = React.useState("");
   const [estado, setEstado] = React.useState(params.get("filtro") === "bajo-minimo" ? "BAJO" : "ACTIVOS");
@@ -38,6 +38,7 @@ export function ProductosView() {
   const [importar, setImportar] = React.useState(false);
   const [nuevo, setNuevo] = React.useState(false);
   const productoId = params.get("id");
+  const un = useUnidadNegocio();
 
   const rubroNombre = React.useMemo(() => new Map(db.rubros.map((r) => [r.id, r.nombre])), [db.rubros]);
   const provNombre = React.useMemo(() => new Map(db.proveedores.map((p) => [p.id, p.razonSocial])), [db.proveedores]);
@@ -45,6 +46,7 @@ export function ProductosView() {
   const filas = React.useMemo(
     () =>
       db.productos.filter((p) => {
+        if (un && p.unidadNegocioId !== un) return false;
         if (rubro && p.rubroId !== rubro) return false;
         if (proveedor && p.proveedorHabitualId !== proveedor) return false;
         if (estado === "ACTIVOS" && !p.activo) return false;
@@ -52,7 +54,7 @@ export function ProductosView() {
         if (estado === "BAJO" && posiciones.get(p.id)?.estado === "OK") return false;
         return true;
       }),
-    [db.productos, rubro, proveedor, estado, posiciones],
+    [db.productos, rubro, proveedor, estado, posiciones, un],
   );
 
   const abrir = (id: string) => router.replace(`/productos?id=${id}`, { scroll: false });

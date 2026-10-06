@@ -71,7 +71,8 @@ export function ReporteLayout({
   const usuario = useUsuario();
   const sucursalId = useSucursalActiva();
   const [imprimir, setImprimir] = React.useState(false);
-  const sucursal = sucursalId ? db.sucursales.find((s) => s.id === sucursalId)?.nombre : "Todas las sucursales";
+  const unId = useStore((s) => s.ui.unidadNegocioId);
+  const sucursal = `${sucursalId ? db.sucursales.find((s) => s.id === sucursalId)?.nombre : "Todas las sucursales"} · ${unId ? db.unidadesNegocio.find((u) => u.id === unId)?.nombre : "todas las unidades de negocio"}`;
   const aplicados = [periodo ? `Período ${formatDate(periodo.desde)} – ${formatDate(periodo.hasta)}` : `Al ${formatDateTime(new Date())}`, sucursal, filtrosTexto].filter(Boolean).join(" · ");
   const pie = `Generado por ${BRAND.sistema} · ${formatDateTime(new Date())} · ${usuario?.nombre ?? ""}`;
 
@@ -104,7 +105,7 @@ export function ReporteLayout({
         <FilterBar className="rounded-card border border-border bg-surface p-3">
           {periodo && onPeriodo && <DateRangePicker value={periodo} onChange={onPeriodo} presets={PRESETS_REPORTE} />}
           {filtros}
-          <span className="ml-auto text-[12px] text-muted">{sucursal} · cambiala desde el selector de arriba</span>
+          <span className="ml-auto text-[12px] text-muted">{sucursal} · se cambian desde los selectores de arriba</span>
         </FilterBar>
         {kpis && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{kpis}</div>}
         {grafico && (

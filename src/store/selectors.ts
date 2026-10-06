@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useStore } from "./index";
 import type { Acopio, AcopioProveedor, Comprobante, EstadoInicial, NotaPedido, Producto } from "@/domain/types";
 import { calcularRentabilidadPedido, type Rentabilidad } from "@/domain/ventas";
@@ -73,6 +74,14 @@ export function useVeCircuito2(): boolean {
 /** Quita lo de circuito 2 si el usuario no tiene el permiso "ver circuito 2". */
 export function filtrarCircuito<T extends { circuito?: 1 | 2 }>(items: T[], veC2: boolean): T[] {
   return veC2 ? items : items.filter((i) => i.circuito !== 2);
+}
+
+/** Filtro global para métricas y reportes: sucursal, unidad de negocio y circuito 2. */
+export function useFiltroMetricas(): { sucursalId: string | null; unidadNegocioId: string | null; circuito2: boolean } {
+  const sucursalId = useSucursalActiva();
+  const unidadNegocioId = useUnidadNegocio();
+  const circuito2 = useVeCircuito2();
+  return React.useMemo(() => ({ sucursalId, unidadNegocioId, circuito2 }), [sucursalId, unidadNegocioId, circuito2]);
 }
 
 /** Productos de la unidad de negocio activa. */

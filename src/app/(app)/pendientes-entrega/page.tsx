@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { PendientesEntregaView } from "@/components/modulos/ventas/pendientes-entrega-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Pendientes de entrega" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Pendientes de entrega" descripcion="Todo lo vendido o retirado de acopio que todavía no se entregó" permiso="ventas.ver" />;
+  return (
+    <RequierePermiso permiso="ventas.ver">
+      <Suspense>
+        <PendientesEntregaView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

@@ -27,8 +27,9 @@ import { ReporteLayout } from "./reporte-layout";
 export function ReporteValorizacion() {
   const db = useDb();
   const suc = useSucursalActiva();
+  const unR = useUnidadNegocio();
   const posiciones = usePosiciones();
-  const [lista, setLista] = React.useState("lst_cor");
+  const [lista, setLista] = React.useState("lst_gen");
   const deps = suc ? db.depositos.filter((d) => d.sucursalId === suc) : db.depositos;
   const filas = React.useMemo(
     () =>
@@ -39,8 +40,8 @@ export function ReporteValorizacion() {
           const precio = obtenerPrecio(p.id, lista, db.precios);
           return { p, fis, porDep: Object.fromEntries(deps.map((d) => [d.id, Math.max(0, pos.porDeposito[d.id]?.fisico ?? 0) * p.costoPromedio])), prom: fis * p.costoPromedio, ult: fis * p.costoUltimo, venta: fis * precio };
         })
-        .filter((f) => f.fis > 0),
-    [posiciones, deps, db.precios, lista],
+        .filter((f) => f.fis > 0 && (!unR || f.p.unidadNegocioId === unR)),
+    [posiciones, deps, db.precios, lista, unR],
   );
   type F = (typeof filas)[number];
   const t = filas.reduce((a, f) => ({ prom: a.prom + f.prom, ult: a.ult + f.ult, venta: a.venta + f.venta }), { prom: 0, ult: 0, venta: 0 });

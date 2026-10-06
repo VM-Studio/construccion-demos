@@ -26,7 +26,9 @@ export interface FilaPendiente extends LineaPendiente {
   acopioId?: string;
   fechaNP: string;
   programada?: string;
-  despacho?: { id: string; numero: string; estado: string; vehiculo?: string };
+  despacho?: { id: string; numero: string; estado: string; vehiculo?: string; chofer?: string };
+  vendedorId: string;
+  modalidad: "ENVIO" | "RETIRA";
   dias: number;
 }
 
@@ -51,7 +53,9 @@ export function useFilasPendientes(lineas: LineaPendiente[]): FilaPendiente[] {
         acopioId: a?.id,
         fechaNP: n.fecha,
         programada: d?.fechaProgramada ?? n.fechaEntregaProgramada,
-        despacho: d ? { id: d.id, numero: d.numero, estado: d.estado, vehiculo: db.vehiculos.find((v) => v.id === d.vehiculoId)?.patente } : undefined,
+        despacho: d ? { id: d.id, numero: d.numero, estado: d.estado, vehiculo: db.vehiculos.find((v) => v.id === d.vehiculoId)?.patente, chofer: db.choferes.find((c) => c.id === d.choferId)?.nombre } : undefined,
+        vendedorId: n.vendedorId,
+        modalidad: d?.modalidad ?? n.modalidadEntrega,
         dias: Math.floor((hoy - Date.parse(n.fecha)) / 86_400_000),
       };
     });
@@ -125,6 +129,8 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
     { key: "q", header: "Pendiente", align: "right", sortable: true, sortValue: (f) => f.pendiente, cell: (f) => <span className="font-medium tnum">{formatQty(f.pendiente, prod(f.productoId)?.unidad ?? "UN")}</span> },
     { key: "$", header: "$ pendiente", align: "right", sortable: true, sortValue: (f) => f.pendiente * f.precio, cell: (f) => <span className="tnum">{formatMoney(f.pendiente * f.precio, { decimals: false })}</span> },
     { key: "np", header: "Origen", cell: (f) => <span className="block whitespace-nowrap"><Link href={`/ventas/notas-pedido/${f.notaPedidoId}`} onClick={(e) => e.stopPropagation()} className="font-mono text-[12px] hover:underline">{f.numeroNP}</Link><span className="block text-[11px] text-muted">{f.origen}</span></span> },
+    { key: "mo", header: "Modalidad", cell: (f) => <span className="whitespace-nowrap text-[12px] text-muted">{f.modalidad === "ENVIO" ? "Envío" : "Retira"}</span>, hideOnMobile: true },
+    { key: "di", header: "Días", align: "right", sortable: true, sortValue: (f) => f.dias, cell: (f) => <span className={cn("tnum", !f.despacho && f.dias > 30 ? "font-semibold text-danger" : "text-muted")}>{f.dias}</span>, hideOnMobile: true },
     { key: "f", header: "Programado", sortable: true, sortValue: (f) => f.programada ?? "9", cell: (f) => <span className={cn("whitespace-nowrap", !f.programada && f.dias > 30 && "font-medium text-danger")}>{f.programada ? formatDate(f.programada) : `Sin fecha · hace ${f.dias} d`}</span> },
     {
       key: "d",
@@ -134,12 +140,13 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
           <Link href={`/despachos?despacho=${f.despacho.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 whitespace-nowrap">
             <span className="font-mono text-[11px]">{f.despacho.numero}</span>
             <StatusBadge tipo="DESPACHO" estado={f.despacho.estado} />
-            {f.despacho.vehiculo && <span className="text-[11px] text-muted">{f.despacho.vehiculo}</span>}
+            {f.despacho.vehiculo && <span className="text-[11px] text-muted">{f.despacho.vehiculo}{f.despacho.chofer ? ` · ${f.despacho.chofer}` : ""}</span>}
           </Link>
         ) : (
           <Badge variant="warning">Sin programar</Badge>
         ),
     },
+    ...(mostrarCliente ? [{ key: "v", header: "Vendedor", cell: (f: FilaPendiente) => <span className="whitespace-nowrap text-[12px] text-muted">{db.usuarios.find((u) => u.id === f.vendedorId)?.nombre ?? "—"}</span>, hideOnMobile: true }] : []),
   ];
   return (
     <>

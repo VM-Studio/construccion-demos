@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { DepositoEnVivo } from "@/components/modulos/despachos/en-vivo";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Depósito en vivo" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Depósito en vivo" descripcion="Espera, preparación y finalizados del día" permiso="despachos.ver" />;
+  return (
+    <RequierePermiso permiso="despachos.ver">
+      <Suspense>
+        <DepositoEnVivo />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

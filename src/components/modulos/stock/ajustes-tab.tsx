@@ -121,8 +121,12 @@ function NuevoAjuste({ open, onClose, productoInicial }: { open: boolean; onClos
             { header: "Motivo", width: 190, cell: (i, up) => <Select size="sm" aria-label="Motivo" value={i.motivo} onValueChange={(v) => up({ motivo: v })} options={motivos.map((m) => ({ value: m.codigo, label: m.nombre }))} /> },
           ]}
           avisoLinea={(i, p) => {
-            const fis = posiciones.get(p.id)?.porDeposito[deposito]?.fisico ?? 0;
-            return i.signo === -1 && i.cantidad > fis ? { texto: `No se puede restar más que el físico (${formatQty(fis, p.unidad)})`, tono: "danger" } : undefined;
+            const pos = posiciones.get(p.id)?.porDeposito[deposito];
+            const fis = pos?.fisico ?? 0;
+            if (i.signo === -1 && i.cantidad > fis) return { texto: `No se puede restar más que el físico (${formatQty(fis, p.unidad)})`, tono: "danger" };
+            const disp = pos?.disponible ?? 0;
+            if (i.signo === -1 && i.cantidad > disp) return { texto: `Atención: deja el disponible en ${formatQty(disp - i.cantidad, p.unidad)} (hay ${formatQty((pos?.pendiente ?? 0) + (pos?.reservado ?? 0), p.unidad)} pendientes de entrega)`, tono: "warning" };
+            return undefined;
           }}
         />
         <div className="flex items-center justify-between rounded-control border border-border bg-subtle px-3 py-2 text-[13px]">

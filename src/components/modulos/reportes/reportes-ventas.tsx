@@ -4,9 +4,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { useDb, useSaldosClientes, useSucursalActiva } from "@/store/selectors";
+import { useDb, useFiltroMetricas, useSaldosClientes } from "@/store/selectors";
+import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { EstadoInicial } from "@/domain/types";
-import { claveFecha, pedidosVendidos, rankingProductos, type Rango } from "@/domain/metricas";
+import { claveFecha, pedidosVendidos, rankingProductos, type FiltroMetricas, type Rango } from "@/domain/metricas";
 import { calcularRentabilidadACostoActual, calcularRentabilidadItem } from "@/domain/ventas";
 import { TIPO_CLIENTE_LABEL } from "@/domain/estados";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -50,7 +51,7 @@ interface FilaVentas {
   delta: number | null;
 }
 
-function agrupar(db: EstadoInicial, r: Rango, suc: string | null, dim: Dim) {
+function agrupar(db: EstadoInicial, r: Rango, suc: FiltroMetricas, dim: Dim) {
   const m = new Map<string, { label: string; unidades: number; facturado: number; costo: number }>();
   for (const v of pedidosVendidos(db, r, suc)) {
     const p = v.pedido;
@@ -103,7 +104,7 @@ function agrupar(db: EstadoInicial, r: Rango, suc: string | null, dim: Dim) {
 
 export function ReporteVentas() {
   const db = useDb();
-  const suc = useSucursalActiva();
+  const suc = useFiltroMetricas();
   const [periodo, setPeriodo] = usePeriodoReporte();
   const [dim, setDim] = React.useState<Dim>("semana");
   const filas: FilaVentas[] = React.useMemo(() => {
@@ -161,7 +162,7 @@ export function ReporteVentas() {
 export function ReporteRentabilidadPedidos() {
   const db = useDb();
   const router = useRouter();
-  const suc = useSucursalActiva();
+  const suc = useFiltroMetricas();
   const [periodo, setPeriodo] = usePeriodoReporte();
   const [umbral, setUmbral] = React.useState(0);
   const costo = React.useCallback((id: string) => db.productos.find((p) => p.id === id)?.costoUltimo ?? 0, [db.productos]);
@@ -178,7 +179,9 @@ export function ReporteRentabilidadPedidos() {
   type F = (typeof filas)[number];
   const t = filas.reduce((a, f) => ({ i: a.i + f.ingreso, c: a.c + f.costo, ch: a.ch + f.costoHoy }), { i: 0, c: 0, ch: 0 });
   const columnas: Column<F>[] = [
-    { key: "n", header: "Pedido", footer: "Total", sortable: true, sortValue: (f) => f.pedido.numero, cell: (f) => <span className="whitespace-nowrap font-mono text-[12px]">{f.pedido.numero}</span> },
+    { key: "n", header: "Nota de pedido", footer: "Total", sortable: true, sortValue: (f) => f.pedido.numero, cell: (f) => <span className="whitespace-nowrap font-mono text-[12px]">{f.pedido.numero}</span> },
+    { key: "ci", header: "Circuito", cell: (f) => <CircuitoBadge circuito={f.pedido.circuito} corto /> },
+    { key: "or", header: "Origen", cell: (f) => <span className="text-[12px] text-muted">{f.pedido.origen === "ACOPIO" ? "Acopio" : "Nueva"}</span> },
     { key: "cli", header: "Cliente", cell: (f) => <span className="block min-w-[150px]">{f.cliente?.nombreFantasia ?? f.cliente?.razonSocial}</span> },
     { key: "fe", header: "Fecha venta", sortable: true, sortValue: (f) => f.fecha, cell: (f) => <span className="text-muted">{formatDate(f.fecha)}</span> },
     { key: "i", header: "Ingreso", align: "right", footer: <span className="tnum">{formatMoney(t.i, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.ingreso, cell: (f) => <span className="tnum">{formatMoney(f.ingreso, { decimals: false })}</span> },
@@ -211,7 +214,7 @@ export function ReporteRentabilidadPedidos() {
         </>
       }
       exportar={() => ({
-        head: ["Pedido", "Cliente", "Fecha", "Ingreso", "Costo snapshot", "Margen $", "Margen %", "Costo actual", "Margen hoy %"],
+        head: ["Nota de pedido", "Cliente", "Fecha", "Ingreso", "Costo snapshot", "Margen $", "Margen %", "Costo actual", "Margen hoy %"],
         rows: filas.map((f) => [f.pedido.numero, f.cliente?.razonSocial, formatDate(f.fecha), Math.round(f.ingreso), Math.round(f.costo), Math.round(f.margen), Math.round(f.margenPct * 1000) / 10, Math.round(f.costoHoy), Math.round(f.margenHoyPct * 1000) / 10]),
         foot: ["Total", "", "", Math.round(t.i), Math.round(t.c), Math.round(t.i - t.c), t.i ? Math.round(((t.i - t.c) / t.i) * 1000) / 10 : 0, Math.round(t.ch), t.i ? Math.round(((t.i - t.ch) / t.i) * 1000) / 10 : 0],
       })}
@@ -226,12 +229,12 @@ export function ReporteRentabilidadPedidos() {
 export function ReporteRentabilidadProductos() {
   const db = useDb();
   const router = useRouter();
-  const suc = useSucursalActiva();
+  const suc = useFiltroMetricas();
   const [periodo, setPeriodo] = usePeriodoReporte();
   const [rubro, setRubro] = React.useState("");
   const dias = diasDelPeriodo(periodo);
   const filas = React.useMemo(() => {
-    const dep = suc ? db.sucursales.find((s) => s.id === suc)?.depositoId : null;
+    const dep = suc.sucursalId ? db.sucursales.find((s) => s.id === suc.sucursalId)?.depositoId : null;
     return rankingProductos(db, periodo, suc)
       .map((r) => {
         const p = db.productos.find((x) => x.id === r.productoId)!;
@@ -290,7 +293,7 @@ export function ReporteRentabilidadProductos() {
 export function ReporteRentabilidadClientes() {
   const db = useDb();
   const router = useRouter();
-  const suc = useSucursalActiva();
+  const suc = useFiltroMetricas();
   const saldos = useSaldosClientes();
   const [periodo, setPeriodo] = usePeriodoReporte();
   const filas = React.useMemo(() => {

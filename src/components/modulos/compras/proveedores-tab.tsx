@@ -196,7 +196,7 @@ function ProductosProveedor({ id }: { id: string }) {
       <tbody>
         {prods.map((p) => (
           <tr key={p.id} className="border-b border-border">
-            <td className="py-2"><Link href={`/productos?id=${p.id}`} className="hover:underline"><span className="mr-2 font-mono text-[11px] text-muted">{p.codigo}</span>{p.nombre}</Link></td>
+            <td className="py-2"><Link href={`/productos?id=${p.id}`} className="hover:underline"><span className="mr-2 whitespace-nowrap font-mono text-[11px] text-muted">{p.codigo}</span>{p.nombre}</Link></td>
             {verCostos && <td className="py-2 text-right tnum">{formatMoney(p.costoUltimo)}</td>}
             <td className="py-2 text-right text-muted">{formatDate(p.fechaUltimoCosto)}</td>
           </tr>

@@ -191,7 +191,7 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
             <tbody>
               {t.items.map((i) => (
                 <tr key={i.productoId} className="border-b border-border">
-                  <td className="py-2"><span className="mr-2 font-mono text-[11px] text-muted">{prod(i.productoId)?.codigo}</span>{prod(i.productoId)?.nombre}</td>
+                  <td className="py-2"><span className="mr-2 whitespace-nowrap font-mono text-[11px] text-muted">{prod(i.productoId)?.codigo}</span>{prod(i.productoId)?.nombre}</td>
                   <td className="py-2 text-right tnum">{formatQty(i.cantidad, prod(i.productoId)?.unidad ?? "UN")}</td>
                 </tr>
               ))}

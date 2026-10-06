@@ -80,7 +80,7 @@ export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }
       sortValue: (p) => p.producto.codigo,
       cell: (p) => (
         <div className="min-w-[200px]">
-          <span className="mr-2 font-mono text-[11px] text-muted">{p.producto.codigo}</span>
+          <span className="mr-2 whitespace-nowrap font-mono text-[11px] text-muted">{p.producto.codigo}</span>
           {p.producto.nombre}
           <span className="ml-1 text-[11px] text-muted">({unidadCorta(p.producto.unidad)})</span>
         </div>

@@ -213,7 +213,7 @@ export function ActualizacionMasivaDialog({
                     return (
                       <tr key={`${c.productoId}-${c.listaPreciosId}`} className="h-9 border-t border-border">
                         <td className="max-w-0 truncate px-3">
-                          <span className="mr-2 font-mono text-[11px] text-muted">{prod(c.productoId)?.codigo}</span>
+                          <span className="mr-2 whitespace-nowrap font-mono text-[11px] text-muted">{prod(c.productoId)?.codigo}</span>
                           {prod(c.productoId)?.nombre}
                         </td>
                         <td className="px-3 text-muted">{lista(c.listaPreciosId)?.nombre}</td>

@@ -163,7 +163,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
                     return (
                       <tr key={l.itemOCId} className="border-t border-border align-top">
                         <td className="px-3 py-2">
-                          <div><span className="mr-2 font-mono text-[11px] text-muted">{p.codigo}</span>{p.nombre}</div>
+                          <div><span className="mr-2 whitespace-nowrap font-mono text-[11px] text-muted">{p.codigo}</span>{p.nombre}</div>
                           {verCostos && suba > umbral && <div className="mt-0.5 text-[11px] text-warning">El costo sube {formatPercent(suba)} respecto del último ({formatMoney(p.costoUltimo)})</div>}
                         </td>
                         <td className="px-3 py-2 pt-3 text-right tnum">{formatQty(l.pedido, p.unidad).split(" ")[0]}</td>

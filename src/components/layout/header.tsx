@@ -7,6 +7,7 @@ import { useStore } from "@/store";
 import { useDb, useUsuario } from "@/store/selectors";
 import { useAlertas } from "@/store/alertas";
 import { SEGMENTOS } from "@/config/navegacion";
+import { REPORTES } from "@/components/modulos/reportes/catalogo";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,7 +32,7 @@ function useBreadcrumb() {
   return partes.map((seg, i) => {
     const ruta = "/" + partes.slice(0, i + 1).join("/");
     const href = REDIRECCION[ruta] ?? ruta;
-    let label = SEGMENTOS[seg];
+    let label = SEGMENTOS[seg] ?? REPORTES.find((r) => r.slug === seg)?.titulo;
     if (!label) {
       const ent =
         db.pedidos.find((x) => x.id === seg) ??

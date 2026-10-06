@@ -126,7 +126,7 @@ export function RemitosView() {
   return (
     <>
       <PageHeader titulo={titulo} descripcion="Buscador global de remitos: picking, entregas, facturación y remito firmado." acciones={puedeVender && <Button onClick={() => setNuevo(true)}><Plus /> Nuevo remito</Button>} />
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4" data-tour="remitos-kpis">
         <KpiCard label="Remitos de hoy" valor={String(base.filter((r) => diaLocal(r.fecha) === hoy).length)} />
         <KpiCard label="En picking" valor={String(base.filter((r) => r.estado === "PICKING").length)} onClick={() => setEstado("PICKING")} />
         <KpiCard label="Hechos sin remito firmado" valor={String(base.filter(sinFirmar).length)} acento subtexto="lo que falta cerrar en papel" onClick={() => { setFirmados("NO"); setEstado("HECHO"); setPeriodo(periodoDesdePreset("30D")); }} />

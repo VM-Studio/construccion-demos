@@ -107,7 +107,9 @@ export const useStore = create<Store>()(
       partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false } }),
       merge: (persisted, current) => {
         const p = persisted as Partial<StoreBase> | undefined;
-        return { ...current, db: p?.db ?? current.db, ui: { ...current.ui, ...(p?.ui ?? {}) } };
+        // Un db guardado incompleto (versión vieja o reseteo) se descarta y se regenera el seed.
+        const valido = !!p?.db?.productos?.length && !!p.db.unidadesNegocio?.length && !!p.db.usuarios?.length;
+        return { ...current, db: valido ? p!.db! : current.db, ui: { ...current.ui, ...(p?.ui ?? {}) } };
       },
     },
   ),

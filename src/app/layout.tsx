@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     default: `${BRAND.empresa} · ${BRAND.sistema}`,
     template: `%s · ${BRAND.empresa}`,
   },
-  description: `${BRAND.sistema} para distribuidora de materiales de construcción. Demo de ${BRAND.agencia}.`,
+  description: `${BRAND.sistema} a medida para corralón y ferretería. Demo de ${BRAND.agencia}.`,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

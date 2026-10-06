@@ -7,6 +7,7 @@ import { useUsuario } from "@/store/selectors";
 import { Button } from "@/components/ui/button";
 
 interface Paso {
+  ruta: string;
   selector: string;
   titulo: string;
   texto: string;
@@ -14,16 +15,17 @@ interface Paso {
 }
 
 const PASOS: Paso[] = [
-  { selector: '[data-tour="kpis"]', titulo: "1 · Los números del negocio", texto: "Ventas, margen bruto, lo que hay por cobrar y la deuda de mercadería de los acopios. Todo sale de las operaciones reales y respeta la sucursal elegida arriba.", lado: "bottom" },
-  { selector: '[data-tour="alertas"]', titulo: "2 · Alertas", texto: "Stock bajo mínimo, acopios por vencer, deuda vencida, compras atrasadas y despachos del día. Cada una lleva directo a resolverla.", lado: "left" },
-  { selector: '[data-tour="stock-rubro"]', titulo: "3 · Stock y valorización", texto: "Cuánto vale el inventario por rubro y depósito a costo promedio. En Stock ves físico, comprometido y disponible con trazabilidad de cada movimiento.", lado: "top" },
-  { selector: '[data-tour="nav-compras"]', titulo: "4 · Compras → ingreso de mercadería", texto: "Órdenes de compra y recepción: al ingresar, se actualiza el stock, el costo promedio y te avisa si conviene subir precios.", lado: "right" },
-  { selector: '[data-tour="nav-ventas"]', titulo: "5 · Ventas y rentabilidad por pedido", texto: "Presupuesto → pedido → factura. Cada pedido congela el costo del momento y muestra su margen real y cuánto sería vendiendo hoy.", lado: "right" },
-  { selector: '[data-tour="nav-acopios"]', titulo: "6 · Acopios y deuda de mercadería", texto: "Lo que el cliente pagó y retira en partes. El sistema muestra cuánto debemos entregar y cuánto se achicó el margen por la suba de costos.", lado: "right" },
-  { selector: '[data-tour="nav-reportes"]', titulo: "7 · Reportes y exportación", texto: "Ventas, rentabilidad, valorización, cobranzas, despachos y auditoría. Todo se exporta a CSV o se imprime en PDF.", lado: "right" },
+  { ruta: "/inicio", selector: '[data-tour="modulos"]', titulo: "Inicio con módulos", texto: "Los módulos como en el sistema actual, pero más limpios: cada tarjeta lista sus páginas. Al entrar a una página, la barra lateral muestra el módulo y el botón «← Módulos» para volver y elegir otro.", lado: "top" },
+  { ruta: "/tablero", selector: '[data-tour="kpis"]', titulo: "Tablero", texto: "Ventas por unidad de negocio, margen, cuentas a cobrar, saldo de acopios de clientes y lo que falta retirar de los acopios con proveedores.", lado: "bottom" },
+  { ruta: "/clientes/cli_ramos", selector: '[data-tour="cliente-acciones"]', titulo: "Cliente: todo desde un lugar", texto: "Desde la ficha del cliente se acopia, se vende, se retira de un acopio, se cobra y se cotiza. Abajo: acopios, ventas, pendientes de entrega, cuenta corriente y remitos.", lado: "bottom" },
+  { ruta: "/ventas/notas-pedido/nueva?cliente=cli_ramos&origen=acopio", selector: '[data-tour="np-origen"]', titulo: "Venta con origen Acopio", texto: "Elegís el acopio del cliente: se cargan sus obras y los precios congelados, y el panel muestra el saldo antes y después del retiro.", lado: "bottom" },
+  { ruta: "/acopios/desacopio?acopio=aco_ramos_3633", selector: '[data-tour="descargar"]', titulo: "Estado de desacopio", texto: "El mismo detalle que usan hoy (NP, devoluciones y traspasos con saldo corrido) y la descarga en PDF o Excel con su formato.", lado: "left" },
+  { ruta: "/pendientes-entrega", selector: '[data-tour="pendientes-kpis"]', titulo: "Pendientes de entrega y disponible", texto: "Lo vendido que sigue en el galpón descuenta del disponible: no se puede sobrevender. Acá ves a quién se le debe cada bolsa y qué despacho tiene.", lado: "bottom" },
+  { ruta: "/remitos", selector: '[data-tour="remitos-kpis"]', titulo: "Remitos y remito firmado", texto: "Picking → hecho → subís la foto del remito firmado y queda guardada. El KPI muestra lo que falta cerrar en papel.", lado: "bottom" },
+  { ruta: "/proveedores/prov_01", selector: '[data-tour="proveedor-kpis"]', titulo: "Proveedores", texto: "Cuánto le debemos a cada proveedor y cuánta mercadería nos falta retirar de los acopios con ellos. Desde acá se retira con una OC contra el acopio.", lado: "bottom" },
 ];
 
-/** Recorrido guiado de 7 pasos (Popover de Radix anclado a elementos). */
+/** Recorrido guiado de 8 pasos (Popover de Radix anclado a elementos). */
 export function Tour() {
   const usuario = useUsuario();
   const pathname = usePathname();
@@ -37,19 +39,21 @@ export function Tour() {
 
   // Primera vez del Dueño: abrir automáticamente en el tablero.
   React.useEffect(() => {
-    if (usuario?.rol === "DUENO" && !visto && pathname === "/tablero" && !abierto) {
+    if (usuario?.rol === "DUENO" && !visto && pathname === "/inicio" && !abierto) {
       const t = setTimeout(abrir, 1500);
       return () => clearTimeout(t);
     }
   }, [usuario?.rol, visto, pathname, abierto, abrir]);
 
   React.useEffect(() => {
-    if (abierto) {
-      setPaso(0);
-      if (pathname !== "/tablero") router.push("/tablero");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (abierto) setPaso(0);
   }, [abierto]);
+  React.useEffect(() => {
+    if (!abierto) return;
+    const destino = PASOS[paso].ruta;
+    if (pathname + (typeof window !== "undefined" ? window.location.search : "") !== destino) router.push(destino);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, paso]);
 
   React.useEffect(() => {
     if (!abierto) return;
@@ -59,7 +63,7 @@ export function Tour() {
       if (els[0]) {
         els[0].scrollIntoView({ behavior: "smooth", block: "center" });
         setAncla(els[0]);
-      } else if (intentos++ < 10) setTimeout(buscar, 200);
+      } else if (intentos++ < 25) setTimeout(buscar, 200);
       else setAncla(null);
     };
     buscar();
@@ -97,6 +101,7 @@ export function Tour() {
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={cerrar}>Salir</Button>
+                {paso > 0 && <Button size="sm" variant="secondary" onClick={() => setPaso(paso - 1)}>Anterior</Button>}
                 <Button size="sm" onClick={() => (ultimo ? cerrar() : setPaso(paso + 1))}>{ultimo ? "Entendido" : "Siguiente"}</Button>
               </div>
             </div>

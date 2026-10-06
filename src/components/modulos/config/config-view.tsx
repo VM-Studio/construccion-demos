@@ -49,7 +49,7 @@ export function ConfigView() {
       <PageHeader titulo={titulo} descripcion={descripcion} />
       {tab === "empresa" && <Empresa />}
       {tab === "sucursales" && <Sucursales />}
-      {tab === "unidades" && <Tablas />}
+      {tab === "unidades" && <UnidadesNegocio />}
       {tab === "usuarios" && <Usuarios editable={verUsuarios} />}
       {tab === "parametros" && <Parametros />}
       {tab === "numeracion" && <Numeracion />}
@@ -281,21 +281,93 @@ function Listas() {
 function Parametros() {
   const db = useDb();
   const c = db.config;
-  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0 });
+  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alicuotaIIBBPct: c.alicuotaIIBBPct, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0, tamanoMaxAdjuntoMB: c.tamanoMaxAdjuntoMB });
+  const [cats, setCats] = React.useState(c.categoriasAdjunto);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Parámetros generales</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <FormField label="IVA (%)" htmlFor="p-iva"><NumberInput id="p-iva" value={f.ivaPct} min={0} onValueChange={(v) => setF({ ...f, ivaPct: v })} /></FormField>
-          <FormField label="Validez de presupuestos (días)" htmlFor="p-val"><NumberInput id="p-val" value={f.validezPresupuestoDias} min={1} onValueChange={(v) => setF({ ...f, validezPresupuestoDias: Math.round(v) })} /></FormField>
+          <FormField label="Alícuota IIBB por defecto para acopios (%)" htmlFor="p-iibb"><NumberInput id="p-iibb" value={f.alicuotaIIBBPct} min={0} onValueChange={(v) => setF({ ...f, alicuotaIIBBPct: v })} /></FormField>
           <FormField label="Vencimiento de acopios (días)" htmlFor="p-aco"><NumberInput id="p-aco" value={f.diasVencimientoAcopio} min={1} onValueChange={(v) => setF({ ...f, diasVencimientoAcopio: Math.round(v) })} /></FormField>
+          <FormField label="Validez de cotizaciones (días)" htmlFor="p-val"><NumberInput id="p-val" value={f.validezPresupuestoDias} min={1} onValueChange={(v) => setF({ ...f, validezPresupuestoDias: Math.round(v) })} /></FormField>
           <FormField label="Aviso de suba de costo (%)" htmlFor="p-suba" hint="Al recibir mercadería más cara que el último costo"><NumberInput id="p-suba" value={f.umbralSubaCostoPct} min={0} onValueChange={(v) => setF({ ...f, umbralSubaCostoPct: v })} /></FormField>
+          <FormField label="Tamaño máximo de adjunto (MB)" htmlFor="p-adj"><NumberInput id="p-adj" value={f.tamanoMaxAdjuntoMB} min={1} onValueChange={(v) => setF({ ...f, tamanoMaxAdjuntoMB: Math.max(1, Math.round(v)) })} /></FormField>
           <FormField label="Tipo de cambio USD de referencia" htmlFor="p-usd"><NumberInput id="p-usd" value={f.tipoCambioUSD} min={0} onValueChange={(v) => setF({ ...f, tipoCambioUSD: v })} /></FormField>
           <label className="flex items-center gap-3 self-end pb-2 text-[13px]"><Switch checked={f.alertaStockMinimo} onCheckedChange={(v) => setF({ ...f, alertaStockMinimo: v })} /> Alertar stock bajo mínimo</label>
-          <div className="flex justify-end sm:col-span-2"><Button onClick={() => ok(useStore.getState().actualizarConfig(f), "Parámetros guardados")}><Save /> Guardar</Button></div>
+          <div className="flex justify-end sm:col-span-2 lg:col-span-3"><Button onClick={() => ok(useStore.getState().actualizarConfig(f), "Parámetros guardados")}><Save /> Guardar</Button></div>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader><CardTitle>Categorías de adjuntos</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {cats.map((cat, k) => (
+            <div key={cat.codigo} className="flex items-center gap-3">
+              <Input aria-label={`Categoría ${cat.codigo}`} className="h-8" value={cat.nombre} onChange={(e) => setCats(cats.map((x, i2) => (i2 === k ? { ...x, nombre: e.target.value } : x)))} />
+              <span className="w-36 font-mono text-[11px] text-muted">{cat.codigo}</span>
+            </div>
+          ))}
+          <div className="flex justify-end"><Button size="sm" onClick={() => ok(useStore.getState().actualizarConfig({ categoriasAdjunto: cats }), "Categorías guardadas")}><Save /> Guardar categorías</Button></div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Posiciones de carga por depósito</CardTitle></CardHeader>
+        <CardContent className="space-y-2 text-[13px]">
+          {db.depositos.map((d) => (
+            <div key={d.id} className="flex flex-wrap items-center gap-2">
+              <span className="w-44 text-muted">{d.nombre}</span>
+              {d.posiciones.map((p) => <span key={p} className="rounded-control bg-subtle px-2 py-0.5">{p}</span>)}
+            </div>
+          ))}
+          <p className="text-[12px] text-muted">Se editan desde Sucursales y depósitos.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function UnidadesNegocio() {
+  const db = useDb();
+  const [edit, setEdit] = React.useState<{ id?: string; nombre: string; codigo: "FER" | "COR"; rubroIds: string[] } | null>(null);
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        {db.unidadesNegocio.map((u) => {
+          const rubros = db.rubros.filter((r) => r.unidadNegocioId === u.id);
+          return (
+            <Card key={u.id}>
+              <CardHeader>
+                <CardTitle>{u.nombre} <span className="ml-1 font-mono text-[12px] text-muted">{u.codigo}</span></CardTitle>
+                <Button size="sm" variant="secondary" onClick={() => setEdit({ id: u.id, nombre: u.nombre, codigo: u.codigo, rubroIds: rubros.map((r) => r.id) })}><Save /> Editar</Button>
+              </CardHeader>
+              <CardContent className="text-[13px]">
+                <p className="mb-2 text-muted">{rubros.length} rubros · {db.productos.filter((p) => p.unidadNegocioId === u.id).length} artículos</p>
+                <div className="flex flex-wrap gap-1.5">{rubros.map((r) => <span key={r.id} className="rounded-control bg-subtle px-2 py-0.5 text-[12px]">{r.nombre}</span>)}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+      <Tablas />
+      <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
+        {edit && (
+          <DialogContent size="md" title={edit.id ? `Editar ${edit.nombre}` : "Nueva unidad de negocio"} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarUnidadNegocio({ nombre: edit.nombre, codigo: edit.codigo, rubroIds: edit.rubroIds }, edit.id); ok(r, "Unidad de negocio guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
+            <div className="space-y-3">
+              <FormField label="Nombre" htmlFor="un-n"><Input id="un-n" value={edit.nombre} onChange={(e) => setEdit({ ...edit, nombre: e.target.value })} /></FormField>
+              <FormField label="Rubros asociados">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {db.rubros.map((r) => (
+                    <label key={r.id} className="flex items-center gap-2 text-[13px]">
+                      <Switch checked={edit.rubroIds.includes(r.id)} onCheckedChange={(v) => setEdit({ ...edit, rubroIds: v ? [...edit.rubroIds, r.id] : edit.rubroIds.filter((x) => x !== r.id) })} aria-label={r.nombre} /> {r.nombre}
+                    </label>
+                  ))}
+                </div>
+              </FormField>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }
@@ -361,6 +433,9 @@ function Tablas() {
 
 function Numeracion() {
   const db = useDb();
+  const usuario = useUsuario();
+  const esDueno = puede(usuario, "config.usuarios");
+  const [edit, setEdit] = React.useState<{ k: string; n: number; label: string } | null>(null);
   const numeradores = Object.entries(db.numeradores)
     .map(([k, n]) => {
       const [codigo, circ, pv] = k.split("|");
@@ -368,19 +443,41 @@ function Numeracion() {
     })
     .sort((a, b) => a.codigo.localeCompare(b.codigo) || a.circ - b.circ || a.pv.localeCompare(b.pv));
   return (
-    <div className="max-w-[720px]">
-      <Card>
-        <CardHeader><CardTitle>Numeración actual</CardTitle><span className="text-[12px] text-muted">Sólo lectura · próximo número</span></CardHeader>
-        <ul className="max-h-[420px] divide-y divide-border overflow-y-auto text-[13px]">
-          {numeradores.map((x) => (
-            <li key={x.k} className="flex justify-between px-4 py-2">
-              <span className="text-muted">{x.codigo}{x.circ || ""} · PV {x.pv}</span>
-              <span className="font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
+    <Card>
+      <div className="overflow-x-auto">
+        <table className="w-full text-table">
+          <thead className="bg-[#FAFAF8] text-[12px] text-muted">
+            <tr>
+              <th className="h-9 px-4 text-left font-medium">Código</th>
+              <th className="h-9 px-4 text-left font-medium">Circuito</th>
+              <th className="h-9 px-4 text-left font-medium">Punto de venta</th>
+              <th className="h-9 px-4 text-right font-medium">Último usado</th>
+              <th className="h-9 px-4 text-left font-medium">Próximo número</th>
+              <th className="h-9 w-48" />
+            </tr>
+          </thead>
+          <tbody>
+            {numeradores.map((x) => (
+              <tr key={x.k} className="h-10 border-t border-border">
+                <td className="px-4 font-mono text-[12px]">{x.codigo}</td>
+                <td className="px-4 text-muted">{x.circ ? `AC${x.circ}` : "—"}</td>
+                <td className="px-4 font-mono text-[12px]">{x.pv}</td>
+                <td className="px-4 text-right tnum">{x.n}</td>
+                <td className="px-4 font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</td>
+                <td className="px-2 text-right">{esDueno && <Button size="sm" variant="ghost" onClick={() => setEdit({ k: x.k, n: x.n, label: `${x.codigo}${x.circ || ""} · PV ${x.pv}` })}>Establecer número inicial</Button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
+        {edit && (
+          <DialogContent size="sm" title={`Número inicial · ${edit.label}`} description="Ingresá el último número usado en el sistema anterior: el próximo documento sale con el siguiente." footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().establecerNumeroInicial(edit.k, edit.n); ok(r, "Numeración actualizada"); if (r.ok) setEdit(null); }}>Guardar</Button></>}>
+            <FormField label="Último número usado" htmlFor="num-u"><NumberInput id="num-u" value={edit.n} min={0} onValueChange={(v) => setEdit({ ...edit, n: Math.round(v) })} /></FormField>
+          </DialogContent>
+        )}
+      </Dialog>
+    </Card>
   );
 }
 
@@ -416,7 +513,33 @@ function DatosDemo() {
             >
               <RotateCcw /> Restablecer datos de demostración
             </Button>
-            <Button variant="secondary" onClick={() => { descargarArchivo(`respaldo-demo-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(db), "application/json"); toast.success("Respaldo descargado"); }}><Download /> Exportar respaldo (JSON)</Button>
+            <Button variant="secondary" onClick={() => { descargarArchivo(`respaldo-aceros-rnf-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(db), "application/json"); toast.success("Respaldo descargado", { description: `Incluye la metadata de ${db.adjuntos.length} adjuntos.` }); }}><Download /> Exportar respaldo (JSON)</Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                const t = toast.loading("Armando ZIP de adjuntos…");
+                try {
+                  const [{ default: JSZip }, { obtenerBlob, asegurarAdjuntosDemo }, { saveAs }] = await Promise.all([import("jszip"), import("@/lib/adjuntos"), import("file-saver")]);
+                  await asegurarAdjuntosDemo();
+                  const zip = new JSZip();
+                  let n = 0;
+                  for (const a of db.adjuntos) {
+                    if (!a.blobKey) continue;
+                    const b = await obtenerBlob(a.blobKey);
+                    if (b) {
+                      zip.file(`${a.entidadTipo.toLowerCase()}/${a.id}-${a.nombre}`, b);
+                      n++;
+                    }
+                  }
+                  saveAs(await zip.generateAsync({ type: "blob" }), `adjuntos-aceros-rnf-${new Date().toISOString().slice(0, 10)}.zip`);
+                  toast.success(`ZIP con ${n} archivos descargado`, { id: t });
+                } catch {
+                  toast.error("No se pudo armar el ZIP", { id: t });
+                }
+              }}
+            >
+              <Download /> Exportar adjuntos (ZIP)
+            </Button>
             <Button variant="secondary" disabled={!esDueno} onClick={() => inputRef.current?.click()}><Upload /> Importar respaldo</Button>
             <input
               ref={inputRef}
@@ -446,7 +569,7 @@ function DatosDemo() {
         </CardHeader>
         <CardContent className="text-[13px]">
           {!res ? (
-            <p className="text-muted">Comprueba que el kardex cierre con el stock físico, que el comprometido coincida con pedidos y acopios, y que los saldos de comprobantes sean total − cobrado.</p>
+            <p className="text-muted">Comprueba que el kardex cierre con el stock físico, que entregados y pendientes coincidan con los remitos, que el saldo de cada acopio sea importe − NP + DP + ACD, que los saldos de comprobantes cierren y que la numeración no se repita.</p>
           ) : (
             <ul className="space-y-2">
               <li className={cn("font-medium", res.ok ? "text-success" : "text-danger")}>{res.ok ? "Todo consistente" : "Se encontraron inconsistencias"} · {formatDateTime(new Date())}</li>

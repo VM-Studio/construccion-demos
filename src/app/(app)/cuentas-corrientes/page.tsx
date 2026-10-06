@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { CuentasView } from "@/components/modulos/cuentas/cuentas-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Cuentas corrientes" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Cuentas corrientes" descripcion="Cobranzas, pagos y cartera de cheques" permiso="ctacte.ver" />;
+  return (
+    <RequierePermiso permiso="ctacte.ver">
+      <Suspense>
+        <CuentasView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

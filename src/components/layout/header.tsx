@@ -35,8 +35,9 @@ function useBreadcrumb() {
     let label = SEGMENTOS[seg] ?? REPORTES.find((r) => r.slug === seg)?.titulo;
     if (!label) {
       const ent =
-        db.pedidos.find((x) => x.id === seg) ??
-        db.presupuestos.find((x) => x.id === seg) ??
+        db.notasPedido.find((x) => x.id === seg) ??
+        db.cotizaciones.find((x) => x.id === seg) ??
+        db.remitos.find((x) => x.id === seg) ??
         db.ordenesCompra.find((x) => x.id === seg) ??
         db.acopios.find((x) => x.id === seg);
       label = ent?.numero ?? db.clientes.find((c) => c.id === seg)?.razonSocial ?? db.proveedores.find((p) => p.id === seg)?.razonSocial ?? seg;

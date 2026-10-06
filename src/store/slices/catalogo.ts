@@ -1,4 +1,4 @@
-import type { Cliente, ListaPrecios, PrecioProducto, Producto, Proveedor, Rubro } from "@/domain/types";
+import type { Cliente, ListaPrecios, Obra, PrecioProducto, Producto, Proveedor, Rubro } from "@/domain/types";
 import { calcularPrecioDesdeMarkup, aplicarCambiosPrecio, type CambioPrecio } from "@/domain/precios";
 import { validarCUIT } from "@/domain/cuit";
 import { newId } from "@/lib/utils";
@@ -16,6 +16,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "productos.editar");
         if (!data.nombre.trim()) throw new ErrorNegocio("El nombre es obligatorio.");
+        data = { ...data, unidadNegocioId: tx.must("rubros", data.rubroId).unidadNegocioId };
         const dup = tx.get("productos").find((p) => p.codigo.toLowerCase() === data.codigo.trim().toLowerCase() && p.id !== id);
         if (dup) throw new ErrorNegocio(`El código ${data.codigo} ya existe (${dup.nombre}).`);
         if (id) {
@@ -71,6 +72,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         if (!data.razonSocial.trim()) throw new ErrorNegocio("La razón social es obligatoria.");
         const err = validarCUIT(data.cuit);
         if (err) throw new ErrorNegocio(err);
+        if (!id && !data.codigo) data = { ...data, codigo: `P${String(tx.get("proveedores").length + 1).padStart(4, "0")}` };
         if (id) {
           tx.patch("proveedores", id, data);
           tx.auditar("Editó proveedor", "Proveedor", id, data.razonSocial);
@@ -90,6 +92,10 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           const err = validarCUIT(data.cuit);
           if (err) throw new ErrorNegocio(err);
         }
+        if (!id && !data.codigo) {
+          const max = tx.get("clientes").reduce((m, c) => Math.max(m, Number(c.codigo.replace(/\D/g, "")) || 0), 0);
+          data = { ...data, codigo: `C${String(max + 1).padStart(4, "0")}` };
+        }
         if (id) {
           tx.patch("clientes", id, data);
           tx.auditar("Editó cliente", "Cliente", id, data.razonSocial);
@@ -99,6 +105,22 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         tx.insert("clientes", nuevo);
         tx.auditar("Creó cliente", "Cliente", nuevo.id, data.razonSocial);
         return nuevo.id;
+      }),
+
+    /** Alta / edición de obra (también alta rápida desde cualquier selector de obra). */
+    guardarObra: (data: Omit<Obra, "id" | "creadoEn" | "actualizadoEn">, id?: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "ventas.editar");
+        if (!data.nombre.trim()) throw new ErrorNegocio("El nombre de la obra es obligatorio.");
+        if (id) {
+          tx.patch("obras", id, { ...data, nombre: data.nombre.trim() });
+          tx.auditar("Editó obra", "Cliente", data.clienteId, data.nombre);
+          return id;
+        }
+        const o: Obra = { ...data, nombre: data.nombre.trim(), id: newId("obra"), ...tx.meta() };
+        tx.insert("obras", o);
+        tx.auditar("Creó obra", "Cliente", data.clienteId, data.nombre);
+        return o.id;
       }),
 
     guardarLista: (data: Omit<ListaPrecios, "id" | "creadoEn" | "actualizadoEn">, id?: string) =>
@@ -128,7 +150,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "productos.editar");
         if (!data.nombre.trim()) throw new ErrorNegocio("El nombre es obligatorio.");
-        if (!/^[A-Z]{3}$/.test(data.prefijo)) throw new ErrorNegocio("El prefijo debe tener 3 letras mayúsculas.");
+        if (!/^\d{2,3}$/.test(data.prefijo)) throw new ErrorNegocio("El prefijo debe ser numérico (2 o 3 dígitos).");
         if (id) {
           tx.patch("rubros", id, data);
           return id;

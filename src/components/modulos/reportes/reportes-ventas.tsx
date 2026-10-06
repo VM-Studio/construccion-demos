@@ -216,7 +216,7 @@ export function ReporteRentabilidadPedidos() {
         foot: ["Total", "", "", Math.round(t.i), Math.round(t.c), Math.round(t.i - t.c), t.i ? Math.round(((t.i - t.c) / t.i) * 1000) / 10 : 0, Math.round(t.ch), t.i ? Math.round(((t.i - t.ch) / t.i) * 1000) / 10 : 0],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.pedido.id} searchText={(f) => `${f.pedido.numero} ${f.cliente?.razonSocial}`} onRowClick={(f) => router.push(`/ventas/pedidos/${f.pedido.id}`)} initialSort={{ key: "mp", dir: "asc" }} showFooter pageSize={50} empty={{ titulo: "Sin pedidos para el filtro" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.pedido.id} searchText={(f) => `${f.pedido.numero} ${f.cliente?.razonSocial}`} onRowClick={(f) => router.push(`/ventas/notas-pedido/${f.pedido.id}`)} initialSort={{ key: "mp", dir: "asc" }} showFooter pageSize={50} empty={{ titulo: "Sin pedidos para el filtro" }} />
     </ReporteLayout>
   );
 }

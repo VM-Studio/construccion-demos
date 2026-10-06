@@ -87,7 +87,7 @@ export function OrdenPagoDocumento({ pago }: { pago: PagoProveedor }) {
         head={["Factura", "Fecha", "Importe"]}
         rows={pago.imputaciones.map((i) => {
           const c = db.comprobantes.find((x) => x.id === i.comprobanteId);
-          return [`Factura A ${c?.numero ?? ""}`, formatDate(c?.fecha), formatMoney(i.importe)];
+          return [`Factura ${c?.numero ?? ""}`, formatDate(c?.fecha), formatMoney(i.importe)];
         })}
         foot={["Total", "", formatMoney(pago.total)]}
       />
@@ -99,30 +99,27 @@ export function OrdenPagoDocumento({ pago }: { pago: PagoProveedor }) {
 export function ComprobanteDocumento({ comprobante: c }: { comprobante: Comprobante }) {
   const db = useDb();
   const prod = (id: string) => db.productos.find((p) => p.id === id);
-  const pedido = c.pedidoId ? db.pedidos.find((p) => p.id === c.pedidoId) : undefined;
+  const pedido = c.notaPedidoId ? db.notasPedido.find((p) => p.id === c.notaPedidoId) : undefined;
   const acopio = c.acopioId ? db.acopios.find((a) => a.id === c.acopioId) : undefined;
-  const letra = c.tipo === "FACTURA_A" ? "A" : c.tipo === "FACTURA_B" ? "B" : "";
-  const items =
-    c.items ??
-    acopio?.items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidadAcopiada, precioUnitario: i.precioUnitarioPactado, descuentoPct: 0 })) ??
-    [];
+  const leyenda = c.circuito === 1 ? "Comprobante no fiscal · Demo" : "Documento interno";
+  const items: { productoId: string; cantidad: number; precioUnitario: number; descuentoPct?: number }[] = c.items ?? [];
   return (
     <PrintLayout
-      titulo={`${TIPO_COMPROBANTE_LABEL[c.tipo]}${letra ? "" : ""}`}
+      titulo={`${TIPO_COMPROBANTE_LABEL[c.tipo]}${c.letra ? ` ${c.letra}` : ""}`}
       numero={c.numero}
       fecha={formatDate(c.fecha)}
-      leyenda="Comprobante no fiscal · Demo"
+      leyenda={leyenda}
       subtitulo={
         <div className="space-y-3">
           <DatosCliente clienteId={c.clienteId} />
           <div className="text-[11px] text-muted">
-            {pedido && <>Pedido {pedido.numero} · </>}
+            {pedido && <>Nota de pedido {pedido.numero} · </>}
             {acopio && <>Acopio {acopio.numero} · </>}
             {c.vencimiento && <>Vencimiento {formatDate(c.vencimiento)}</>}
           </div>
         </div>
       }
-      pie="Documento generado por el sistema de demostración. No válido como factura."
+      pie={c.circuito === 1 ? "Documento generado por el sistema de demostración. No válido como factura." : "Documento interno. No válido como comprobante fiscal."}
     >
       {items.length > 0 ? (
         <PrintTable
@@ -137,11 +134,11 @@ export function ComprobanteDocumento({ comprobante: c }: { comprobante: Comproba
       )}
       <div className="mt-4 ml-auto w-64 space-y-1 text-[12px]">
         <div className="flex justify-between"><span>Neto gravado</span><span className="tnum">{formatMoney(c.subtotal)}</span></div>
-        <div className="flex justify-between"><span>IVA 21 %</span><span className="tnum">{formatMoney(c.iva)}</span></div>
+        {c.iva > 0 && <div className="flex justify-between"><span>IVA 21 %</span><span className="tnum">{formatMoney(c.iva)}</span></div>}
         <div className="flex justify-between border-t border-ink pt-1 text-[13px] font-semibold"><span>Total</span><span className="tnum">{formatMoney(c.total)}</span></div>
       </div>
       {c.observaciones && items.length > 0 && <p className="mt-3 text-[11px]">{c.observaciones}</p>}
-      <p className="mt-6 text-center text-[11px] font-semibold uppercase">Comprobante no fiscal · Demo — sin validez ante AFIP/ARCA</p>
+      <p className="mt-6 text-center text-[11px] font-semibold uppercase">{c.circuito === 1 ? "Comprobante no fiscal · Demo — sin validez ante AFIP/ARCA" : "Documento interno"}</p>
     </PrintLayout>
   );
 }

@@ -1,5 +1,5 @@
 import { round2 } from "@/lib/utils";
-import type { CondicionIVA, ItemVenta, Pedido, TipoComprobante } from "./types";
+import type { CondicionIVA, ItemVenta, LetraComprobante, Pedido } from "./types";
 
 export interface Totales {
   /** Suma de líneas con descuento por línea, antes del descuento general. */
@@ -11,7 +11,7 @@ export interface Totales {
 }
 
 /** Importe neto de una línea (con su descuento de línea). */
-export function importeLinea(item: Pick<ItemVenta, "cantidad" | "precioUnitario" | "descuentoPct">): number {
+export function importeLinea(item: { cantidad: number; precioUnitario: number; descuentoPct?: number }): number {
   return item.cantidad * item.precioUnitario * (1 - (item.descuentoPct || 0) / 100);
 }
 
@@ -20,7 +20,7 @@ export function importeLinea(item: Pick<ItemVenta, "cantidad" | "precioUnitario"
  * `descuentoPct` e `ivaPct` en base 100.
  */
 export function calcularTotales(
-  items: Pick<ItemVenta, "cantidad" | "precioUnitario" | "descuentoPct">[],
+  items: { cantidad: number; precioUnitario: number; descuentoPct?: number }[],
   descuentoPct: number,
   ivaPct: number,
 ): Totales {
@@ -45,7 +45,7 @@ export interface Rentabilidad {
 }
 
 /** Rentabilidad de una línea con su costo snapshot (sin IVA). */
-export function calcularRentabilidadItem(item: ItemVenta, descuentoGeneralPct = 0, costoUnitario?: number): Rentabilidad {
+export function calcularRentabilidadItem(item: Pick<ItemVenta, "cantidad" | "precioUnitario" | "costoUnitarioSnapshot"> & { descuentoPct?: number }, descuentoGeneralPct = 0, costoUnitario?: number): Rentabilidad {
   const ingreso = importeLinea(item) * (1 - descuentoGeneralPct / 100);
   const costo = item.cantidad * (costoUnitario ?? item.costoUnitarioSnapshot);
   const margenBruto = ingreso - costo;
@@ -84,9 +84,9 @@ export function calcularRentabilidadACostoActual(
   return { ingreso: round2(ingreso), costo: round2(costo), margenBruto: round2(margenBruto), margenPct: ingreso ? margenBruto / ingreso : 0 };
 }
 
-/** Tipo de factura según la condición de IVA del cliente: RI → A, resto → B. */
-export function tipoFacturaPara(condicionIVA: CondicionIVA): TipoComprobante {
-  return condicionIVA === "RI" ? "FACTURA_A" : "FACTURA_B";
+/** Letra de factura fiscal (AC1) según la condición de IVA del cliente: RI → A, resto → B. */
+export function letraFacturaPara(condicionIVA: CondicionIVA): LetraComprobante {
+  return condicionIVA === "RI" ? "A" : "B";
 }
 
 /** Días de plazo según condición de pago. */
@@ -95,8 +95,9 @@ export function diasCondicionPago(c: string): number {
 }
 
 /** Porcentaje despachado de un pedido (0..1). */
-export function porcentajeDespachado(pedido: Pick<Pedido, "items">): number {
-  const total = pedido.items.reduce((a, i) => a + i.cantidad, 0);
-  const desp = pedido.items.reduce((a, i) => a + Math.min(i.cantidad, i.cantidadDespachada ?? 0), 0);
-  return total ? desp / total : 0;
+/** Porcentaje entregado de una nota de pedido (0..1), descontando devoluciones. */
+export function porcentajeEntregado(np: Pick<Pedido, "items">): number {
+  const total = np.items.reduce((a, i) => a + i.cantidad - (i.devueltos ?? 0), 0);
+  const ent = np.items.reduce((a, i) => a + Math.min(i.cantidad, i.entregados), 0);
+  return total > 0 ? Math.min(1, ent / total) : 1;
 }

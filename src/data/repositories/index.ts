@@ -6,8 +6,8 @@ import type {
   Despacho,
   MovimientoStock,
   OrdenCompra,
-  Pedido,
-  Presupuesto,
+  NotaPedido,
+  Cotizacion,
   Producto,
   Proveedor,
   Usuario,
@@ -22,8 +22,8 @@ export const productosRepo = new RepositorioMemoria<Producto>("productos", "prod
 export const proveedoresRepo = new RepositorioMemoria<Proveedor>("proveedores", "prov");
 export const clientesRepo = new RepositorioMemoria<Cliente>("clientes", "cli");
 export const ordenesCompraRepo = new RepositorioMemoria<OrdenCompra>("ordenesCompra", "oc");
-export const presupuestosRepo = new RepositorioMemoria<Presupuesto>("presupuestos", "pre");
-export const pedidosRepo = new RepositorioMemoria<Pedido>("pedidos", "ped");
+export const cotizacionesRepo = new RepositorioMemoria<Cotizacion>("cotizaciones", "cot");
+export const notasPedidoRepo = new RepositorioMemoria<NotaPedido>("notasPedido", "np");
 export const comprobantesRepo = new RepositorioMemoria<Comprobante>("comprobantes", "cmp");
 export const acopiosRepo = new RepositorioMemoria<Acopio>("acopios", "aco");
 export const despachosRepo = new RepositorioMemoria<Despacho>("despachos", "des");

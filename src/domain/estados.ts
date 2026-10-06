@@ -9,37 +9,39 @@ export const ESTADOS: Record<string, { label: string; variant: BadgeVariant }> =
   "OC.RECIBIDA_PARCIAL": { label: "Recibida parcial", variant: "warning" },
   "OC.RECIBIDA": { label: "Recibida", variant: "success" },
   "OC.CANCELADA": { label: "Cancelada", variant: "neutral" },
-  // Presupuestos
-  "PRESUPUESTO.BORRADOR": { label: "Borrador", variant: "neutral" },
-  "PRESUPUESTO.ENVIADO": { label: "Enviado", variant: "info" },
-  "PRESUPUESTO.ACEPTADO": { label: "Aceptado", variant: "success" },
-  "PRESUPUESTO.RECHAZADO": { label: "Rechazado", variant: "danger" },
-  "PRESUPUESTO.VENCIDO": { label: "Vencido", variant: "danger" },
-  // Pedidos
-  "PEDIDO.BORRADOR": { label: "Borrador", variant: "neutral" },
-  "PEDIDO.CONFIRMADO": { label: "Confirmado", variant: "info" },
-  "PEDIDO.EN_PREPARACION": { label: "En preparación", variant: "warning" },
-  "PEDIDO.DESPACHADO_PARCIAL": { label: "Despachado parcial", variant: "warning" },
-  "PEDIDO.DESPACHADO": { label: "Despachado", variant: "success" },
-  "PEDIDO.FACTURADO": { label: "Facturado", variant: "success" },
-  "PEDIDO.CANCELADO": { label: "Cancelado", variant: "neutral" },
-  // Acopios
+  // Cotizaciones
+  "COTIZACION.BORRADOR": { label: "Borrador", variant: "neutral" },
+  "COTIZACION.ENVIADA": { label: "Enviada", variant: "info" },
+  "COTIZACION.ACEPTADA": { label: "Aceptada", variant: "success" },
+  "COTIZACION.RECHAZADA": { label: "Rechazada", variant: "danger" },
+  "COTIZACION.VENCIDA": { label: "Vencida", variant: "danger" },
+  // Notas de pedido
+  "NP.BORRADOR": { label: "Borrador", variant: "neutral" },
+  "NP.PENDIENTE": { label: "Pendiente", variant: "info" },
+  "NP.ENTREGADA_PARCIAL": { label: "Entregada parcial", variant: "warning" },
+  "NP.ENTREGADA": { label: "Entregada", variant: "success" },
+  "NP.ANULADA": { label: "Anulada", variant: "neutral" },
+  // Acopios (clientes y proveedores)
   "ACOPIO.VIGENTE": { label: "Vigente", variant: "accent" },
-  "ACOPIO.RETIRADO_PARCIAL": { label: "Retirado parcial", variant: "warning" },
-  "ACOPIO.COMPLETADO": { label: "Completado", variant: "success" },
   "ACOPIO.VENCIDO": { label: "Vencido", variant: "danger" },
+  "ACOPIO.AGOTADO": { label: "Agotado", variant: "success" },
   "ACOPIO.CANCELADO": { label: "Cancelado", variant: "neutral" },
+  // Remitos
+  "REMITO.INICIAL": { label: "Inicial", variant: "neutral" },
+  "REMITO.PICKING": { label: "Picking", variant: "warning" },
+  "REMITO.HECHO": { label: "Hecho", variant: "success" },
+  "REMITO.ANULADO": { label: "Anulado", variant: "neutral" },
   // Despachos
-  "DESPACHO.PENDIENTE": { label: "Pendiente", variant: "neutral" },
-  "DESPACHO.EN_PREPARACION": { label: "En preparación", variant: "info" },
-  "DESPACHO.EN_VIAJE": { label: "En viaje", variant: "warning" },
+  "DESPACHO.ESPERA": { label: "Espera", variant: "neutral" },
+  "DESPACHO.PREPARACION": { label: "Preparación", variant: "warning" },
+  "DESPACHO.FINALIZADO": { label: "Finalizado", variant: "success" },
+  "DESPACHO.EN_VIAJE": { label: "En viaje", variant: "info" },
   "DESPACHO.ENTREGADO": { label: "Entregado", variant: "success" },
-  "DESPACHO.RETIRADO_EN_MOSTRADOR": { label: "Retirado en mostrador", variant: "success" },
   "DESPACHO.CANCELADO": { label: "Cancelado", variant: "neutral" },
   // Movimientos de stock
   "MOVIMIENTO.INGRESO_COMPRA": { label: "Ingreso por compra", variant: "success" },
   "MOVIMIENTO.EGRESO_VENTA": { label: "Egreso por venta", variant: "info" },
-  "MOVIMIENTO.EGRESO_ACOPIO": { label: "Egreso por acopio", variant: "accent" },
+  "MOVIMIENTO.EGRESO_ACOPIO": { label: "Egreso por desacopio", variant: "accent" },
   "MOVIMIENTO.TRANSFERENCIA_SALIDA": { label: "Transferencia salida", variant: "neutral" },
   "MOVIMIENTO.TRANSFERENCIA_ENTRADA": { label: "Transferencia entrada", variant: "neutral" },
   "MOVIMIENTO.AJUSTE_POSITIVO": { label: "Ajuste positivo", variant: "success" },
@@ -73,9 +75,10 @@ export const ESTADOS: Record<string, { label: string; variant: BadgeVariant }> =
 
 export type TipoEstado =
   | "OC"
-  | "PRESUPUESTO"
-  | "PEDIDO"
+  | "COTIZACION"
+  | "NP"
   | "ACOPIO"
+  | "REMITO"
   | "DESPACHO"
   | "MOVIMIENTO"
   | "TRANSFERENCIA"
@@ -89,17 +92,23 @@ export function estadoInfo(tipo: TipoEstado, estado: string) {
 }
 
 export const TIPO_COMPROBANTE_LABEL: Record<string, string> = {
-  FACTURA_A: "Factura A",
-  FACTURA_B: "Factura B",
+  FACTURA: "Factura",
   NOTA_CREDITO: "Nota de crédito",
   NOTA_DEBITO: "Nota de débito",
-  REMITO: "Remito",
-  RECIBO: "Recibo",
-  ORDEN_PAGO: "Orden de pago",
+  SALDO_A_FAVOR: "Saldo a favor",
 };
+
+/** Circuito del documento. */
+export const CIRCUITO_LABEL: Record<1 | 2, string> = { 1: "AC1 · Fiscal", 2: "AC2 · Interno" };
+
+export const TIPO_REMITO_LABEL: Record<string, string> = { VENTA: "Venta", DESACOPIO: "Desacopio", DEVOLUCION: "Devolución", TRANSFERENCIA: "Transferencia" };
+export const TIPO_PROVEEDOR_LABEL: Record<string, string> = { FABRICANTE: "Fabricante", DISTRIBUIDOR: "Distribuidor mayorista", TRANSPORTISTA: "Transportista", SERVICIOS: "Servicios" };
+export const FORMA_PAGO_LABEL: Record<string, string> = { CONTADO: "Contado", CUENTA_CORRIENTE: "Cuenta corriente", ACOPIO: "Acopio", ANTICIPO: "Anticipo" };
+export const ORIGEN_LABEL: Record<string, string> = { NUEVA: "Nueva", ACOPIO: "Acopio" };
 
 export const TIPO_CLIENTE_LABEL: Record<string, string> = {
   CORRALON: "Corralón",
+  FERRETERIA: "Ferretería",
   CONSTRUCTORA: "Constructora",
   PARTICULAR: "Particular",
   ARQUITECTO: "Arquitecto",
@@ -141,6 +150,7 @@ export const UNIDAD_LABEL: Record<string, string> = {
   CAJA: "Caja",
   ROLLO: "Rollo",
   PLACA: "Placa",
+  TN: "Tonelada",
 };
 
 export const DIFERENCIA_LABEL: Record<string, string> = {

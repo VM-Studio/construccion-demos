@@ -72,7 +72,7 @@ function NuevoAjuste({ open, onClose, productoInicial }: { open: boolean; onClos
   const db = useDb();
   const posiciones = usePosiciones();
   const crear = useStore((s) => s.crearAjuste);
-  const [deposito, setDeposito] = React.useState("dep_norte");
+  const [deposito, setDeposito] = React.useState("dep_central");
   const [items, setItems] = React.useState<Linea[]>([]);
   const [obs, setObs] = React.useState("");
   const motivos = db.config.motivosAjuste.filter((m) => m.activo);

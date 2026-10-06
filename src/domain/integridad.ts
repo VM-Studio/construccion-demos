@@ -1,5 +1,8 @@
 import type { EstadoInicial } from "./types";
-import { calcularComprometido } from "./stock";
+import { movimientosAcopio, pendienteLinea, saldoDisponible } from "./acopios";
+import { pendienteRetirar } from "./acopiosProveedor";
+import { calcularDisponible, lineasPendientes } from "./stock";
+import { parsearNumeroDoc } from "./numeracion";
 
 export interface ResultadoIntegridad {
   ok: boolean;
@@ -10,11 +13,13 @@ const EPS = 0.01;
 
 /**
  * Verifica la consistencia interna de los datos:
- * - Σ movimientos por producto/depósito = stock físico, y nunca negativo en el tiempo.
- * - Comprometido = pedidos confirmados sin despachar + saldos de acopio (≤ lo vendido).
- * - Saldos de comprobantes = total − imputaciones (cobranzas, pagos y notas de crédito).
- * - Retiros de acopio ≤ acopiado y coherentes con lo registrado en cada ítem.
- * - Lo despachado de cada pedido coincide con los egresos de sus despachos.
+ * - Kardex: Σ movimientos = stock físico, nunca negativo en el tiempo.
+ * - Notas de pedido: entregados ≤ cantidad y = remitos hechos − devoluciones; pendiente consistente.
+ * - Disponible nunca negativo salvo ventas forzadas (auditadas).
+ * - Comprobantes: saldo = total − imputaciones.
+ * - Acopios: saldo = importe − NP + DP + ACD (y el saldo corrido del detalle cierra igual).
+ * - Acopios con proveedores: pendiente de retirar = pactado − recibido; pagado = OP imputadas.
+ * - Numeración: ningún número repetido por (código, circuito, punto de venta) y circuito heredado.
  */
 export function verificarIntegridad(db: EstadoInicial): ResultadoIntegridad {
   const chequeos: ResultadoIntegridad["chequeos"] = [];
@@ -39,90 +44,139 @@ export function verificarIntegridad(db: EstadoInicial): ResultadoIntegridad {
     for (const s of db.stock) {
       const k = `${s.productoId}|${s.depositoId}`;
       const v = acumulado.get(k) ?? 0;
-      if (Math.abs(v - s.cantidadFisica) > EPS)
-        errores.push(`${nombreProd.get(s.productoId)} en ${nombreDep.get(s.depositoId)}: kardex ${v} ≠ físico ${s.cantidadFisica}`);
-      if (s.cantidadFisica < -EPS) errores.push(`${nombreProd.get(s.productoId)} en ${nombreDep.get(s.depositoId)} con stock físico negativo`);
+      if (Math.abs(v - s.cantidadFisica) > EPS) errores.push(`${nombreProd.get(s.productoId)} en ${nombreDep.get(s.depositoId)}: kardex ${v} ≠ físico ${s.cantidadFisica}`);
     }
     chequeos.push({ nombre: "Kardex cierra con el stock físico", ok: !errores.length, detalle: `${db.movimientos.length} movimientos, ${db.stock.length} posiciones`, errores });
   }
 
-  // 2. Comprometido
+  // 2. Notas de pedido: entregados vs remitos
   {
     const errores: string[] = [];
-    let total = 0;
-    for (const s of db.stock) {
-      const c = calcularComprometido(s.productoId, s.depositoId, db.pedidos, db.acopios, db.despachos);
-      if (c < 0) errores.push(`${nombreProd.get(s.productoId)}: comprometido negativo`);
-      total += c;
+    const neto = new Map<string, number>();
+    for (const r of db.remitos) {
+      if (r.estado !== "HECHO") continue;
+      const signo = r.tipo === "DEVOLUCION" ? -1 : r.tipo === "TRANSFERENCIA" ? 0 : 1;
+      for (const it of r.items) if (it.itemNPId && signo) neto.set(it.itemNPId, (neto.get(it.itemNPId) ?? 0) + signo * it.cantidad);
     }
-    for (const p of db.pedidos)
-      for (const it of p.items)
-        if ((it.cantidadDespachada ?? 0) - it.cantidad > EPS) errores.push(`${p.numero}: se despachó más de lo vendido en una línea`);
-    chequeos.push({ nombre: "Comprometido = pedidos sin despachar + saldos de acopio", ok: !errores.length, detalle: `${Math.round(total)} unidades comprometidas`, errores });
+    let lineas = 0;
+    for (const n of db.notasPedido)
+      for (const it of n.items) {
+        lineas++;
+        if (it.entregados - it.cantidad > EPS) errores.push(`${n.numero}: entregados ${it.entregados} > cantidad ${it.cantidad} (${nombreProd.get(it.productoId)})`);
+        if (it.entregados + (it.devueltos ?? 0) - it.cantidad > EPS) errores.push(`${n.numero}: entregados + devueltos superan la cantidad (${nombreProd.get(it.productoId)})`);
+        const r = neto.get(it.id) ?? 0;
+        if (Math.abs(r - it.entregados) > EPS) errores.push(`${n.numero}: entregados ${it.entregados} ≠ remitos hechos ${r} (${nombreProd.get(it.productoId)})`);
+        const pend = pendienteLinea(it) > EPS;
+        if (n.estado === "ENTREGADA" && pend) errores.push(`${n.numero}: figura entregada con pendiente`);
+      }
+    chequeos.push({ nombre: "Entregados ≤ cantidad y = remitos hechos − devoluciones", ok: !errores.length, detalle: `${db.notasPedido.length} notas de pedido, ${lineas} líneas`, errores });
   }
 
-  // 3. Despachado de pedidos = egresos de despachos
+  // 3. Pendiente de entrega y disponible
   {
     const errores: string[] = [];
-    const egresado = new Map<string, number>();
-    for (const d of db.despachos) {
-      if (d.origenTipo !== "PEDIDO" || !d.egresoGenerado || d.estado === "CANCELADO") continue;
-      for (const it of d.items) {
-        if (!it.itemOrigenId) continue;
-        const entregadoNeto = it.cantidadEntregada !== undefined && (d.estado === "ENTREGADO" || d.estado === "RETIRADO_EN_MOSTRADOR") ? it.cantidadEntregada : it.cantidad;
-        egresado.set(it.itemOrigenId, (egresado.get(it.itemOrigenId) ?? 0) + entregadoNeto);
+    const pend = new Map<string, number>();
+    const lineas = lineasPendientes(db.notasPedido, db.remitos);
+    for (const l of lineas) pend.set(`${l.productoId}|${l.depositoId}`, (pend.get(`${l.productoId}|${l.depositoId}`) ?? 0) + l.pendiente);
+    const res = new Map<string, number>();
+    for (const r of db.remitos) if (r.estado === "PICKING" && (r.tipo === "VENTA" || r.tipo === "DESACOPIO")) for (const it of r.items) res.set(`${it.productoId}|${r.depositoId}`, (res.get(`${it.productoId}|${r.depositoId}`) ?? 0) + it.cantidad);
+    const forzados = new Set(db.notasPedido.filter((n) => n.forzadoSinDisponible && n.estado !== "ENTREGADA" && n.estado !== "ANULADA").flatMap((n) => n.items.map((i) => `${i.productoId}|${n.depositoId}`)));
+    let negativos = 0;
+    for (const s of db.stock) {
+      const k = `${s.productoId}|${s.depositoId}`;
+      const disp = calcularDisponible(s.cantidadFisica, pend.get(k) ?? 0, res.get(k) ?? 0);
+      if (disp < -EPS) {
+        negativos++;
+        if (!forzados.has(k)) errores.push(`${nombreProd.get(s.productoId)} en ${nombreDep.get(s.depositoId)}: disponible ${disp} sin venta forzada auditada`);
       }
     }
-    for (const p of db.pedidos)
-      for (const it of p.items) {
-        const e = egresado.get(it.id) ?? 0;
-        if (Math.abs(e - (it.cantidadDespachada ?? 0)) > EPS) errores.push(`${p.numero}: despachado ${it.cantidadDespachada ?? 0} ≠ egresos ${e}`);
-      }
-    chequeos.push({ nombre: "Lo despachado de cada pedido coincide con sus remitos", ok: !errores.length, detalle: `${db.despachos.length} despachos`, errores });
+    const total = lineas.reduce((a, l) => a + l.pendiente * l.precio, 0);
+    chequeos.push({ nombre: "Disponible = físico − pendiente − reservado (nunca negativo salvo forzados)", ok: !errores.length, detalle: `${lineas.length} líneas pendientes por $ ${Math.round(total).toLocaleString("es-AR")} · ${negativos} posiciones negativas`, errores });
   }
 
   // 4. Saldos de comprobantes
   {
     const errores: string[] = [];
     const imputado = new Map<string, number>();
-    for (const c of db.cobranzas) for (const i of c.imputaciones) imputado.set(i.comprobanteId, (imputado.get(i.comprobanteId) ?? 0) + i.importe);
-    for (const p of db.pagosProveedores) for (const i of p.imputaciones) imputado.set(i.comprobanteId, (imputado.get(i.comprobanteId) ?? 0) + i.importe);
-    // Notas de crédito aplicadas a comprobantes con saldo
-    for (const nc of db.comprobantes) for (const i of nc.aplicadoA ?? []) imputado.set(i.comprobanteId, (imputado.get(i.comprobanteId) ?? 0) + i.importe);
+    const add = (id: string, x: number) => imputado.set(id, (imputado.get(id) ?? 0) + x);
+    for (const c of db.cobranzas) for (const i of c.imputaciones) add(i.comprobanteId, i.importe);
+    for (const p of db.pagosProveedores) for (const i of p.imputaciones) add(i.comprobanteId, i.importe);
+    for (const nc of db.comprobantes) for (const i of nc.aplicadoA ?? []) add(i.comprobanteId, i.importe);
     for (const c of db.comprobantes) {
-      if (c.tipo !== "FACTURA_A" && c.tipo !== "FACTURA_B" && c.tipo !== "NOTA_DEBITO") continue;
+      if (c.estado === "ANULADO" || (c.tipo !== "FACTURA" && c.tipo !== "NOTA_DEBITO")) continue;
       const esperado = c.total - (imputado.get(c.id) ?? 0);
-      if (c.estado === "ANULADO") continue;
-      if (Math.abs(esperado - c.saldoPendiente) > 1) errores.push(`${c.numero}: saldo ${c.saldoPendiente.toFixed(2)} ≠ total − cobrado ${esperado.toFixed(2)}`);
+      if (Math.abs(esperado - c.saldoPendiente) > 1) errores.push(`${c.numero}: saldo ${c.saldoPendiente.toFixed(2)} ≠ total − imputado ${esperado.toFixed(2)}`);
     }
-    const cobradoAcopio = new Map<string, number>();
-    for (const c of db.cobranzas) for (const i of c.imputaciones) cobradoAcopio.set(i.comprobanteId, (cobradoAcopio.get(i.comprobanteId) ?? 0) + i.importe);
-    for (const a of db.acopios) {
-      const ids = a.comprobanteIds ?? (a.comprobanteId ? [a.comprobanteId] : []);
-      const pagado = ids.reduce((s, id) => s + (cobradoAcopio.get(id) ?? 0), 0);
-      if (Math.abs(pagado - a.montoPagado) > 1) errores.push(`${a.numero}: monto pagado ${a.montoPagado} ≠ cobranzas imputadas ${pagado.toFixed(2)}`);
-    }
-    chequeos.push({ nombre: "Saldos de comprobantes = total − imputaciones", ok: !errores.length, detalle: `${db.comprobantes.length} comprobantes, ${db.cobranzas.length} cobranzas, ${db.pagosProveedores.length} pagos`, errores });
+    chequeos.push({ nombre: "Saldos de comprobantes = total − imputaciones", ok: !errores.length, detalle: `${db.comprobantes.length} comprobantes, ${db.cobranzas.length} recibos, ${db.pagosProveedores.length} órdenes de pago`, errores });
   }
 
-  // 5. Acopios
+  // 5. Acopios de clientes
   {
     const errores: string[] = [];
-    // Lo retirado = lo incluido en remitos de acopio no cancelados (en entregas parciales, lo entregado + el saldo reprogramado).
-    const retirado = new Map<string, number>();
-    for (const d of db.despachos) {
-      if (d.origenTipo !== "RETIRO_ACOPIO" || d.estado === "CANCELADO") continue;
-      const cerrado = d.estado === "ENTREGADO" || d.estado === "RETIRADO_EN_MOSTRADOR";
-      for (const it of d.items)
-        if (it.itemOrigenId) retirado.set(it.itemOrigenId, (retirado.get(it.itemOrigenId) ?? 0) + (cerrado ? (it.cantidadEntregada ?? it.cantidad) : it.cantidad));
+    for (const a of db.acopios) {
+      const np = db.notasPedido.filter((n) => n.acopioId === a.id && n.estado !== "ANULADA" && n.estado !== "BORRADOR").reduce((s, n) => s + n.monto, 0);
+      const dp = db.devoluciones.filter((d) => d.acopioId === a.id).reduce((s, d) => s + d.monto, 0);
+      const acd = db.ajustesAcopio.filter((x) => x.acopioId === a.id).reduce((s, x) => s + x.monto, 0);
+      const esperado = Math.round((a.importe - np - dp + acd) * 100) / 100;
+      const saldo = saldoDisponible(a, db.notasPedido, db.devoluciones, db.ajustesAcopio);
+      if (Math.abs(esperado - saldo) > EPS) errores.push(`${a.numero}: saldo ${saldo} ≠ importe − NP + DP + ACD ${esperado}`);
+      const grupos = movimientosAcopio(a, db.notasPedido, db.devoluciones, db.ajustesAcopio, db);
+      const ultimo = grupos.at(-1)?.lineas.at(-1)?.saldoDisponible ?? a.importe;
+      if (Math.abs(ultimo - saldo) > EPS) errores.push(`${a.numero}: el saldo corrido del detalle (${ultimo}) no cierra con el saldo (${saldo})`);
+      if (saldo < -EPS && !db.notasPedido.some((n) => n.acopioId === a.id && n.autorizadoSaldoNegativo)) errores.push(`${a.numero}: saldo negativo sin autorización`);
+      for (const n of db.notasPedido.filter((x) => x.acopioId === a.id)) if (n.circuito !== a.circuito) errores.push(`${n.numero}: no hereda el circuito del acopio ${a.numero}`);
     }
-    for (const a of db.acopios)
-      for (const it of a.items) {
-        if (it.cantidadRetirada - it.cantidadAcopiada > EPS) errores.push(`${a.numero}: retirado mayor a lo acopiado (${nombreProd.get(it.productoId)})`);
-        const r = retirado.get(it.id) ?? 0;
-        if (Math.abs(r - it.cantidadRetirada) > EPS) errores.push(`${a.numero}: retiros ${r} ≠ registrado ${it.cantidadRetirada} (${nombreProd.get(it.productoId)})`);
-      }
-    chequeos.push({ nombre: "Retiros de acopio ≤ acopiado", ok: !errores.length, detalle: `${db.acopios.length} acopios, ${db.retiros.length} retiros`, errores });
+    chequeos.push({ nombre: "Saldo de acopio = importe − NP + DP + ACD", ok: !errores.length, detalle: `${db.acopios.length} acopios, ${db.devoluciones.length} devoluciones, ${db.ajustesAcopio.length} ajustes/traspasos`, errores });
+  }
+
+  // 6. Acopios con proveedores
+  {
+    const errores: string[] = [];
+    for (const a of db.acopiosProveedor) {
+      if (a.modalidad === "CANTIDAD")
+        for (const p of pendienteRetirar(a, db.ordenesCompra).porProducto) {
+          const recibido = db.ordenesCompra.filter((o) => o.acopioProveedorId === a.id).flatMap((o) => o.items).filter((i) => i.productoId === p.productoId).reduce((s, i) => s + i.cantidadRecibida, 0);
+          if (Math.abs(p.pendiente - Math.max(0, p.pactado - recibido)) > EPS) errores.push(`${a.numero}: pendiente de retirar ≠ pactado − recibido`);
+        }
+      const pagado = db.pagosProveedores.flatMap((o) => o.imputaciones).filter((i) => a.comprobanteCompraIds.includes(i.comprobanteId)).reduce((s, i) => s + i.importe, 0);
+      if (Math.abs(pagado - a.pagado) > 1) errores.push(`${a.numero}: pagado ${a.pagado} ≠ órdenes de pago imputadas ${pagado}`);
+    }
+    chequeos.push({ nombre: "Acopios con proveedores: pendiente = pactado − recibido; pagado = OP", ok: !errores.length, detalle: `${db.acopiosProveedor.length} acopios con proveedores`, errores });
+  }
+
+  // 7. Numeración única y circuito heredado
+  {
+    const errores: string[] = [];
+    const vistos = new Map<string, string>();
+    const docs: { numero: string; tipo: string }[] = [
+      ...db.acopios.map((x) => ({ numero: x.numero, tipo: "acopio" })),
+      ...db.notasPedido.filter((n) => n.numero).map((x) => ({ numero: x.numero, tipo: "NP" })),
+      ...db.remitos.map((x) => ({ numero: x.numero, tipo: "remito" })),
+      ...db.comprobantes.filter((c) => c.clienteId && c.tipo !== "SALDO_A_FAVOR").map((x) => ({ numero: x.numero, tipo: "comprobante" })),
+      ...db.cobranzas.map((x) => ({ numero: x.numero, tipo: "recibo" })),
+      ...db.pagosProveedores.map((x) => ({ numero: x.numero, tipo: "OP" })),
+      ...db.ordenesCompra.map((x) => ({ numero: x.numero, tipo: "OC" })),
+      ...db.ajustesAcopio.map((x) => ({ numero: x.numero, tipo: "ACD" })),
+      ...db.devoluciones.map((x) => ({ numero: x.numero, tipo: "DP" })),
+      ...db.despachos.map((x) => ({ numero: x.numero, tipo: "despacho" })),
+    ];
+    for (const d of docs) {
+      const p = parsearNumeroDoc(d.numero);
+      if (!p) continue;
+      const k = d.numero;
+      if (vistos.has(k)) errores.push(`Número repetido: ${d.numero} (${vistos.get(k)} y ${d.tipo})`);
+      vistos.set(k, d.tipo);
+    }
+    const npPorId = new Map(db.notasPedido.map((n) => [n.id, n]));
+    for (const r of db.remitos) {
+      const n = r.notaPedidoId ? npPorId.get(r.notaPedidoId) : undefined;
+      if (n && n.circuito !== r.circuito) errores.push(`${r.numero}: circuito distinto al de ${n.numero}`);
+    }
+    for (const c of db.comprobantes) {
+      const n = c.notaPedidoId ? npPorId.get(c.notaPedidoId) : undefined;
+      if (n && n.circuito !== c.circuito) errores.push(`${c.numero}: circuito distinto al de ${n.numero}`);
+    }
+    chequeos.push({ nombre: "Numeración única por código, circuito y punto de venta", ok: !errores.length, detalle: `${docs.length} documentos numerados`, errores });
   }
 
   return { ok: chequeos.every((c) => c.ok), chequeos };

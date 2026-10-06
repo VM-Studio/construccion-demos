@@ -9,8 +9,8 @@ import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { verificarIntegridad, type ResultadoIntegridad } from "@/domain/integridad";
-import { formatearNumero, formatearNumeroFiscal, type EntidadNumerada } from "@/domain/numeracion";
-import { TIPO_COMPROBANTE_LABEL } from "@/domain/estados";
+import { formatearDoc } from "@/domain/numeracion";
+import type { CodigoDoc } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { useConfirm } from "@/components/shared/confirm-dialog";
@@ -132,13 +132,15 @@ function Sucursales() {
 function SucursalDialog({ sucursal, onClose }: { sucursal?: Sucursal; onClose: () => void }) {
   const db = useDb();
   const dep = db.depositos.find((d) => d.id === sucursal?.depositoId);
-  const [f, setF] = React.useState({ nombre: sucursal?.nombre ?? "", direccion: sucursal?.direccion ?? "", telefono: sucursal?.telefono ?? "", puntoVenta: sucursal?.puntoVenta ?? String(db.sucursales.length + 1).padStart(4, "0"), depositoNombre: dep?.nombre ?? "", depositoDireccion: dep?.direccion ?? "" });
+  const [f, setF] = React.useState({ nombre: sucursal?.nombre ?? "", direccion: sucursal?.direccion ?? "", telefono: sucursal?.telefono ?? "", puntoVenta: sucursal?.puntoVenta ?? String(db.sucursales.length + 1).padStart(4, "0"), puntoVentaRemito: sucursal?.puntoVentaRemito ?? String(db.sucursales.length + 20).padStart(5, "0"), depositoNombre: dep?.nombre ?? "", depositoDireccion: dep?.direccion ?? "", posiciones: dep?.posiciones ?? ["Playa", "Mostrador"] });
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent title={sucursal ? `Editar ${sucursal.nombre}` : "Nueva sucursal"} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarSucursal(f, sucursal?.id); ok(r, "Sucursal guardada"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Nombre" required htmlFor="s-n"><Input id="s-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
           <FormField label="Punto de venta fiscal" htmlFor="s-pv" hint="Numera facturas, notas de crédito y recibos"><Input id="s-pv" value={f.puntoVenta} onChange={(e) => setF({ ...f, puntoVenta: e.target.value.replace(/\D/g, "").slice(0, 4) })} /></FormField>
+          <FormField label="Punto de venta de remitos" htmlFor="s-pvr" hint="Numera los remitos (RM1 / RM2)"><Input id="s-pvr" value={f.puntoVentaRemito} onChange={(e) => setF({ ...f, puntoVentaRemito: e.target.value.replace(/\D/g, "").slice(0, 5) })} /></FormField>
+          <FormField label="Posiciones de carga del depósito" htmlFor="s-pos" hint="Separadas por coma, ej. Playa 1, Galpón 2, Mostrador"><Input id="s-pos" value={f.posiciones.join(", ")} onChange={(e) => setF({ ...f, posiciones: e.target.value.split(",").map((x) => x.trimStart()) })} /></FormField>
           <FormField label="Dirección" htmlFor="s-d"><Input id="s-d" value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} /></FormField>
           <FormField label="Teléfono" htmlFor="s-t"><Input id="s-t" value={f.telefono} onChange={(e) => setF({ ...f, telefono: e.target.value })} /></FormField>
           <FormField label="Depósito asociado" htmlFor="s-dn"><Input id="s-dn" value={f.depositoNombre} onChange={(e) => setF({ ...f, depositoNombre: e.target.value })} placeholder="Depósito …" /></FormField>
@@ -207,7 +209,7 @@ function Usuarios({ editable }: { editable: boolean }) {
 
 function UsuarioDialog({ usuario, onClose }: { usuario?: Usuario; onClose: () => void }) {
   const db = useDb();
-  const [f, setF] = React.useState({ nombre: usuario?.nombre ?? "", email: usuario?.email ?? "", rol: usuario?.rol ?? ("VENTAS" as Rol), sucursalId: usuario?.sucursalId ?? "suc_norte", activo: usuario?.activo ?? true });
+  const [f, setF] = React.useState({ nombre: usuario?.nombre ?? "", email: usuario?.email ?? "", rol: usuario?.rol ?? ("VENTAS" as Rol), sucursalId: usuario?.sucursalId ?? "suc_central", activo: usuario?.activo ?? true });
   const iniciales = f.nombre.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -262,7 +264,12 @@ function Parametros() {
   const db = useDb();
   const c = db.config;
   const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0 });
-  const internos: [EntidadNumerada, string][] = [["OC", "Órdenes de compra"], ["RCP", "Recepciones"], ["PRE", "Presupuestos"], ["PED", "Pedidos"], ["ACO", "Acopios"], ["RET", "Retiros de acopio"], ["REM", "Remitos"], ["REC", "Recibos"], ["OP", "Órdenes de pago"], ["TRF", "Transferencias"], ["AJU", "Ajustes"]];
+  const numeradores = Object.entries(db.numeradores)
+    .map(([k, n]) => {
+      const [codigo, circ, pv] = k.split("|");
+      return { k, codigo: codigo as CodigoDoc, circ: Number(circ) as 0 | 1 | 2, pv, n };
+    })
+    .sort((a, b) => a.codigo.localeCompare(b.codigo) || a.circ - b.circ || a.pv.localeCompare(b.pv));
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
@@ -279,20 +286,14 @@ function Parametros() {
       </Card>
       <Card>
         <CardHeader><CardTitle>Numeración actual</CardTitle><span className="text-[12px] text-muted">Sólo lectura · próximo número</span></CardHeader>
-        <div className="grid sm:grid-cols-2">
-          <ul className="divide-y divide-border border-border text-[13px] sm:border-r">
-            {internos.map(([k, l]) => (
-              <li key={k} className="flex justify-between px-4 py-2"><span className="text-muted">{l}</span><span className="font-mono text-[12px]">{formatearNumero(k, db.numeradores[k] + 1)}</span></li>
-            ))}
-          </ul>
-          <ul className="divide-y divide-border text-[13px]">
-            {db.sucursales.flatMap((s) =>
-              (["FACTURA_A", "FACTURA_B", "NOTA_CREDITO"] as const).map((t) => (
-                <li key={s.id + t} className="flex justify-between gap-2 px-4 py-2"><span className="text-muted">{TIPO_COMPROBANTE_LABEL[t]} · {s.nombre.replace("Sucursal ", "")}</span><span className="font-mono text-[12px]">{formatearNumeroFiscal(s.puntoVenta, (db.numeradores.fiscal[s.puntoVenta]?.[t] ?? 0) + 1)}</span></li>
-              )),
-            )}
-          </ul>
-        </div>
+        <ul className="max-h-[420px] divide-y divide-border overflow-y-auto text-[13px]">
+          {numeradores.map((x) => (
+            <li key={x.k} className="flex justify-between px-4 py-2">
+              <span className="text-muted">{x.codigo}{x.circ || ""} · PV {x.pv}</span>
+              <span className="font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</span>
+            </li>
+          ))}
+        </ul>
       </Card>
     </div>
   );
@@ -301,11 +302,11 @@ function Parametros() {
 function Tablas() {
   const db = useDb();
   const [rubro, setRubro] = React.useState<Rubro | "nuevo" | null>(null);
-  const [fr, setFr] = React.useState({ nombre: "", prefijo: "", orden: 9 });
+  const [fr, setFr] = React.useState({ nombre: "", prefijo: "", orden: 9, unidadNegocioId: "un_cor" });
   const [motivos, setMotivos] = React.useState(db.config.motivosAjuste);
   const [nuevoMotivo, setNuevoMotivo] = React.useState("");
   React.useEffect(() => {
-    if (rubro) setFr(rubro === "nuevo" ? { nombre: "", prefijo: "", orden: db.rubros.length + 1 } : { nombre: rubro.nombre, prefijo: rubro.prefijo, orden: rubro.orden });
+    if (rubro) setFr(rubro === "nuevo" ? { nombre: "", prefijo: "", orden: db.rubros.length + 1, unidadNegocioId: "un_cor" } : { nombre: rubro.nombre, prefijo: rubro.prefijo, orden: rubro.orden, unidadNegocioId: rubro.unidadNegocioId });
   }, [rubro, db.rubros.length]);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -345,7 +346,10 @@ function Tablas() {
         <DialogContent size="sm" title={rubro === "nuevo" ? "Nuevo rubro" : "Editar rubro"} footer={<><Button variant="secondary" onClick={() => setRubro(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarRubro(fr, rubro === "nuevo" ? undefined : (rubro as Rubro).id); ok(r, "Rubro guardado"); if (r.ok) setRubro(null); }}><Save /> Guardar</Button></>}>
           <div className="space-y-3">
             <FormField label="Nombre" htmlFor="r-n"><Input id="r-n" value={fr.nombre} onChange={(e) => setFr({ ...fr, nombre: e.target.value })} /></FormField>
-            <FormField label="Prefijo de código (3 letras)" htmlFor="r-p"><Input id="r-p" value={fr.prefijo} maxLength={3} onChange={(e) => setFr({ ...fr, prefijo: e.target.value.toUpperCase() })} /></FormField>
+            <FormField label="Prefijo de código (2 o 3 dígitos)" htmlFor="r-p"><Input id="r-p" value={fr.prefijo} maxLength={3} onChange={(e) => setFr({ ...fr, prefijo: e.target.value.replace(/\D/g, "") })} /></FormField>
+            <FormField label="Unidad de negocio">
+              <Select aria-label="Unidad de negocio" value={fr.unidadNegocioId} onValueChange={(v) => setFr({ ...fr, unidadNegocioId: v })} options={db.unidadesNegocio.map((u) => ({ value: u.id, label: u.nombre }))} />
+            </FormField>
             <FormField label="Orden" htmlFor="r-o"><NumberInput id="r-o" value={fr.orden} min={1} onValueChange={(v) => setFr({ ...fr, orden: Math.round(v) })} /></FormField>
           </div>
         </DialogContent>

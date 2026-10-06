@@ -32,6 +32,7 @@ function vacio(rubroId: string, codigo: string): Form {
     nombre: "",
     descripcion: "",
     rubroId,
+    unidadNegocioId: "",
     marca: "",
     unidad: "UN",
     unidadesPorPallet: undefined,

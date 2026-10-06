@@ -3,6 +3,12 @@ import type { EstadoInicial } from "@/domain/types";
 export interface UIState {
   usuarioId: string | null;
   sucursalActivaId: string | null;
+  /** Unidad de negocio activa (null = todas). */
+  unidadNegocioId: string | null;
+  /** Módulos favoritos por usuario (se muestran primero en /inicio). */
+  favoritosModulos: Record<string, string[]>;
+  /** Páginas favoritas (href) por usuario. */
+  favoritosPaginas: Record<string, string[]>;
   sidebarColapsado: boolean;
   /** Usuarios que ya vieron el tour guiado. */
   tourVisto: Record<string, boolean>;

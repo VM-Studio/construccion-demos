@@ -1,20 +1,45 @@
-# construccion-demos
+# construccion-demos · Aceros RNF
 
-Sistema de gestión para distribuidora de materiales de construcción. DEMO comercial de VM Studio: debe verse como producto terminado.
+Sistema de gestión a medida para **Aceros RNF** (dueño: **Felipe**). DEMO comercial de VM Studio: debe verse como producto terminado.
 
 ## Negocio
-- Empresa de 7 años, 2 sucursales (Norte y Sur), cada una con su depósito. No fabrica: compra, acopia, almacena, vende y despacha.
-- Flujos clave: Orden de compra → Ingreso de mercadería (recepción) → Stock por depósito → Venta (presupuesto → pedido → comprobante) → Despacho (remito) → Cobranza. Acopio: el cliente compra cantidades a precio fijo, paga, y retira en partes; el saldo pendiente es "deuda de mercadería".
-- Rentabilidad por pedido = Σ (precio unitario vendido − costo unitario al momento de la venta) × cantidad. El costo se guarda como snapshot en cada línea, nunca se recalcula con el costo actual.
-- Stock: físico, comprometido (pedidos confirmados sin despachar + saldos de acopio sin retirar), disponible = físico − comprometido, en tránsito (OC confirmadas sin recibir).
+- Dos **unidades de negocio**: **Corralón** (materiales de construcción: áridos, hierros, ladrillos, viguetas, cementos, impermeabilización, construcción en seco) y **Ferretería** (herramientas, fijaciones, pinturas, electricidad, sanitarios, seguridad). `Producto` y `Rubro` llevan `unidadNegocioId`; el header tiene un selector global de unidad (Todas / Ferretería / Corralón).
+- Dos sucursales: **Casa Central** (punto de venta 0001, remitos 00016) y **Sucursal 2** (0002, remitos 00006), cada una con su depósito y sus posiciones de carga (Playa 1, Galpón 2, Mostrador…).
+- Clientes con **obras** (`Obra`): cada línea de nota de pedido indica a qué obra va; los acopios se asocian a una o más obras.
+- **Circuito** `1 | 2`: AC1 · Fiscal / AC2 · Interno. Lo llevan acopios, NP, remitos, comprobantes, recibos, OC, OP y acopios con proveedores. Se elige al crear y se hereda a todo lo derivado (acopio → NP → RM → F → RC). Badge gris oscuro para AC1, gris claro con borde para AC2.
+- **Códigos de documento** (con sufijo de circuito): `AC` acopio · `NP` nota de pedido (retiro de acopio o venta) · `DP` devolución de NP (`DP2 0001-00067661-1`) · `ACD` ajuste/traspaso de saldo · `RM` remito · `RD` remito de devolución · `F` factura · `NC` nota de crédito · `RC` recibo · `OC` orden de compra · `OP` orden de pago · `ACP` acopio con proveedor. Formato `${codigo}${circuito} ${puntoVenta}-${correlativo 8 dígitos}`; numeración independiente por código, circuito y punto de venta (`src/domain/numeracion.ts`, `tx.numero(codigo, circuito, pv)`).
+
+### Acopio de clientes por monto (`src/domain/acopios.ts`)
+1. El cliente deposita (anticipo) o pacta en cuenta corriente un **importe**; se factura (F1/F2) y, si es anticipo, se cobra con un RC.
+2. Al crear el acopio se **congela TODA la lista de precios** de la unidad de negocio (`preciosCongelados`: precio + costo snapshot).
+3. Retira con **notas de pedido** origen ACOPIO a precio congelado; cada NP descuenta su monto del saldo. Las NP de acopio no se facturan.
+4. **Saldo disponible = importe − Σ NP + Σ DP + Σ ACD** (DP negativos suman; ACD traspasos/ajustes con signo). El detalle muestra el saldo corrido línea a línea, igual al documento real (Ramos AC2 0001-00003633 cierra en $ 844,85).
+5. Estado derivado: VENCIDO si pasó la fecha con saldo, AGOTADO si saldo ≤ 0. Pendiente de entrega = Σ(cantidad − entregados − devueltos) de sus NP.
+
+### Acopio con proveedores (`src/domain/acopiosProveedor.ts`)
+Espejo del de clientes: Aceros RNF acopia con proveedores por monto o por cantidad (ej. 2.000 bolsas Loma Negra), por anticipo o cuenta corriente. Los retiros son **OC origen ACOPIO** a costo congelado; al recibir baja el pendiente de retirar y **no genera deuda nueva**. "Le debemos" = importe − pagado (cuenta corriente); "Nos falta retirar" = pactado − recibido.
+
+### Ventas, remitos y stock
+- `NotaPedido` es la fuente de verdad de las ventas (`Pedido` es alias): `origen` NUEVA | ACOPIO, `formaPago` CONTADO | CUENTA_CORRIENTE | ACOPIO, `pendienteEntrega`.
+- Remitos `INICIAL → PICKING → HECHO`. Recién al pasar a HECHO se generan los movimientos de stock y se actualizan los `entregados` de la NP (`marcarHecho` en `src/store/ops.ts`).
+- **Disponible = físico − pendiente de entrega − reservado (remitos en picking)**. Toda validación de venta/transferencia usa disponible; solo DUENO/ADMIN pueden forzar (auditado).
+- Despachos con tiempos: ESPERA → PREPARACION → FINALIZADO (+ EN_VIAJE / ENTREGADO para envíos). `src/domain/despachos.ts`: `minutosEspera`, `minutosPreparacion`, `minutosTotal`.
+- Rentabilidad = Σ (precio − costo snapshot de la línea) × cantidad. El costo snapshot nunca se recalcula.
+
+### Adjuntos
+Los **blobs viven en IndexedDB** (`idb-keyval`, helper `src/lib/adjuntos.ts`: `guardarAdjunto`, `obtenerUrl`, `eliminarAdjunto`); en el store (localStorage) solo la metadata `Adjunto`. El remito firmado (categoría REMITO_FIRMADO) setea `firmadoAdjuntoId`. Los 3 remitos firmados de ejemplo del seed se generan en runtime con jsPDF.
+
+## Navegación
+Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas de módulos y sus páginas; dentro de una página, barra lateral con las páginas del módulo y "← Módulos". Definición única en `src/config/modulos.ts`.
 
 ## Stack y reglas
-- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Zustand con persist, Recharts, Lucide, pnpm.
-- SIN base de datos. `src/data/repositories/*` expone funciones tipadas; `src/store/*` las consume. Las pantallas nunca tocan localStorage directo.
-- Toda regla de negocio vive en `src/domain/` como funciones puras testeables. Los componentes solo renderizan y llaman acciones del store.
-- Dinero en ARS, siempre `formatMoney`. Fechas con date-fns y `formatDate`. Nunca `toLocaleString` suelto.
-- UI: usar las primitivas de `src/components/ui`. No inventar colores: solo tokens. Un acento (ámbar) para lo importante. Densidad alta.
-- Español rioplatense en toda la UI (vos/usted neutro: "Crear pedido", "Confirmar", "Cancelar"). Sin anglicismos innecesarios.
+- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Zustand con persist (clave `aceros-rnf-v1`), Recharts, Lucide, pnpm. jsPDF + autotable y exceljs para descargas (dynamic import).
+- SIN base de datos. `src/store/*` con transacciones (`Tx`, `ejecutar`); `src/data/repositories/*` lista para Prisma. Las pantallas nunca tocan localStorage directo.
+- Toda regla de negocio vive en `src/domain/` como funciones puras. Los componentes solo renderizan y llaman acciones del store.
+- `pnpm seed:check` (consistencia del seed: kardex, saldos, acopios, Ramos = $ 844,85) y `pnpm flujos:check` (flujos completos sobre el store).
+- Dinero en ARS con `formatMoney`. Fechas con date-fns y `formatDate`. Nunca `toLocaleString` suelto.
+- UI: primitivas de `src/components/ui`. Solo tokens de color, un acento ámbar. Densidad alta. Nada de colores llamativos.
+- Español rioplatense en toda la UI. Sin anglicismos innecesarios. Textos de empresa desde `BRAND` / configuración.
 - Cada página: título, acción primaria arriba a la derecha, filtros, tabla o grilla, estado vacío con CTA.
-- Mobile responsive obligatorio pero el diseño prioritario es escritorio (lo van a usar en PC de oficina y depósito).
+- Escritorio prioritario, responsive obligatorio.
 - Commits en español, imperativo, cortos.

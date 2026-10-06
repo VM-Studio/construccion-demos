@@ -82,6 +82,7 @@ const UNIDAD_LABEL: Record<string, [string, string]> = {
   CAJA: ["caja", "cajas"],
   ROLLO: ["rollo", "rollos"],
   PLACA: ["placa", "placas"],
+  TN: ["tn", "tn"],
 };
 
 /** Cantidad con unidad: `120 bolsas`, `4,5 m³`. */

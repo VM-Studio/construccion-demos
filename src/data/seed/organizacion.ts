@@ -1,41 +1,30 @@
-import type { Chofer, Deposito, Sucursal, Usuario, Vehiculo } from "@/domain/types";
+import type { Chofer, Deposito, Sucursal, UnidadNegocio, Usuario, Vehiculo } from "@/domain/types";
 
 export function seedOrganizacion(ts: string) {
   const base = { creadoEn: ts, actualizadoEn: ts };
 
+  const unidadesNegocio: UnidadNegocio[] = [
+    { id: "un_cor", nombre: "Corralón", codigo: "COR", orden: 1, ...base },
+    { id: "un_fer", nombre: "Ferretería", codigo: "FER", orden: 2, ...base },
+  ];
+
   const sucursales: Sucursal[] = [
-    {
-      id: "suc_norte",
-      nombre: "Sucursal Norte",
-      direccion: "Av. Tomás Márquez 1850, Pilar",
-      telefono: "(0230) 442-1850",
-      depositoId: "dep_norte",
-      puntoVenta: "0001",
-      ...base,
-    },
-    {
-      id: "suc_sur",
-      nombre: "Sucursal Sur",
-      direccion: "Av. Ricardo Balbín 3240, San Martín",
-      telefono: "(011) 4754-3240",
-      depositoId: "dep_sur",
-      puntoVenta: "0002",
-      ...base,
-    },
+    { id: "suc_central", nombre: "Casa Central", direccion: "Av. Gral. San Martín 4520, Florida Oeste", telefono: "(011) 4730-5520", depositoId: "dep_central", puntoVenta: "0001", puntoVentaRemito: "00016", ...base },
+    { id: "suc_2", nombre: "Sucursal 2", direccion: "Av. Ricardo Balbín 2870, San Martín", telefono: "(011) 4754-2870", depositoId: "dep_2", puntoVenta: "0002", puntoVentaRemito: "00006", ...base },
   ];
 
   const depositos: Deposito[] = [
-    { id: "dep_norte", nombre: "Depósito Norte", sucursalId: "suc_norte", direccion: "Ruta 8 km 52,5, Pilar", ...base },
-    { id: "dep_sur", nombre: "Depósito Sur", sucursalId: "suc_sur", direccion: "Av. Ricardo Balbín 3260, San Martín", ...base },
+    { id: "dep_central", nombre: "Depósito Casa Central", sucursalId: "suc_central", direccion: "Av. Gral. San Martín 4560, Florida Oeste", posiciones: ["Playa 1", "Playa 2", "Galpón 1", "Mostrador"], ...base },
+    { id: "dep_2", nombre: "Depósito Sucursal 2", sucursalId: "suc_2", direccion: "Av. Ricardo Balbín 2890, San Martín", posiciones: ["Playa", "Galpón 2", "Mostrador"], ...base },
   ];
 
   const usuarios: Usuario[] = [
-    { id: "usr_martin", nombre: "Martín Ferrari", email: "martin@distribuidoranorte.com.ar", rol: "DUENO", activo: true, avatarIniciales: "MF", ...base },
-    { id: "usr_laura", nombre: "Laura Giménez", email: "laura@distribuidoranorte.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "LG", ...base },
-    { id: "usr_diego", nombre: "Diego Romero", email: "diego@distribuidoranorte.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "DR", ...base },
-    { id: "usr_carla", nombre: "Carla Méndez", email: "carla@distribuidoranorte.com.ar", rol: "VENTAS", sucursalId: "suc_norte", activo: true, avatarIniciales: "CM", ...base },
-    { id: "usr_pablo", nombre: "Pablo Sosa", email: "pablo@distribuidoranorte.com.ar", rol: "VENTAS", sucursalId: "suc_sur", activo: true, avatarIniciales: "PS", ...base },
-    { id: "usr_jorge", nombre: "Jorge Benítez", email: "jorge@distribuidoranorte.com.ar", rol: "DEPOSITO", sucursalId: "suc_sur", activo: true, avatarIniciales: "JB", ...base },
+    { id: "usr_felipe", nombre: "Felipe", apellido: "", email: "felipe@acerosrnf.com.ar", rol: "DUENO", activo: true, avatarIniciales: "F", ...base },
+    { id: "usr_natalia", nombre: "Natalia Quiroga", email: "natalia@acerosrnf.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "NQ", ...base },
+    { id: "usr_sergio", nombre: "Sergio Medina", email: "sergio@acerosrnf.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "SM", ...base },
+    { id: "usr_lucas", nombre: "Lucas Fernández", email: "lucas@acerosrnf.com.ar", rol: "VENTAS", sucursalId: "suc_central", activo: true, avatarIniciales: "LF", ...base },
+    { id: "usr_rocio", nombre: "Rocío Benítez", email: "rocio@acerosrnf.com.ar", rol: "VENTAS", sucursalId: "suc_2", activo: true, avatarIniciales: "RB", ...base },
+    { id: "usr_hugo", nombre: "Hugo Ramírez", email: "hugo@acerosrnf.com.ar", rol: "DEPOSITO", sucursalId: "suc_central", activo: true, avatarIniciales: "HR", ...base },
   ];
 
   const choferes: Chofer[] = [
@@ -50,5 +39,5 @@ export function seedOrganizacion(ts: string) {
     { id: "veh_3", patente: "AF 233 LT", descripcion: "Iveco Daily 70C17 caja abierta", capacidadKg: 3500, choferId: "cho_3", activo: true, ...base },
   ];
 
-  return { sucursales, depositos, usuarios, choferes, vehiculos };
+  return { unidadesNegocio, sucursales, depositos, usuarios, choferes, vehiculos };
 }

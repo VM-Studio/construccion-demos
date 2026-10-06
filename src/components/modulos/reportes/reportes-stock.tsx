@@ -6,8 +6,8 @@ import { addDays } from "date-fns";
 import { toast } from "sonner";
 import { FilePlus2 } from "lucide-react";
 import { useStore } from "@/store";
-import { useAcopiosConSaldo, useDb, usePosiciones, usePuede, useSucursalActiva } from "@/store/selectors";
-import { pendienteItem } from "@/domain/acopios";
+import { useAcopiosResumen, useDb, usePosiciones, usePuede, useSucursalActiva, useUnidadNegocio, useVeCircuito2 } from "@/store/selectors";
+import { pendienteEntrega } from "@/domain/acopios";
 import { obtenerPrecio } from "@/domain/precios";
 import { cantidadReposicion } from "@/domain/productos";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -86,58 +86,69 @@ export function ReporteValorizacion() {
   );
 }
 
-// ───────────────────────── 6. Deuda de mercadería ─────────────────────────
+// ───────────────────────── 6. Acopios de clientes (deuda de mercadería) ─────────────────────────
 
 export function ReporteDeudaMercaderia() {
   const db = useDb();
   const router = useRouter();
   const suc = useSucursalActiva();
-  const acopios = useAcopiosConSaldo().filter((a) => ["VIGENTE", "RETIRADO_PARCIAL", "VENCIDO"].includes(a.estado) && (!suc || a.acopio.sucursalId === suc));
-  const filas = acopios.flatMap((a) =>
-    a.acopio.items
-      .filter((i) => pendienteItem(i) > 0)
-      .map((i) => {
-        const p = db.productos.find((x) => x.id === i.productoId)!;
-        const q = pendienteItem(i);
-        return { id: i.id, a, p, q, pactado: q * i.precioUnitarioPactado, actual: q * p.costoUltimo, exposicion: q * (p.costoUltimo - i.costoUnitarioSnapshot), cliente: db.clientes.find((c) => c.id === a.acopio.clienteId) };
-      }),
+  const un = useUnidadNegocio();
+  const veC2 = useVeCircuito2();
+  const resumen = useAcopiosResumen().filter(
+    (a) => (a.estado === "VIGENTE" || a.estado === "VENCIDO") && (!suc || a.acopio.sucursalId === suc) && (!un || a.acopio.unidadNegocioId === un) && (veC2 || a.acopio.circuito !== 2),
   );
+  const precioHoy = new Map(db.precios.map((p) => [`${p.productoId}|${p.listaPreciosId}`, p.precio]));
+  const costoHoy = new Map(db.productos.map((p) => [p.id, p.costoUltimo]));
+  const filas = resumen.map((r) => {
+    const a = r.acopio;
+    // Exposición: cuánto más vale hoy lo que el cliente todavía puede retirar (lista actual vs congelada).
+    const ratios = a.preciosCongelados.map((pc) => (precioHoy.get(`${pc.productoId}|${a.listaPreciosBaseId}`) ?? pc.precio) / (pc.precio || 1)).filter((x) => Number.isFinite(x));
+    const ratio = ratios.length ? ratios.reduce((s, x) => s + x, 0) / ratios.length : 1;
+    const pend = pendienteEntrega(a.id, db.notasPedido);
+    const expPendiente = pend.reduce((s, l) => s + l.pendiente * ((costoHoy.get(l.productoId) ?? 0) - (a.preciosCongelados.find((x) => x.productoId === l.productoId)?.costoSnapshot ?? 0)), 0);
+    const exposicion = Math.max(0, r.saldo) * (ratio - 1) + expPendiente;
+    return { id: a.id, r, cliente: db.clientes.find((c) => c.id === a.clienteId), obras: db.obras.filter((o) => a.obraIds.includes(o.id)).map((o) => o.nombre).join(", "), ratio, exposicion };
+  });
   type F = (typeof filas)[number];
-  const t = filas.reduce((x, f) => ({ p: x.p + f.pactado, a: x.a + f.actual, e: x.e + f.exposicion }), { p: 0, a: 0, e: 0 });
+  const t = filas.reduce((x, f) => ({ i: x.i + f.r.acopio.importe, s: x.s + f.r.saldo, p: x.p + f.r.pendienteEntrega, e: x.e + f.exposicion }), { i: 0, s: 0, p: 0, e: 0 });
   const porCliente = new Map<string, number>();
-  for (const f of filas) porCliente.set(f.cliente?.nombreFantasia ?? f.cliente?.razonSocial ?? "", (porCliente.get(f.cliente?.nombreFantasia ?? f.cliente?.razonSocial ?? "") ?? 0) + f.pactado);
+  for (const f of filas) {
+    const k = f.cliente?.nombreFantasia ?? f.cliente?.razonSocial ?? "";
+    porCliente.set(k, (porCliente.get(k) ?? 0) + f.r.saldo + f.r.pendienteEntrega);
+  }
   const columnas: Column<F>[] = [
     { key: "cli", header: "Cliente", footer: "Total", sortable: true, sortValue: (f) => f.cliente?.razonSocial ?? "", cell: (f) => <span className="block min-w-[140px]">{f.cliente?.nombreFantasia ?? f.cliente?.razonSocial}</span> },
-    { key: "aco", header: "Acopio", cell: (f) => <span className="whitespace-nowrap font-mono text-[12px]">{f.a.acopio.numero}</span> },
-    { key: "p", header: "Producto", cell: (f) => <span className="block min-w-[180px]">{f.p.nombre}</span> },
-    { key: "q", header: "Pendiente", align: "right", cell: (f) => <span className="tnum">{formatQty(f.q, f.p.unidad)}</span> },
-    { key: "pa", header: "A precio pactado", align: "right", footer: <span className="tnum text-accent">{formatMoney(t.p, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.pactado, cell: (f) => <span className="font-medium tnum">{formatMoney(f.pactado, { decimals: false })}</span> },
-    { key: "ca", header: "A costo actual", align: "right", footer: <span className="tnum">{formatMoney(t.a, { decimals: false })}</span>, cell: (f) => <span className="tnum">{formatMoney(f.actual, { decimals: false })}</span> },
-    { key: "ex", header: "Exposición", align: "right", footer: <span className={cn("tnum", t.e > 0 ? "text-danger" : "text-success")}>{formatMoney(t.e, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.exposicion, cell: (f) => <span className={cn("tnum", f.exposicion > 0 ? "text-danger" : f.exposicion < 0 ? "text-success" : "text-muted")}>{formatMoney(f.exposicion, { decimals: false })}</span> },
-    { key: "ve", header: "Vence", sortable: true, sortValue: (f) => f.a.acopio.fechaVencimiento, cell: (f) => <span className={cn("whitespace-nowrap", f.a.diasParaVencer < 0 ? "font-medium text-danger" : f.a.diasParaVencer <= 30 ? "font-medium text-warning" : "text-muted")}>{formatDate(f.a.acopio.fechaVencimiento)}</span> },
+    { key: "aco", header: "Acopio", cell: (f) => <span className="whitespace-nowrap font-mono text-[12px]">{f.r.acopio.numero}</span> },
+    { key: "ob", header: "Obras", cell: (f) => <span className="block min-w-[160px] text-muted">{f.obras}</span> },
+    { key: "im", header: "Importe", align: "right", footer: <span className="tnum">{formatMoney(t.i, { decimals: false })}</span>, cell: (f) => <span className="tnum">{formatMoney(f.r.acopio.importe, { decimals: false })}</span> },
+    { key: "re", header: "Retirado", align: "right", cell: (f) => <span className="tnum">{formatMoney(f.r.retirado, { decimals: false })}</span> },
+    { key: "sa", header: "Saldo disponible", align: "right", footer: <span className="tnum text-accent">{formatMoney(t.s, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.r.saldo, cell: (f) => <span className="font-medium tnum">{formatMoney(f.r.saldo)}</span> },
+    { key: "pe", header: "Pendiente de entrega", align: "right", footer: <span className="tnum">{formatMoney(t.p, { decimals: false })}</span>, cell: (f) => <span className="tnum">{formatMoney(f.r.pendienteEntrega, { decimals: false })}</span> },
+    { key: "ex", header: "Exposición", align: "right", footer: <span className={cn("tnum", t.e > 0 ? "text-danger" : "text-success")}>{formatMoney(t.e, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.exposicion, cell: (f) => <span className={cn("tnum", f.exposicion > 0 ? "text-danger" : "text-muted")} title={`Lista hoy ${formatPercent(f.ratio - 1, { signo: true })} vs congelada`}>{formatMoney(f.exposicion, { decimals: false })}</span> },
+    { key: "ve", header: "Vence", sortable: true, sortValue: (f) => f.r.acopio.fechaVencimiento, cell: (f) => <span className={cn("whitespace-nowrap", f.r.diasParaVencer < 0 ? "font-medium text-danger" : f.r.diasParaVencer <= 30 ? "font-medium text-warning" : "text-muted")}>{formatDate(f.r.acopio.fechaVencimiento)}</span> },
   ];
   return (
     <ReporteLayout
       slug="deuda-mercaderia"
-      titulo="Deuda de mercadería (acopios)"
-      descripcion="Lo que todavía hay que entregar a cada cliente: a precio pactado, cuánto cuesta hoy reponerlo y cuánto se erosionó el margen."
+      titulo="Acopios de clientes"
+      descripcion="Plata que los clientes ya pagaron o pactaron y todavía no retiraron, lo retirado sin entregar y cuánto margen se pierde por la suba de precios desde que se congelaron."
       kpis={
         <>
-          <KpiCard label="Deuda a precio pactado" valor={formatMoney(t.p, { compact: true })} acento />
-          <KpiCard label="Costo de reposición hoy" valor={formatMoney(t.a, { compact: true })} subtexto={`margen restante ${formatPercent(t.p ? (t.p - t.a) / t.p : 0)}`} />
-          <KpiCard label="Exposición por suba de costos" valor={<span className={t.e > 0 ? "text-danger" : "text-success"}>{formatMoney(t.e, { compact: true })}</span>} />
-          <KpiCard label="Vencen en 30 días" valor={String(acopios.filter((a) => a.diasParaVencer >= 0 && a.diasParaVencer <= 30).length)} subtexto={`${acopios.filter((a) => a.diasParaVencer < 0).length} ya vencidos con saldo`} />
+          <KpiCard label="Saldo disponible de acopios" valor={formatMoney(t.s, { compact: true })} acento />
+          <KpiCard label="Pendiente de entrega" valor={formatMoney(t.p, { compact: true })} subtexto="retirado con NP y sin remitir" />
+          <KpiCard label="Exposición por suba de precios" valor={<span className={t.e > 0 ? "text-danger" : "text-success"}>{formatMoney(t.e, { compact: true })}</span>} />
+          <KpiCard label="Vencen en 30 días" valor={String(filas.filter((f) => f.r.diasParaVencer >= 0 && f.r.diasParaVencer <= 30).length)} subtexto={`${filas.filter((f) => f.r.estado === "VENCIDO").length} ya vencidos con saldo`} />
         </>
       }
-      graficoTitulo="Deuda por cliente (a precio pactado)"
+      graficoTitulo="Saldo + pendiente por cliente"
       grafico={<BarrasAgrupadasChart data={[...porCliente.entries()].sort((a, b) => b[1] - a[1]).map(([clave, v]) => ({ clave, deuda: Math.round(v) }))} series={[{ key: "deuda", nombre: "Deuda de mercadería", color: COLORES.acento }]} />}
       exportar={() => ({
-        head: ["Cliente", "Acopio", "Producto", "Pendiente", "Unidad", "A precio pactado", "A costo actual", "Exposición", "Vencimiento"],
-        rows: filas.map((f) => [f.cliente?.razonSocial, f.a.acopio.numero, f.p.nombre, f.q, f.p.unidad, Math.round(f.pactado), Math.round(f.actual), Math.round(f.exposicion), formatDate(f.a.acopio.fechaVencimiento)]),
-        foot: ["Total", "", "", "", "", Math.round(t.p), Math.round(t.a), Math.round(t.e), ""],
+        head: ["Cliente", "Acopio", "Circuito", "Obras", "Importe", "Retirado", "Saldo disponible", "Pendiente de entrega", "Exposición", "Vencimiento"],
+        rows: filas.map((f) => [f.cliente?.razonSocial, f.r.acopio.numero, `AC${f.r.acopio.circuito}`, f.obras, Math.round(f.r.acopio.importe), Math.round(f.r.retirado), Math.round(f.r.saldo * 100) / 100, Math.round(f.r.pendienteEntrega), Math.round(f.exposicion), formatDate(f.r.acopio.fechaVencimiento)]),
+        foot: ["Total", "", "", "", Math.round(t.i), "", Math.round(t.s), Math.round(t.p), Math.round(t.e), ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} searchText={(f) => `${f.cliente?.razonSocial} ${f.a.acopio.numero} ${f.p.nombre}`} onRowClick={(f) => router.push(`/acopios/${f.a.acopio.id}`)} initialSort={{ key: "pa", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "No hay saldos de acopio pendientes" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} searchText={(f) => `${f.cliente?.razonSocial} ${f.r.acopio.numero} ${f.obras}`} onRowClick={(f) => router.push(`/acopios/${f.id}`)} initialSort={{ key: "sa", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "No hay acopios con saldo" }} />
     </ReporteLayout>
   );
 }
@@ -166,8 +177,8 @@ export function ReporteStockCritico() {
     const prov = db.proveedores.find((p) => p.id === proveedorId)!;
     const items = (porProveedor.get(proveedorId) ?? []).map((f) => ({ id: newId("ioc"), productoId: f.p.id, cantidadPedida: f.sugerida, cantidadRecibida: 0, costoUnitario: f.p.costoUltimo, descuentoPct: 0 }));
     const u = db.usuarios.find((x) => x.id === useStore.getState().ui.usuarioId);
-    const suc = u?.sucursalId ?? "suc_norte";
-    const r = useStore.getState().guardarOC({ proveedorId, sucursalId: suc, depositoDestinoId: db.sucursales.find((s) => s.id === suc)?.depositoId ?? "dep_norte", fechaEmision: new Date().toISOString(), fechaEntregaEstimada: addDays(new Date(), prov.plazoEntregaDias).toISOString(), items, observaciones: "Reposición sugerida desde el reporte de stock crítico." });
+    const suc = u?.sucursalId ?? "suc_central";
+    const r = useStore.getState().guardarOC({ proveedorId, circuito: prov.circuitoHabitual, origen: "NUEVA", sucursalId: suc, depositoDestinoId: db.sucursales.find((s) => s.id === suc)?.depositoId ?? "dep_central", fechaEmision: new Date().toISOString(), fechaEntregaEstimada: addDays(new Date(), prov.plazoEntregaDias).toISOString(), items, observaciones: "Reposición sugerida desde el reporte de stock crítico." });
     if (r.ok) {
       toast.success(`OC borrador creada para ${prov.razonSocial}`, { action: { label: "Abrir", onClick: () => router.push(`/compras/oc/${r.data}`) } });
     } else toast.error(r.error);

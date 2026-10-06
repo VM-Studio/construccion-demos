@@ -18,12 +18,12 @@ export function crearSliceStock(set: SetFn, get: GetFn) {
           const disp = disponible(tx, it.productoId, data.depositoOrigenId);
           if (it.cantidad > disp + 1e-9) {
             const u = tx.find("productos", it.productoId)?.unidad ?? "UN";
-            throw new ErrorNegocio(`${nombreProducto(tx, it.productoId)}: el disponible en origen es ${formatQty(Math.max(0, disp), u)}.`);
+            throw new ErrorNegocio(`${nombreProducto(tx, it.productoId)}: el disponible en origen es ${formatQty(Math.max(0, disp), u)} (lo pendiente de entrega no se puede transferir).`);
           }
         }
         const t: TransferenciaStock = {
           id: newId("trf"),
-          numero: tx.numero("TRF"),
+          numero: tx.numero("TRF", null, "0001"),
           depositoOrigenId: data.depositoOrigenId,
           depositoDestinoId: data.depositoDestinoId,
           items,
@@ -89,7 +89,7 @@ export function crearSliceStock(set: SetFn, get: GetFn) {
           throw new ErrorNegocio("El ajuste supera $ 500.000: la observación es obligatoria.", "OBSERVACION");
         const aj: AjusteStock = {
           id: newId("aju"),
-          numero: tx.numero("AJU"),
+          numero: tx.numero("AJU", null, "0001"),
           depositoId: data.depositoId,
           items,
           usuarioId: tx.usuarioId,

@@ -1,6 +1,6 @@
-# construccion-demos
+# construccion-demos · Aceros RNF
 
-Sistema de gestión para distribuidora de materiales de construcción (compras, stock, ventas, acopios, despachos, cuentas corrientes y reportes) — demo comercial de VM Studio.
+Sistema de gestión a medida para Aceros RNF (corralón y ferretería): clientes y obras, acopios por monto con precios congelados, ventas con origen y forma de pago, remitos con remito firmado, stock con pendiente de entrega, despachos con tiempos, proveedores y acopios con proveedores, cuentas corrientes y reportes — demo comercial de VM Studio.
 
 ## Cómo correrlo
 
@@ -16,14 +16,14 @@ Abrí http://localhost:3000 y elegí un usuario del demo.
 
 | Usuario | Rol | Qué ve |
 |---|---|---|
-| Martín Ferrari | Dueño | Todo, incluidos márgenes, usuarios y auditoría (ve el recorrido guiado la primera vez) |
-| Laura Giménez / Diego Romero | Administración | Todo menos la administración de usuarios |
-| Carla Méndez | Ventas · Sucursal Norte | Ventas, acopios, despachos y cuentas corrientes (sin costos ni márgenes) |
-| Pablo Sosa | Ventas · Sucursal Sur | Ídem, bloqueado en su sucursal |
-| Jorge Benítez | Depósito · Sucursal Sur | Stock, recepción de mercadería y despachos |
+| Felipe | Dueño | Todo, incluidos márgenes, usuarios, numeración y auditoría |
+| Natalia Quiroga / Sergio Medina | Administración | Todo menos la administración de usuarios |
+| Lucas Fernández | Ventas · Casa Central | Clientes, ventas, acopios, remitos y cuentas corrientes (sin costos ni márgenes) |
+| Rocío Benítez | Ventas · Sucursal 2 | Ídem, en su sucursal |
+| Hugo Ramírez | Depósito · Casa Central | Stock, recepciones, remitos (picking / hecho / firmado) y despachos |
 
 ## Scripts
 
-- `pnpm seed:check` — valida la consistencia del seed (kardex = stock físico, saldos = total − cobrado, retiros ≤ acopiado, despachos programados con stock).
+- `pnpm seed:check` — valida la consistencia del seed (kardex = stock físico, saldos = total − imputado, saldo de acopio = importe − NP + DP + ACD, entregados ≤ cantidad, el acopio de Ramos cierra en $ 844,85).
 - `pnpm flujos:check` — ejecuta los flujos completos de negocio sobre el store y verifica la integridad al final.
 - `pnpm build` — build de producción.

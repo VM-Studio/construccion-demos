@@ -1,7 +1,7 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import type { Cliente, Comprobante } from "./types";
 
-const TIPOS_DEUDA = new Set(["FACTURA_A", "FACTURA_B", "NOTA_DEBITO"]);
+const TIPOS_DEUDA = new Set(["FACTURA", "NOTA_DEBITO"]);
 
 /** True si el comprobante genera deuda (facturas y notas de débito). */
 export function esComprobanteDeuda(c: Pick<Comprobante, "tipo">): boolean {

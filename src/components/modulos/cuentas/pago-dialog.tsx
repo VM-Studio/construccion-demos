@@ -32,16 +32,18 @@ const deInput = (v: string) => {
 export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean; onOpenChange: (v: boolean) => void; proveedorId: string }) {
   const db = useDb();
   const [fecha, setFecha] = React.useState(diaLocal(new Date()));
+  const [circuito, setCircuito] = React.useState<1 | 2>(1);
   const [medios, setMedios] = React.useState<Fila[]>([]);
   const [imput, setImput] = React.useState<Record<string, number>>({});
   const [op, setOp] = React.useState<string | null>(null);
   const prov = db.proveedores.find((p) => p.id === proveedorId);
-  const pendientes = React.useMemo(() => db.comprobantes.filter((c) => c.proveedorId === proveedorId && c.saldoPendiente > 0.009 && c.estado !== "ANULADO").sort((a, b) => a.fecha.localeCompare(b.fecha)), [db.comprobantes, proveedorId]);
+  const pendientes = React.useMemo(() => db.comprobantes.filter((c) => c.proveedorId === proveedorId && c.circuito === circuito && c.saldoPendiente > 0.009 && c.estado !== "ANULADO").sort((a, b) => a.fecha.localeCompare(b.fecha)), [db.comprobantes, proveedorId, circuito]);
   const enCartera = db.cheques.filter((c) => c.estado === "EN_CARTERA");
 
   React.useEffect(() => {
     if (!open) return;
     setFecha(diaLocal(new Date()));
+    setCircuito(prov?.circuitoHabitual ?? 1);
     const primera = pendientes[0];
     setMedios([{ _id: newId("m"), medio: "TRANSFERENCIA", importe: primera?.saldoPendiente ?? 0 }]);
     setImput(primera ? { [primera.id]: primera.saldoPendiente } : {});
@@ -56,6 +58,7 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
   const confirmar = () => {
     const r = useStore.getState().registrarPagoProveedor({
       proveedorId,
+      circuito,
       fecha: deInput(fecha),
       medios: medios.map(({ _id, ...m }) => {
         void _id;
@@ -86,7 +89,12 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
           }
         >
           <div className="space-y-5">
-            <FormField label="Fecha" htmlFor="op-f" className="max-w-[200px]"><Input id="op-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
+            <div className="flex flex-wrap gap-3">
+              <FormField label="Fecha" htmlFor="op-f" className="max-w-[200px]"><Input id="op-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
+              <FormField label="Circuito" className="max-w-[200px]">
+                <Select aria-label="Circuito" value={String(circuito)} onValueChange={(v) => { setCircuito(Number(v) as 1 | 2); setImput({}); }} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
+              </FormField>
+            </div>
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h4 className="text-[13px] font-semibold">Medios de pago</h4>

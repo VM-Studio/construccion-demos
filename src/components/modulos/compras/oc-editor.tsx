@@ -59,10 +59,10 @@ export function OCEditor({ id }: { id: string }) {
   const [email, setEmail] = React.useState(false);
   const [recibir, setRecibir] = React.useState(false);
 
-  const sucursalUsuario = usuario?.sucursalId ?? "suc_norte";
+  const sucursalUsuario = usuario?.sucursalId ?? "suc_central";
   const [proveedorId, setProveedorId] = React.useState(oc?.proveedorId ?? "");
   const [sucursalId, setSucursalId] = React.useState(oc?.sucursalId ?? sucursalUsuario);
-  const [depositoId, setDepositoId] = React.useState(oc?.depositoDestinoId ?? db.sucursales.find((s) => s.id === sucursalUsuario)?.depositoId ?? "dep_norte");
+  const [depositoId, setDepositoId] = React.useState(oc?.depositoDestinoId ?? db.sucursales.find((s) => s.id === sucursalUsuario)?.depositoId ?? "dep_central");
   const [fecha, setFecha] = React.useState(aInput(oc?.fechaEmision ?? new Date().toISOString()));
   const [entrega, setEntrega] = React.useState(aInput(oc?.fechaEntregaEstimada ?? new Date().toISOString()));
   const [obs, setObs] = React.useState(oc?.observaciones ?? "");
@@ -111,6 +111,9 @@ export function OCEditor({ id }: { id: string }) {
 
   const datos = () => ({
     proveedorId,
+    circuito: oc?.circuito ?? db.proveedores.find((p) => p.id === proveedorId)?.circuitoHabitual ?? 1,
+    origen: oc?.origen ?? ("NUEVA" as const),
+    acopioProveedorId: oc?.acopioProveedorId,
     sucursalId,
     depositoDestinoId: depositoId,
     fechaEmision: deInput(fecha),

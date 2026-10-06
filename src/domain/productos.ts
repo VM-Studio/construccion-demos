@@ -1,13 +1,13 @@
 import type { Producto, Rubro } from "./types";
 
-/** Próximo código de producto para un rubro: `GRU-0018`. */
+/** Próximo código numérico de artículo para un rubro (prefijo del rubro + correlativo): `50319`. */
 export function siguienteCodigoProducto(rubroId: string, productos: Producto[], rubros: Rubro[]): string {
   const r = rubros.find((x) => x.id === rubroId);
   if (!r) return "";
   const max = productos
-    .filter((p) => p.codigo.startsWith(r.prefijo + "-"))
-    .reduce((m, p) => Math.max(m, Number(p.codigo.split("-")[1]) || 0), 0);
-  return `${r.prefijo}-${String(max + 1).padStart(4, "0")}`;
+    .filter((p) => p.rubroId === rubroId && /^\d+$/.test(p.codigo) && p.codigo.startsWith(r.prefijo))
+    .reduce((m, p) => Math.max(m, Number(p.codigo)), 0);
+  return max ? String(max + 1) : `${r.prefijo}001`;
 }
 
 /** Cantidad sugerida de reposición: mínimo × 2 − disponible, redondeado a pallet si corresponde. */

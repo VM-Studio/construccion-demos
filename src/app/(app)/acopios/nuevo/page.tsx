@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { AcopioNuevo } from "@/components/modulos/acopios/acopio-nuevo";
-import { RequierePermiso } from "@/components/shared/requiere-permiso";
+import { EnConstruccion } from "@/components/modulos/en-construccion";
 
 export const metadata: Metadata = { title: "Nuevo acopio" };
 
 export default function Page() {
-  return (
-    <RequierePermiso permiso="acopios.editar">
-      <AcopioNuevo />
-    </RequierePermiso>
-  );
+  return <EnConstruccion titulo="Nuevo acopio" descripcion="Acopio por monto con precios congelados" permiso="acopios.editar" actualizacion />;
 }

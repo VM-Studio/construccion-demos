@@ -1,16 +1,8 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
-import { VentasView } from "@/components/modulos/ventas/ventas-view";
-import { RequierePermiso } from "@/components/shared/requiere-permiso";
+import { EnConstruccion } from "@/components/modulos/en-construccion";
 
 export const metadata: Metadata = { title: "Ventas" };
 
 export default function Page() {
-  return (
-    <RequierePermiso permiso="ventas.ver">
-      <Suspense>
-        <VentasView />
-      </Suspense>
-    </RequierePermiso>
-  );
+  return <EnConstruccion titulo="Ventas" descripcion="Notas de pedido, cotizaciones y comprobantes" permiso="ventas.ver" actualizacion />;
 }

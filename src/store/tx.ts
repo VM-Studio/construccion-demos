@@ -1,12 +1,13 @@
 import type {
   Auditoria,
+  Circuito,
+  CodigoDoc,
   EstadoInicial,
   MovimientoStock,
   ReferenciaTipo,
-  TipoComprobante,
   TipoMovimientoStock,
 } from "@/domain/types";
-import { reservarNumero, siguienteNumeroFiscal, type EntidadNumerada } from "@/domain/numeracion";
+import { reservarNumeroDoc } from "@/domain/numeracion";
 import { newId } from "@/lib/utils";
 
 type Colecciones = {
@@ -89,18 +90,22 @@ export class Tx {
     return this.draft.config;
   }
 
-  /** Reserva el próximo número interno (OC-00012, PED-00045…). */
-  numero(entidad: EntidadNumerada): string {
-    const [n, num] = reservarNumero(this.draft.numeradores, entidad);
+  /**
+   * Reserva el próximo número de un documento: numeración independiente por código,
+   * circuito y punto de venta (`NP2 0001-00074025`, `RM1 00016-00006280`, `TRF 0001-00000385`).
+   */
+  numero(codigo: CodigoDoc, circuito: Circuito | null, puntoVenta: string): string {
+    const [n, num] = reservarNumeroDoc(this.draft.numeradores, codigo, circuito, puntoVenta);
     this.draft.numeradores = num;
     return n;
   }
 
-  /** Reserva el próximo número fiscal por punto de venta (0001-00001234). */
-  numeroFiscal(puntoVenta: string, tipo: TipoComprobante): string {
-    const [n, num] = siguienteNumeroFiscal(this.draft.numeradores, puntoVenta, tipo);
-    this.draft.numeradores = num;
-    return n;
+  get numeradores() {
+    return this.draft.numeradores;
+  }
+
+  setNumerador(clave: string, valor: number) {
+    this.draft.numeradores = { ...this.draft.numeradores, [clave]: valor };
   }
 
   meta() {

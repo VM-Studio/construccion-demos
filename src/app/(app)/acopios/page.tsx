@@ -1,16 +1,8 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
-import { AcopiosView } from "@/components/modulos/acopios/acopios-view";
-import { RequierePermiso } from "@/components/shared/requiere-permiso";
+import { EnConstruccion } from "@/components/modulos/en-construccion";
 
-export const metadata: Metadata = { title: "Acopios" };
+export const metadata: Metadata = { title: "Acopios de clientes" };
 
 export default function Page() {
-  return (
-    <RequierePermiso permiso="acopios.ver">
-      <Suspense>
-        <AcopiosView />
-      </Suspense>
-    </RequierePermiso>
-  );
+  return <EnConstruccion titulo="Acopios de clientes" descripcion="Acopios por monto con precios congelados" permiso="acopios.ver" actualizacion />;
 }

@@ -52,7 +52,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               </Command.Group>
               <Command.Group heading="Acciones" className={grupoCls}>
                 {puede(usuario, "ventas.editar") && (
-                  <Command.Item value="nuevo pedido" onSelect={() => ir("/ventas/pedidos/nuevo")} className={itemCls}>
+                  <Command.Item value="nuevo pedido" onSelect={() => ir("/ventas/notas-pedido/nuevo")} className={itemCls}>
                     <Plus /> Nuevo pedido
                   </Command.Item>
                 )}
@@ -96,9 +96,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                 </Command.Group>
               )}
               {puede(usuario, "ventas.ver") && (
-                <Command.Group heading="Pedidos" className={grupoCls}>
-                  {db.pedidos.map((p) => (
-                    <Command.Item key={p.id} value={`${p.numero} pedido ${cliente.get(p.clienteId)?.razonSocial ?? ""}`} onSelect={() => ir(`/ventas/pedidos/${p.id}`)} className={itemCls}>
+                <Command.Group heading="Notas de pedido" className={grupoCls}>
+                  {db.notasPedido.filter((p) => p.numero).map((p) => (
+                    <Command.Item key={p.id} value={`${p.numero} pedido ${cliente.get(p.clienteId)?.razonSocial ?? ""}`} onSelect={() => ir(`/ventas/notas-pedido/${p.id}`)} className={itemCls}>
                       <FileText />
                       <span className="w-[86px] shrink-0 font-mono text-[12px]">{p.numero}</span>
                       <span className="truncate">{cliente.get(p.clienteId)?.razonSocial}</span>

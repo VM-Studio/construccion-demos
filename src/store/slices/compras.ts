@@ -1,5 +1,7 @@
 import { addDays, parseISO } from "date-fns";
-import type { Comprobante, DiferenciaRecepcion, EstadoOC, ItemOC, OrdenCompra, RecepcionMercaderia } from "@/domain/types";
+import type { AcopioProveedor, Circuito, Comprobante, DiferenciaRecepcion, EstadoOC, FormaPagoAcopio, ItemOC, OrdenCompra, OrigenVenta, RecepcionMercaderia } from "@/domain/types";
+import { saldoDisponible as saldoACP } from "@/domain/acopiosProveedor";
+import { formatMoney } from "@/lib/format";
 import { recalcularCostoPromedio, variacionCosto } from "@/domain/costos";
 import { markupEfectivo, obtenerPrecio } from "@/domain/precios";
 import { diasCondicionPago } from "@/domain/ventas";
@@ -9,6 +11,9 @@ import type { GetFn, SetFn } from "../types";
 
 export interface OCInput {
   proveedorId: string;
+  circuito: Circuito;
+  origen: OrigenVenta;
+  acopioProveedorId?: string;
   depositoDestinoId: string;
   sucursalId: string;
   fechaEmision: string;
@@ -20,6 +25,8 @@ export interface OCInput {
 export interface RecepcionInput {
   ordenCompraId: string;
   remitoProveedor: string;
+  /** Número de la factura del proveedor (compras nuevas). */
+  facturaProveedor?: string;
   fecha: string;
   depositoId: string;
   observaciones?: string;
@@ -32,6 +39,22 @@ export interface AvisoSubaCosto {
   costoNuevo: number;
   subaPct: number;
   markupMayorista: number;
+}
+
+export interface AcopioProveedorInput {
+  proveedorId: string;
+  sucursalId: string;
+  depositoDestinoId: string;
+  circuito: Circuito;
+  fechaCreacion: string;
+  fechaVencimiento: string;
+  modalidad: "MONTO" | "CANTIDAD";
+  importe?: number;
+  items?: { productoId: string; cantidadPactada: number }[];
+  formaPago: FormaPagoAcopio;
+  /** productoId → costo a congelar (snapshot editable). */
+  costos: Record<string, number>;
+  observaciones?: string;
 }
 
 export function totalesOC(items: ItemOC[], ivaPct = 21) {
@@ -62,9 +85,29 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "compras.editar");
         if (!data.proveedorId) throw new ErrorNegocio("Elegí un proveedor.");
-        const items = data.items.filter((i) => i.productoId && i.cantidadPedida > 0);
+        let items = data.items.filter((i) => i.productoId && i.cantidadPedida > 0);
         if (!items.length) throw new ErrorNegocio("Agregá al menos un producto con cantidad.");
-        const tot = totalesOC(items, tx.config.ivaPct);
+        if (data.origen === "ACOPIO") {
+          if (!data.acopioProveedorId) throw new ErrorNegocio("Elegí el acopio con el proveedor.");
+          const acp = tx.must("acopiosProveedor", data.acopioProveedorId);
+          if (acp.proveedorId !== data.proveedorId) throw new ErrorNegocio("El acopio es de otro proveedor.");
+          items = items.map((i) => {
+            const c = acp.preciosCongelados.find((x) => x.productoId === i.productoId);
+            if (!c) throw new ErrorNegocio(`${tx.find("productos", i.productoId)?.nombre ?? "El producto"} no está en el acopio con el proveedor.`);
+            return { ...i, costoUnitario: c.costo, descuentoPct: 0 };
+          });
+          const otras = tx.get("ordenesCompra").filter((o) => o.id !== id);
+          const saldo = saldoACP(acp, otras);
+          const monto = items.reduce((a, i) => a + i.cantidadPedida * i.costoUnitario, 0);
+          if (acp.modalidad === "MONTO" && monto > saldo + 0.01) throw new ErrorNegocio(`El retiro (${formatMoney(monto)}) supera el saldo del acopio (${formatMoney(saldo)}).`);
+          if (acp.modalidad === "CANTIDAD")
+            for (const it of items) {
+              const pactado = acp.items?.find((x) => x.productoId === it.productoId)?.cantidadPactada ?? 0;
+              const pedido = otras.filter((o) => o.acopioProveedorId === acp.id && o.estado !== "CANCELADA" && o.estado !== "BORRADOR").flatMap((o) => o.items).filter((x) => x.productoId === it.productoId).reduce((a, x) => a + x.cantidadPedida, 0);
+              if (it.cantidadPedida > pactado - pedido + 1e-9) throw new ErrorNegocio(`Del acopio quedan ${pactado - pedido} por retirar de ${tx.find("productos", it.productoId)?.nombre}.`);
+            }
+        }
+        const tot = totalesOC(items, data.circuito === 1 ? tx.config.ivaPct : 0);
         if (id) {
           const oc = tx.must("ordenesCompra", id);
           if (oc.estado !== "BORRADOR") throw new ErrorNegocio("Sólo se pueden editar órdenes en borrador.");
@@ -74,7 +117,7 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         }
         const oc: OrdenCompra = {
           id: newId("oc"),
-          numero: tx.numero("OC"),
+          numero: tx.numero("OC", data.circuito, "0001"),
           ...data,
           items,
           ...tot,
@@ -138,7 +181,7 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         const umbral = (tx.config.umbralSubaCostoPct ?? 3) / 100;
         const recepcion: RecepcionMercaderia = {
           id: newId("rcp"),
-          numero: tx.numero("RCP"),
+          numero: tx.numero("RCP", null, "0001"),
           ordenCompraId: oc.id,
           depositoId: data.depositoId,
           remitoProveedor: data.remitoProveedor.trim(),
@@ -183,27 +226,118 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         tx.patch("ordenesCompra", oc.id, { items: itemsOC, estado: completa ? "RECIBIDA" : "RECIBIDA_PARCIAL" });
 
         const prov = tx.must("proveedores", oc.proveedorId);
-        const iva = r2(neto * (tx.config.ivaPct / 100));
-        const factura: Comprobante = {
-          id: newId("cmp"),
-          tipo: "FACTURA_A",
-          numero: `${String((Date.now() % 9) + 1).padStart(4, "0")}-${String(Date.now() % 100_000_000).padStart(8, "0")}`,
-          proveedorId: prov.id,
-          recepcionId: recepcion.id,
-          fecha: data.fecha,
-          vencimiento: addDays(parseISO(data.fecha), diasCondicionPago(prov.condicionPago)).toISOString(),
-          subtotal: r2(neto),
-          iva,
-          total: r2(neto + iva),
-          saldoPendiente: r2(neto + iva),
-          estado: "PENDIENTE",
-          ...tx.meta(),
-        };
-        tx.insert("comprobantes", factura);
-        recepcion.comprobanteId = factura.id;
+        // Retiro de acopio: no genera deuda nueva (el acopio ya está facturado / pagado).
+        if (oc.origen !== "ACOPIO") {
+          const iva = r2(neto * ((oc.circuito === 1 ? tx.config.ivaPct : 0) / 100));
+          const factura: Comprobante = {
+            id: newId("cmp"),
+            tipo: "FACTURA",
+            letra: oc.circuito === 1 ? "A" : undefined,
+            circuito: oc.circuito,
+            numero: data.facturaProveedor?.trim() || `FC ${oc.circuito === 1 ? "A" : "X"} ${recepcion.remitoProveedor.replace(/^\D+/, "").trim()}`,
+            proveedorId: prov.id,
+            recepcionId: recepcion.id,
+            fecha: data.fecha,
+            vencimiento: addDays(parseISO(data.fecha), diasCondicionPago(prov.condicionPago)).toISOString(),
+            subtotal: r2(neto),
+            iva,
+            total: r2(neto + iva),
+            saldoPendiente: r2(neto + iva),
+            estado: "PENDIENTE",
+            ...tx.meta(),
+          };
+          tx.insert("comprobantes", factura);
+          recepcion.comprobanteId = factura.id;
+        }
         tx.insert("recepciones", recepcion);
         tx.auditar("Registró recepción de mercadería", "RecepcionMercaderia", recepcion.id, `${oc.numero} · remito ${recepcion.remitoProveedor} · ${completa ? "completa" : "parcial"}`);
         return { recepcionId: recepcion.id, numero: recepcion.numero, completa, avisos };
+      }),
+
+    reclamarOC: (id: string, texto: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "compras.editar");
+        const oc = tx.must("ordenesCompra", id);
+        tx.patch("ordenesCompra", id, { reclamos: [...(oc.reclamos ?? []), `${tx.ahora} · ${texto}`] });
+        tx.auditar("Reclamó entrega al proveedor", "OrdenCompra", id, `${oc.numero} · ${texto}`);
+      }),
+
+    /** Acopio con proveedor: congela costos, genera la factura de compra y, si es anticipo, queda listo para la OP. */
+    crearAcopioProveedor: (data: AcopioProveedorInput) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "acopiosProveedor.editar");
+        const prov = tx.must("proveedores", data.proveedorId);
+        const preciosCongelados = Object.entries(data.costos).filter(([, c]) => c > 0).map(([productoId, costo]) => ({ productoId, costo: r2(costo) }));
+        if (!preciosCongelados.length) throw new ErrorNegocio("No hay costos para congelar.");
+        let importe = data.importe ?? 0;
+        let items: AcopioProveedor["items"];
+        if (data.modalidad === "CANTIDAD") {
+          items = (data.items ?? []).filter((i) => i.cantidadPactada > 0);
+          if (!items.length) throw new ErrorNegocio("Indicá las cantidades pactadas.");
+          importe = r2(items.reduce((a, i) => a + i.cantidadPactada * (data.costos[i.productoId] ?? 0), 0));
+        }
+        if (!(importe > 0)) throw new ErrorNegocio("Ingresá el importe del acopio.");
+        const acp: AcopioProveedor = {
+          id: newId("acp"),
+          numero: tx.numero("ACP", data.circuito, "0001"),
+          circuito: data.circuito,
+          proveedorId: prov.id,
+          sucursalId: data.sucursalId,
+          depositoDestinoId: data.depositoDestinoId,
+          fechaCreacion: data.fechaCreacion,
+          fechaVencimiento: data.fechaVencimiento,
+          modalidad: data.modalidad,
+          importe,
+          formaPago: data.formaPago,
+          preciosCongelados,
+          items,
+          pagado: 0,
+          comprobanteCompraIds: [],
+          ordenPagoIds: [],
+          estado: "VIGENTE",
+          observaciones: data.observaciones,
+          ...tx.meta(),
+        };
+        const subtotal = data.circuito === 1 ? r2(importe / 1.21) : importe;
+        const fac: Comprobante = {
+          id: newId("cmp"),
+          tipo: "FACTURA",
+          letra: data.circuito === 1 ? "A" : undefined,
+          circuito: data.circuito,
+          numero: `FC ${data.circuito === 1 ? "A" : "X"} ${String(Math.floor(Math.random() * 9) + 1).padStart(4, "0")}-${String(Date.now() % 100_000_000).padStart(8, "0")}`,
+          proveedorId: prov.id,
+          acopioProveedorId: acp.id,
+          fecha: data.fechaCreacion,
+          vencimiento: addDays(parseISO(data.fechaCreacion), data.formaPago === "ANTICIPO" ? 0 : diasCondicionPago(prov.condicionPago)).toISOString(),
+          subtotal,
+          iva: r2(importe - subtotal),
+          total: importe,
+          saldoPendiente: importe,
+          estado: "PENDIENTE",
+          observaciones: `Acopio ${acp.numero}`,
+          ...tx.meta(),
+        };
+        acp.comprobanteCompraIds.push(fac.id);
+        tx.insert("acopiosProveedor", acp);
+        tx.insert("comprobantes", fac);
+        tx.auditar("Creó acopio con proveedor", "AcopioProveedor", acp.id, `${acp.numero} · ${prov.razonSocial} · ${formatMoney(importe)}`);
+        return { id: acp.id, numero: acp.numero, comprobanteId: fac.id };
+      }),
+
+    extenderVencimientoACP: (id: string, fecha: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "acopiosProveedor.editar");
+        const a = tx.must("acopiosProveedor", id);
+        tx.patch("acopiosProveedor", id, { fechaVencimiento: fecha, estado: a.estado === "VENCIDO" ? "VIGENTE" : a.estado });
+        tx.auditar("Extendió vencimiento de acopio con proveedor", "AcopioProveedor", id, `${a.numero} → ${fecha.slice(0, 10)}`);
+      }),
+
+    cancelarACP: (id: string, motivo: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "acopiosProveedor.editar");
+        const a = tx.must("acopiosProveedor", id);
+        tx.patch("acopiosProveedor", id, { estado: "CANCELADO", observaciones: [a.observaciones, `Cancelado: ${motivo}`].filter(Boolean).join(" · ") });
+        tx.auditar("Canceló acopio con proveedor", "AcopioProveedor", id, `${a.numero} · ${motivo}`);
       }),
   };
 }

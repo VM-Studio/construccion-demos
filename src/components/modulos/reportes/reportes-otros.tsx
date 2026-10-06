@@ -164,19 +164,19 @@ export function ReporteDespachos() {
   const db = useDb();
   const suc = useSucursalActiva();
   const [periodo, setPeriodo] = usePeriodoReporte("30D");
-  const entregas = db.despachos.filter((d) => (d.estado === "ENTREGADO" || d.estado === "RETIRADO_EN_MOSTRADOR") && d.fechaEntrega && enPeriodo(d.fechaEntrega, periodo) && (!suc || d.sucursalId === suc));
+  const entregas = db.despachos.filter((d) => (d.estado === "ENTREGADO" || (d.estado === "FINALIZADO" && d.modalidad === "RETIRA")) && d.fechaEntrega && enPeriodo(d.fechaEntrega, periodo) && (!suc || d.sucursalId === suc));
   const aTiempo = (d: (typeof entregas)[number]) => diaLocal(d.fechaEntrega!) <= diaLocal(d.fechaProgramada);
   const porDia = new Map<string, { envio: number; mostrador: number }>();
   for (const d of entregas) {
     const k = diaLocal(d.fechaEntrega!);
     const x = porDia.get(k) ?? { envio: 0, mostrador: 0 };
-    if (d.estado === "RETIRADO_EN_MOSTRADOR") x.mostrador++;
+    if (d.modalidad === "RETIRA") x.mostrador++;
     else x.envio++;
     porDia.set(k, x);
   }
   const filas = [
     ...db.vehiculos.map((v) => ({ id: v.id, nombre: `${v.patente} · ${v.descripcion}`, ds: entregas.filter((d) => d.vehiculoId === v.id) })),
-    { id: "mostrador", nombre: "Retiro en mostrador", ds: entregas.filter((d) => d.estado === "RETIRADO_EN_MOSTRADOR") },
+    { id: "mostrador", nombre: "Retiro en mostrador", ds: entregas.filter((d) => d.modalidad === "RETIRA") },
   ].map((f) => ({ ...f, n: f.ds.length, kg: f.ds.reduce((a, d) => a + pesoDespacho(d, db.productos), 0), aTiempo: f.ds.length ? f.ds.filter(aTiempo).length / f.ds.length : null, reprog: f.ds.reduce((a, d) => a + (d.reprogramaciones ?? 0), 0) }));
   type F = (typeof filas)[number];
   const kg = filas.reduce((a, f) => a + (f.id === "mostrador" ? 0 : f.kg), 0);

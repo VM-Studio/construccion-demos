@@ -5,7 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb, usePuede, useSaldosClientes, useAcopiosConSaldo } from "@/store/selectors";
+import { useDb, usePuede, useSaldosClientes, useAcopiosResumen } from "@/store/selectors";
 import type { Cliente, CondicionIVA, CondicionPago, TipoCliente } from "@/domain/types";
 import { validarCUIT, formatearCUIT } from "@/domain/cuit";
 import { antiguedadDeuda } from "@/domain/cuentasCorrientes";
@@ -28,11 +28,13 @@ type Form = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
 
 function vacio(sucursalId: string, vendedorId?: string): Form {
   return {
+    codigo: "",
     razonSocial: "",
     nombreFantasia: "",
     tipo: "PARTICULAR",
     cuit: "",
     condicionIVA: "CF",
+    circuitoHabitual: 2,
     email: "",
     telefono: "",
     direccion: "",
@@ -54,7 +56,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   const usuarioId = useStore((s) => s.ui.usuarioId);
   const usuario = db.usuarios.find((u) => u.id === usuarioId);
   const puede = usePuede("clientes.editar");
-  const [f, setF] = React.useState<Form>(() => (cliente ? { ...cliente } : vacio(usuario?.sucursalId ?? "suc_norte", usuario?.rol === "VENTAS" ? usuario.id : undefined)));
+  const [f, setF] = React.useState<Form>(() => (cliente ? { ...cliente } : vacio(usuario?.sucursalId ?? "suc_central", usuario?.rol === "VENTAS" ? usuario.id : undefined)));
   const [err, setErr] = React.useState<Record<string, string>>({});
   React.useEffect(() => {
     if (cliente) setF({ ...cliente });
@@ -204,17 +206,17 @@ export function ClienteSheet({ id, nuevo, onClose }: { id?: string | null; nuevo
 
 function PedidosCliente({ id }: { id: string }) {
   const db = useDb();
-  const ps = db.pedidos.filter((p) => p.clienteId === id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const ps = db.notasPedido.filter((p) => p.clienteId === id && p.estado !== "BORRADOR").sort((a, b) => b.fecha.localeCompare(a.fecha));
   if (!ps.length) return <p className="py-8 text-center text-[13px] text-muted">Sin pedidos.</p>;
   return (
     <ul className="divide-y divide-border rounded-card border border-border">
       {ps.map((p) => (
         <li key={p.id}>
-          <Link href={`/ventas/pedidos/${p.id}`} className="flex items-center gap-3 px-3 py-2.5 text-[13px] hover:bg-subtle">
+          <Link href={`/ventas/notas-pedido/${p.id}`} className="flex items-center gap-3 px-3 py-2.5 text-[13px] hover:bg-subtle">
             <span className="font-mono text-[12px]">{p.numero}</span>
             <span className="flex-1 text-muted">{formatDate(p.fecha)}</span>
             <span className="tnum">{formatMoney(p.total, { decimals: false })}</span>
-            <StatusBadge tipo="PEDIDO" estado={p.estado} />
+            <StatusBadge tipo="NP" estado={p.estado} />
           </Link>
         </li>
       ))}
@@ -223,7 +225,7 @@ function PedidosCliente({ id }: { id: string }) {
 }
 
 function AcopiosCliente({ id }: { id: string }) {
-  const acopios = useAcopiosConSaldo().filter((a) => a.acopio.clienteId === id);
+  const acopios = useAcopiosResumen().filter((a) => a.acopio.clienteId === id);
   if (!acopios.length) return <p className="py-8 text-center text-[13px] text-muted">Sin acopios.</p>;
   return (
     <ul className="divide-y divide-border rounded-card border border-border">
@@ -233,8 +235,8 @@ function AcopiosCliente({ id }: { id: string }) {
             <span className="font-mono text-[12px]">{a.acopio.numero}</span>
             <span className="flex-1 text-muted">vence {formatDate(a.acopio.fechaVencimiento)}</span>
             <span className="text-right">
-              <span className="block tnum">{formatMoney(a.deuda.aPrecioPactado, { decimals: false })}</span>
-              <span className="block text-[11px] text-muted">saldo pendiente</span>
+              <span className="block tnum">{formatMoney(a.saldo)}</span>
+              <span className="block text-[11px] text-muted">saldo disponible</span>
             </span>
             <StatusBadge tipo="ACOPIO" estado={a.estado} />
           </Link>
@@ -298,7 +300,7 @@ function RentabilidadCliente({ id }: { id: string }) {
   const ps = pedidosVendidos(db, r, null).filter((x) => x.pedido.clienteId === id);
   const ingreso = ps.reduce((a, p) => a + p.ingreso, 0);
   const margen = ps.reduce((a, p) => a + p.margen, 0);
-  const dbCliente = { ...db, pedidos: db.pedidos.filter((p) => p.clienteId === id) };
+  const dbCliente = { ...db, notasPedido: db.notasPedido.filter((p) => p.clienteId === id) };
   const top = rankingProductos(dbCliente, r, null).sort((a, b) => b.margen - a.margen).slice(0, 8);
   return (
     <div className="space-y-4">

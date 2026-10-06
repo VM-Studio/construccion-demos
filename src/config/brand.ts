@@ -1,14 +1,14 @@
 export const BRAND = {
-  empresa: "Distribuidora Norte", // nombre de fantasía del demo (se cambia por el del cliente)
+  empresa: "Aceros RNF",
   sistema: "Sistema de Gestión",
   agencia: "VM Studio",
   moneda: "ARS",
   locale: "es-AR",
   esDemo: true,
-  razonSocial: "Distribuidora Norte S.R.L.",
-  cuit: "30-71234567-4",
-  direccion: "Av. Tomás Márquez 1850, Pilar, Buenos Aires",
-  telefono: "(0230) 442-1850",
-  email: "ventas@distribuidoranorte.com.ar",
+  razonSocial: "Aceros RNF S.A.",
+  cuit: "30-71589346-2",
+  direccion: "Av. Gral. San Martín 4520, Florida Oeste, Buenos Aires",
+  telefono: "(011) 4730-5520",
+  email: "ventas@acerosrnf.com.ar",
   zonaHoraria: "America/Argentina/Buenos_Aires",
 };

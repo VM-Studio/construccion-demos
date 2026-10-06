@@ -1,15 +1,25 @@
 /**
- * Ejercita los flujos de negocio completos sobre el store y verifica la integridad
+ * Ejercita los flujos de negocio de Aceros RNF sobre el store y verifica la integridad
  * al final: `pnpm flujos:check`.
  */
+import "./shim-storage";
 import { useStore } from "../src/store";
 import { crearSeed } from "../src/data/seed";
 import { verificarIntegridad } from "../src/domain/integridad";
-import { posicionesDe } from "../src/store/selectors";
+import { saldoDisponible } from "../src/domain/acopios";
+import { pendienteRetirar } from "../src/domain/acopiosProveedor";
+import { posicionesDe, acopiosResumenDe } from "../src/store/selectors";
+import { minutosPreparacion } from "../src/domain/despachos";
 
 const s = () => useStore.getState();
 let fallas = 0;
-function paso<T>(nombre: string, r: { ok: true; data: T } | { ok: false; error: string; codigo?: string }): T {
+function paso<T>(nombre: string, r: { ok: true; data: T } | { ok: false; error: string; codigo?: string }, esperaError?: string): T {
+  if (esperaError) {
+    const ok = !r.ok && (r as { codigo?: string }).codigo === esperaError;
+    if (!ok) fallas++;
+    console.log(`  ${ok ? "✔" : "✘"} ${nombre}${!r.ok ? ` — ${r.error}` : " — no bloqueó"}`);
+    return undefined as T;
+  }
   if (!r.ok) {
     fallas++;
     console.log(`  ✘ ${nombre}: ${r.error}`);
@@ -24,133 +34,148 @@ function check(nombre: string, cond: boolean, detalle = "") {
 }
 
 useStore.setState({ db: crearSeed(new Date()), hidratado: true });
-s().login("usr_martin");
+s().login("usr_felipe");
 const hoy = new Date().toISOString();
 const pos = (pid: string, dep: string) => posicionesDe(s().db).get(pid)!.porDeposito[dep];
+const saldoAco = (id: string) => saldoDisponible(s().db.acopios.find((a) => a.id === id)!, s().db.notasPedido, s().db.devoluciones, s().db.ajustesAcopio);
+const HOLCIM = "prod_50104";
 
-console.log("\n1) Compras: OC → confirmar → en tránsito → recepción parcial → recepción total");
+console.log("\n1) Retiro de acopio (Ramos): 40 bolsas Holcim a precio congelado → saldo → remito picking → hecho → remito firmado");
 {
-  const prod = s().db.productos.find((p) => p.proveedorHabitualId === "prov_04")!;
-  const antes = pos(prod.id, "dep_norte");
-  const costoPromAntes = prod.costoPromedio;
-  const ocId = paso("Crear OC", s().guardarOC({ proveedorId: "prov_04", depositoDestinoId: "dep_norte", sucursalId: "suc_norte", fechaEmision: hoy, fechaEntregaEstimada: hoy, items: [{ id: "i1", productoId: prod.id, cantidadPedida: 100, cantidadRecibida: 0, costoUnitario: Math.round(prod.costoUltimo * 1.08), descuentoPct: 0 }] }));
+  const ramos = s().db.acopios.find((a) => a.numero === "AC2 0001-00003633")!;
+  const antes = saldoAco(ramos.id);
+  const input = {
+    clienteId: ramos.clienteId, sucursalId: ramos.sucursalId, depositoId: ramos.depositoId, fecha: hoy, circuito: 2 as const, origen: "ACOPIO" as const, acopioId: ramos.id, formaPago: "ACOPIO" as const,
+    items: [{ productoId: HOLCIM, obraId: "obra_ramos_2", cantidad: 40, precioUnitario: 1 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "ENVIO" as const,
+  };
+  s().login("usr_lucas");
+  paso("Vendedor: retiro que supera el saldo se bloquea", s().crearNotaPedido(input), "SALDO_ACOPIO");
+  s().login("usr_felipe");
+  const npId = paso("Dueño: confirma con autorización", s().crearNotaPedido(input, { autorizarSaldoNegativo: true }));
+  const np = s().db.notasPedido.find((n) => n.id === npId)!;
+  check("Precio congelado $ 982,87 y circuito AC2", np.items[0].precioUnitario === 982.87 && np.circuito === 2, np.numero);
+  check("Saldo baja 40 × 982,87", Math.abs(saldoAco(ramos.id) - (antes - 39314.8)) < 0.01, `${antes} → ${saldoAco(ramos.id)}`);
+  const fis = pos(HOLCIM, "dep_central").fisico;
+  const rem = paso("Generar remito (picking)", s().generarRemito(npId, { estado: "PICKING" }));
+  check("Reservado +40", pos(HOLCIM, "dep_central").reservado >= 40);
+  paso("Marcar hecho", s().marcarRemitoHecho(rem.id));
+  check("Físico −40", pos(HOLCIM, "dep_central").fisico === fis - 40);
+  check("NP entregada", s().db.notasPedido.find((n) => n.id === npId)!.estado === "ENTREGADA");
+  paso("Subir remito firmado (metadata)", s().registrarAdjunto({ entidadTipo: "REMITO", entidadId: rem.id, nombre: "firmado.jpg", tamanoBytes: 120_000, tipoMime: "image/jpeg", categoria: "REMITO_FIRMADO", blobKey: "test" }));
+  check("Remito con firmado", !!s().db.remitos.find((r) => r.id === rem.id)!.firmadoAdjuntoId);
+}
+
+console.log("\n2) Control de sobreventa: físico 500, pendiente 420 → disponible 80");
+{
+  // Se repone el caso: el paso 1 consumió 40 de disponible. Medimos el disponible actual.
+  const d0 = pos(HOLCIM, "dep_central");
+  check("Disponible = físico − pendiente − reservado", d0.disponible === d0.fisico - d0.pendiente - d0.reservado, `físico ${d0.fisico} · pendiente ${d0.pendiente} · disponible ${d0.disponible}`);
+  const venta = {
+    clienteId: "cli_bencen", sucursalId: "suc_central", depositoId: "dep_central", fecha: hoy, circuito: 1 as const, origen: "NUEVA" as const, formaPago: "CUENTA_CORRIENTE" as const,
+    items: [{ productoId: HOLCIM, obraId: "obra_bencen_1", cantidad: d0.disponible + 20, precioUnitario: 14000 }], descuentoPct: 0, pendienteEntrega: true, modalidadEntrega: "ENVIO" as const,
+  };
+  s().login("usr_lucas");
+  paso("Vendedor: venta mayor al disponible se bloquea", s().crearNotaPedido(venta), "SIN_DISPONIBLE");
+  s().login("usr_felipe");
+  // Programar la entrega de una NP pendiente (Enjinia, 300 bolsas) → espera → preparación → finalizado
+  const np = s().db.notasPedido.find((n) => n.clienteId === "cli_enjinia" && n.items.some((i) => i.productoId === HOLCIM && i.cantidad === 300))!;
+  const des = paso("Programar entrega", s().crearDespacho({ notaPedidoId: np.id, modalidad: "RETIRA" }));
+  check("Despacho en ESPERA", s().db.despachos.find((d) => d.id === des.id)!.estado === "ESPERA");
+  const disp = pos(HOLCIM, "dep_central").disponible;
+  paso("Iniciar preparación", s().iniciarPreparacion(des.id, "Playa 1"));
+  check("Remito en picking (reservado 300)", pos(HOLCIM, "dep_central").reservado >= 300);
+  paso("Finalizar", s().finalizarDespacho(des.id));
+  const d1 = pos(HOLCIM, "dep_central");
+  check("Pendiente baja, físico baja, disponible igual", d1.disponible === disp, `físico ${d1.fisico} · pendiente ${d1.pendiente} · disponible ${d1.disponible}`);
+  const d = s().db.despachos.find((x) => x.id === des.id)!;
+  check("Despacho FINALIZADO con tiempos", d.estado === "FINALIZADO" && minutosPreparacion(d) !== null);
+}
+
+console.log("\n3) Venta nueva contado → remito hecho (retira) → factura F1 → cobro");
+{
+  const prod = "prod_81001";
+  const npId = paso("Confirmar venta", s().crearNotaPedido({ clienteId: "cli_ortiz", sucursalId: "suc_central", depositoId: "dep_central", fecha: hoy, circuito: 1, origen: "NUEVA", formaPago: "CONTADO", items: [{ productoId: prod, obraId: "obra_ortiz_1", cantidad: 2, precioUnitario: 26000 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "RETIRA" }));
+  paso("Retiro en mostrador", s().retiroEnMostrador(npId));
+  const fac = paso("Facturar F1", s().facturarNotaPedido(npId));
+  check("Factura F1 con letra B (consumidor final)", fac?.numero.startsWith("F1 ") && s().db.comprobantes.find((c) => c.id === fac.id)!.letra === "B", fac?.numero);
+  const c = s().db.comprobantes.find((x) => x.id === fac.id)!;
+  paso("Cobro", s().registrarCobranza({ clienteId: "cli_ortiz", circuito: 1, fecha: hoy, medios: [{ medio: "EFECTIVO", importe: c.total }], imputaciones: [{ comprobanteId: c.id, importe: c.total }] }));
+  check("Factura pagada", s().db.comprobantes.find((x) => x.id === fac.id)!.estado === "PAGADO");
+  paso("Facturar retiro de acopio se bloquea", s().facturarNotaPedido(s().db.notasPedido.find((n) => n.origen === "ACOPIO")!.id).ok ? { ok: false, error: "no bloqueó" } : { ok: true, data: null });
+}
+
+console.log("\n4) Devolución: DP + RD (reingresa stock) + NC; en acopio el saldo vuelve");
+{
+  const np = s().db.notasPedido.find((n) => n.origen === "ACOPIO" && n.acopioId !== "aco_ramos_3633" && n.estado === "ENTREGADA" && n.items.some((i) => i.entregados >= 2))!;
+  const it = np.items.find((i) => i.entregados >= 2)!;
+  const saldo0 = saldoAco(np.acopioId!);
+  const fis0 = pos(it.productoId, np.depositoId).fisico;
+  const r = paso("Registrar devolución", s().registrarDevolucion({ notaPedidoId: np.id, items: [{ itemId: it.id, cantidad: 2 }], motivo: "Sobrante de obra" }));
+  check("Número DP heredado de la NP", r?.numero.startsWith(`DP${np.circuito} ${np.numero.split(" ")[1]}-`), r?.numero);
+  check("Stock reingresa", pos(it.productoId, np.depositoId).fisico === fis0 + 2);
+  check("Saldo del acopio sube", Math.abs(saldoAco(np.acopioId!) - (saldo0 + 2 * it.precioUnitario)) < 0.01);
+}
+
+console.log("\n5) Acopio nuevo (anticipo) + traspaso de saldo");
+{
+  const a = paso("Crear acopio SP2 por $ 5M", s().crearAcopio({ clienteId: "cli_sp2", sucursalId: "suc_central", depositoId: "dep_central", fechaCreacion: hoy, fechaVencimiento: new Date(Date.now() + 180 * 86400000).toISOString(), circuito: 1, obraIds: ["obra_sp2_1"], importe: 5_000_000, alicuotaIIBBPct: 0, formaPago: "ANTICIPO", listaPreciosBaseId: "lst_may", unidadNegocioId: "un_cor", medios: [{ medio: "TRANSFERENCIA", importe: 5_000_000 }] }));
+  const nuevo = s().db.acopios.find((x) => x.id === a.id)!;
+  check("Congela toda la lista de la unidad", nuevo.preciosCongelados.length === s().db.productos.filter((p) => p.unidadNegocioId === "un_cor").length, `${nuevo.preciosCongelados.length} precios`);
+  check("Factura y recibo pagados", s().db.comprobantes.find((c) => c.id === nuevo.comprobanteIds[0])!.estado === "PAGADO" && nuevo.reciboIds.length === 1);
+  const viejo = s().db.acopios.find((x) => x.clienteId === "cli_sp2" && x.id !== a.id)!;
+  const s0 = saldoAco(viejo.id);
+  const t = paso("Traspasar $ 1.000.000", s().traspasarSaldo(viejo.id, a.id, 1_000_000));
+  check("ACD de salida y entrada", Math.abs(saldoAco(viejo.id) - (s0 - 1_000_000)) < 0.01 && Math.abs(saldoAco(a.id) - 6_000_000) < 0.01, `${t?.salida} / ${t?.entrada}`);
+  check("Descripción automática", s().db.ajustesAcopio.at(-1)!.descripcion.includes("Se traspasa el saldo del"), s().db.ajustesAcopio.at(-1)!.descripcion);
+}
+
+console.log("\n6) Acopio con proveedor (Loma Negra): OC origen acopio 400 bolsas → recepción → pendiente baja, sin deuda nueva");
+{
+  const acp = s().db.acopiosProveedor.find((a) => a.proveedorId === "prov_01")!;
+  const pend0 = pendienteRetirar(acp, s().db.ordenesCompra).porProducto[0].pendiente;
+  const deuda0 = s().db.comprobantes.filter((c) => c.proveedorId === "prov_01").reduce((x, c) => x + c.saldoPendiente, 0);
+  const fis0 = pos("prod_50101", "dep_central").fisico;
+  const ocId = paso("Crear OC origen acopio", s().guardarOC({ proveedorId: "prov_01", circuito: 1, origen: "ACOPIO", acopioProveedorId: acp.id, depositoDestinoId: "dep_central", sucursalId: "suc_central", fechaEmision: hoy, fechaEntregaEstimada: hoy, items: [{ id: "i1", productoId: "prod_50101", cantidadPedida: 400, cantidadRecibida: 0, costoUnitario: 1, descuentoPct: 0 }] }));
+  const oc = s().db.ordenesCompra.find((o) => o.id === ocId)!;
+  check("Costo congelado aplicado", oc.items[0].costoUnitario === acp.preciosCongelados.find((c) => c.productoId === "prod_50101")!.costo);
   paso("Enviar", s().cambiarEstadoOC(ocId, "ENVIADA"));
   paso("Confirmar", s().cambiarEstadoOC(ocId, "CONFIRMADA"));
-  check("Stock en tránsito +100", pos(prod.id, "dep_norte").enTransito === antes.enTransito + 100);
-  const oc = s().db.ordenesCompra.find((o) => o.id === ocId)!;
-  const r1 = paso("Recepción parcial (60)", s().recibirMercaderia({ ordenCompraId: ocId, remitoProveedor: "R-0001-00012345", fecha: hoy, depositoId: "dep_norte", items: [{ itemOCId: oc.items[0].id, cantidad: 60, costoUnitario: oc.items[0].costoUnitario, diferencia: "OK" }] }));
-  check("Aviso de suba de costo", (r1?.avisos.length ?? 0) > 0, r1?.avisos[0] ? `${(r1.avisos[0].subaPct * 100).toFixed(1)} %` : "");
-  check("OC RECIBIDA_PARCIAL", s().db.ordenesCompra.find((o) => o.id === ocId)!.estado === "RECIBIDA_PARCIAL");
-  check("Físico +60", pos(prod.id, "dep_norte").fisico === antes.fisico + 60);
-  check("Costo promedio cambió", s().db.productos.find((p) => p.id === prod.id)!.costoPromedio !== costoPromAntes);
-  paso("Recepción del resto (40)", s().recibirMercaderia({ ordenCompraId: ocId, remitoProveedor: "R-0001-00012399", fecha: hoy, depositoId: "dep_norte", items: [{ itemOCId: oc.items[0].id, cantidad: 40, costoUnitario: oc.items[0].costoUnitario, diferencia: "OK" }] }));
-  check("OC RECIBIDA", s().db.ordenesCompra.find((o) => o.id === ocId)!.estado === "RECIBIDA");
-  check("Deuda con proveedor", s().db.comprobantes.filter((c) => c.proveedorId === "prov_04" && c.saldoPendiente > 0).length > 0);
+  paso("Recepción", s().recibirMercaderia({ ordenCompraId: ocId, remitoProveedor: "R 0004-00099887", fecha: hoy, depositoId: "dep_central", items: [{ itemOCId: oc.items[0].id, cantidad: 400, costoUnitario: oc.items[0].costoUnitario, diferencia: "OK" }] }));
+  const acp1 = s().db.acopiosProveedor.find((a) => a.id === acp.id)!;
+  check("Pendiente de retirar −400", pendienteRetirar(acp1, s().db.ordenesCompra).porProducto[0].pendiente === pend0 - 400);
+  check("Stock +400", pos("prod_50101", "dep_central").fisico === fis0 + 400);
+  check("Sin deuda nueva", Math.abs(s().db.comprobantes.filter((c) => c.proveedorId === "prov_01").reduce((x, c) => x + c.saldoPendiente, 0) - deuda0) < 0.01);
+  paso("Excede lo pactado se bloquea", s().guardarOC({ proveedorId: "prov_01", circuito: 1, origen: "ACOPIO", acopioProveedorId: acp.id, depositoDestinoId: "dep_central", sucursalId: "suc_central", fechaEmision: hoy, fechaEntregaEstimada: hoy, items: [{ id: "i1", productoId: "prod_50101", cantidadPedida: 5000, cantidadRecibida: 0, costoUnitario: 1, descuentoPct: 0 }] }).ok ? { ok: false, error: "no bloqueó" } : { ok: true, data: null });
 }
 
-console.log("\n2) Ventas: presupuesto → pedido → confirmar → despacho → hoja de ruta → entrega → factura → cobro parcial → cobro total");
+console.log("\n7) Acopio con proveedor en cuenta corriente → orden de pago parcial");
 {
-  const prod = s().db.productos.find((p) => p.nombre.startsWith("Cemento Portland normal"))!;
-  const preId = paso("Crear presupuesto", s().guardarPresupuesto({ clienteId: "cli_01", sucursalId: "suc_norte", vendedorId: "usr_carla", fecha: hoy, validezDias: 7, descuentoPct: 0, items: [{ id: "x1", productoId: prod.id, cantidad: 42, precioUnitario: 13000, costoUnitarioSnapshot: 0, descuentoPct: 0 }] }));
-  paso("Enviar presupuesto", s().cambiarEstadoPresupuesto(preId, "ENVIADO"));
-  const pedId = paso("Convertir en pedido", s().convertirEnPedido(preId));
-  const antes = pos(prod.id, "dep_norte");
-  paso("Confirmar pedido", s().confirmarPedido(pedId, { permitirBackorder: true, autorizarExcepcion: true }));
-  check("Comprometido +42", pos(prod.id, "dep_norte").comprometido === antes.comprometido + 42);
-  const ped = s().db.pedidos.find((p) => p.id === pedId)!;
-  check("Snapshot de costo congelado", ped.items[0].costoUnitarioSnapshot > 0);
-  const des = paso("Generar despacho", s().generarDespachoPedido(pedId));
-  paso("Asignar a hoja de ruta", s().asignarAHojaRuta(des.despachoId, "veh_1", hoy));
-  const hoja = s().db.hojasRuta.find((h) => h.despachoIds.includes(des.despachoId))!;
-  paso("Iniciar recorrido", s().iniciarRecorrido(hoja.id));
-  check("Físico −42 y comprometido −42", pos(prod.id, "dep_norte").fisico === antes.fisico - 42 && pos(prod.id, "dep_norte").comprometido === antes.comprometido);
-  paso("Marcar entregado", s().marcarEntregado(des.despachoId, { fecha: hoy, recibio: "Encargado" }));
-  check("Pedido DESPACHADO", s().db.pedidos.find((p) => p.id === pedId)!.estado === "DESPACHADO");
-  paso("Cerrar hoja", s().cerrarHojaRuta(hoja.id));
-  const cmpId = paso("Facturar", s().facturarPedido(pedId, { tipo: "FACTURA_A", fecha: hoy, vencimiento: hoy }));
-  const c = s().db.comprobantes.find((x) => x.id === cmpId)!;
-  paso("Cobro parcial", s().registrarCobranza({ clienteId: "cli_01", fecha: hoy, medios: [{ medio: "CHEQUE", importe: 100000, banco: "Galicia", numeroCheque: "123", fechaCobro: hoy }], imputaciones: [{ comprobanteId: cmpId, importe: 100000 }] }));
-  check("Comprobante PARCIAL", s().db.comprobantes.find((x) => x.id === cmpId)!.estado === "PARCIAL");
-  paso("Cobro del resto", s().registrarCobranza({ clienteId: "cli_01", fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: c.total - 100000 }], imputaciones: [{ comprobanteId: cmpId, importe: c.total - 100000 }] }));
-  check("Comprobante PAGADO", s().db.comprobantes.find((x) => x.id === cmpId)!.estado === "PAGADO");
+  const acp = s().db.acopiosProveedor.find((a) => a.proveedorId === "prov_02")!;
+  const fac = s().db.comprobantes.find((c) => c.id === acp.comprobanteCompraIds[0])!;
+  const pagado0 = acp.pagado;
+  paso("Orden de pago $ 2M", s().registrarPagoProveedor({ proveedorId: "prov_02", circuito: 1, fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: 2_000_000 }], imputaciones: [{ comprobanteId: fac.id, importe: 2_000_000 }] }));
+  check("Pagado sube y deuda baja", s().db.acopiosProveedor.find((a) => a.id === acp.id)!.pagado === pagado0 + 2_000_000);
 }
 
-console.log("\n3) Entrega parcial: reingresa el resto y crea nuevo despacho");
+console.log("\n8) Cobro de cuota de acopio en cuenta corriente (Naku)");
 {
-  const prod = s().db.productos.find((p) => p.nombre.startsWith("Cal hidratada"))!;
-  const pedId = paso("Pedido", s().guardarPedido({ clienteId: "cli_03", sucursalId: "suc_norte", depositoId: "dep_norte", vendedorId: "usr_carla", fecha: hoy, items: [{ id: "y", productoId: prod.id, cantidad: 20, precioUnitario: 6000, costoUnitarioSnapshot: 0, descuentoPct: 0 }], descuentoPct: 0, condicionPago: "CTA_CTE_30", modalidadEntrega: "ENVIO", direccionEntrega: "Ruta 25" }));
-  paso("Confirmar", s().confirmarPedido(pedId, { permitirBackorder: true, autorizarExcepcion: true }));
-  const d = paso("Despacho", s().generarDespachoPedido(pedId));
-  paso("Preparar", s().prepararDespacho(d.despachoId));
-  paso("Despachar", s().despacharDespacho(d.despachoId, "veh_2", "cho_2"));
-  const nuevo = paso("Entrega parcial (12 de 20)", s().marcarEntregado(d.despachoId, { fecha: hoy, recibio: "Capataz", cantidades: [12] }));
-  check("Nuevo despacho con 8", s().db.despachos.find((x) => x.id === nuevo)?.items[0].cantidad === 8);
-  check("Pedido DESPACHADO_PARCIAL", s().db.pedidos.find((p) => p.id === pedId)!.estado === "DESPACHADO_PARCIAL");
+  const r = acopiosResumenDe(s().db).find((x) => x.acopio.clienteId === "cli_naku")!;
+  const fac = s().db.comprobantes.find((c) => c.id === r.acopio.comprobanteIds[0])!;
+  paso("Recibo RC2", s().registrarCobranza({ clienteId: "cli_naku", circuito: 2, fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: 1_000_000 }], imputaciones: [{ comprobanteId: fac.id, importe: 1_000_000 }] }));
+  check("Pagado del acopio sube", acopiosResumenDe(s().db).find((x) => x.acopio.id === r.acopio.id)!.pagado === r.pagado + 1_000_000);
 }
 
-console.log("\n4) Acopio: crear → retiro con envío → despachar → canje → retiro mostrador → cancelar saldo");
+console.log("\n9) Integridad final");
 {
-  const prodA = s().db.productos.find((p) => p.nombre.startsWith("Cemento Portland normal"))!;
-  const prodB = s().db.productos.find((p) => p.nombre.startsWith("Cal hidratada"))!;
-  const r = paso("Crear acopio", s().crearAcopio({ clienteId: "cli_10", sucursalId: "suc_norte", depositoId: "dep_norte", vendedorId: "usr_carla", fechaInicio: hoy, fechaVencimiento: hoy, condicionPago: "ANTICIPO", items: [{ productoId: prodA.id, cantidad: 100, precio: 12000 }] }));
-  const fc = s().db.comprobantes.find((c) => c.id === r.comprobanteId)!;
-  paso("Cobro 50 %", s().registrarCobranza({ clienteId: "cli_10", fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: fc.total / 2 }], imputaciones: [{ comprobanteId: fc.id, importe: fc.total / 2 }] }));
-  const a = s().db.acopios.find((x) => x.id === r.acopioId)!;
-  check("Monto pagado 50 %", Math.abs(a.montoPagado - fc.total / 2) < 1);
-  s().login("usr_carla");
-  const bloqueado = s().registrarRetiroAcopio({ acopioId: a.id, fecha: hoy, items: [{ itemAcopioId: a.items[0].id, cantidad: 80 }], modalidad: "ENVIO" });
-  check("Ventas no puede retirar más de lo pagado", !bloqueado.ok);
-  s().login("usr_martin");
-  const ret = paso("Retiro 30 con envío", s().registrarRetiroAcopio({ acopioId: a.id, fecha: hoy, items: [{ itemAcopioId: a.items[0].id, cantidad: 30 }], modalidad: "ENVIO" }));
-  const antes = pos(prodA.id, "dep_norte");
-  paso("Despachar retiro", s().despacharDespacho(ret.despachoId, "veh_1", "cho_1"));
-  check("Egreso de acopio", pos(prodA.id, "dep_norte").fisico === antes.fisico - 30 && pos(prodA.id, "dep_norte").comprometido === antes.comprometido - 30);
-  paso("Entregado", s().marcarEntregado(ret.despachoId, { fecha: hoy, recibio: "Obra" }));
-  const precioCal = s().db.precios.find((p) => p.productoId === prodB.id && p.listaPreciosId === "lst_may")!.precio;
-  paso("Canjear 10 bolsas de cemento por cal", s().canjearProducto(a.id, { itemAcopioId: a.items[0].id, cantidadOrigen: 10, productoDestinoId: prodB.id, precioDestino: precioCal }));
-  const a2 = s().db.acopios.find((x) => x.id === a.id)!;
-  paso("Retiro en mostrador de la cal", s().registrarRetiroAcopio({ acopioId: a.id, fecha: hoy, items: [{ itemAcopioId: a2.items[1].id, cantidad: 5 }], modalidad: "RETIRA", autorizarSinPago: true }));
-  paso("Cancelar saldo", s().cancelarSaldoAcopio(a.id));
-  check("Acopio CANCELADO", s().db.acopios.find((x) => x.id === a.id)!.estado === "CANCELADO");
+  const res = verificarIntegridad(s().db);
+  for (const c of res.chequeos) {
+    check(c.nombre, c.ok, c.detalle);
+    for (const e of c.errores.slice(0, 5)) console.log(`      · ${e}`);
+  }
 }
 
-console.log("\n5) Stock: transferencia y ajuste");
-{
-  const prod = s().db.productos.find((p) => p.nombre.startsWith("Ladrillo hueco 12"))!;
-  const t = paso("Transferencia Norte → Sur", s().crearTransferencia({ depositoOrigenId: "dep_norte", depositoDestinoId: "dep_sur", items: [{ productoId: prod.id, cantidad: 144 }] }));
-  paso("Despachar", s().despacharTransferencia(t.id));
-  check("En tránsito entre depósitos", posicionesDe(s().db).get(prod.id)!.enTransferencia >= 144);
-  paso("Recibir", s().recibirTransferencia(t.id));
-  paso("Ajuste negativo por rotura", s().crearAjuste({ depositoId: "dep_sur", items: [{ productoId: prod.id, cantidad: 10, signo: -1, motivo: "ROTURA" }], observacion: "Rotura" }));
+if (fallas) {
+  console.error(`\n✘ ${fallas} verificaciones fallaron.\n`);
+  process.exit(1);
 }
-
-console.log("\n6) Anulación con nota de crédito y pago a proveedor con cheque de cartera");
-{
-  const fact = s().db.comprobantes.find((c) => c.clienteId && c.pedidoId && c.estado === "PENDIENTE" && (c.tipo === "FACTURA_A" || c.tipo === "FACTURA_B"))!;
-  paso("Anular factura", s().anularComprobante(fact.id));
-  const fp = s().db.comprobantes.find((c) => c.proveedorId && c.saldoPendiente > 0)!;
-  const ch = s().db.cheques.find((c) => c.estado === "EN_CARTERA" && c.importe < fp.saldoPendiente);
-  const medios = ch
-    ? [{ medio: ch.tipo, importe: ch.importe, chequeId: ch.id, banco: ch.banco, numeroCheque: ch.numero, fechaCobro: ch.fechaCobro }, { medio: "TRANSFERENCIA" as const, importe: fp.saldoPendiente - ch.importe }]
-    : [{ medio: "TRANSFERENCIA" as const, importe: fp.saldoPendiente }];
-  paso("Pago a proveedor", s().registrarPagoProveedor({ proveedorId: fp.proveedorId!, fecha: hoy, medios, imputaciones: [{ comprobanteId: fp.id, importe: fp.saldoPendiente }] }));
-  check("Factura de proveedor pagada", s().db.comprobantes.find((c) => c.id === fp.id)!.estado === "PAGADO");
-}
-
-console.log("\n7) Permisos");
-{
-  s().login("usr_jorge");
-  check("Depósito no puede crear pedidos", !s().guardarPedido({ clienteId: "cli_01", sucursalId: "suc_sur", depositoId: "dep_sur", vendedorId: "usr_jorge", fecha: hoy, items: [], descuentoPct: 0, condicionPago: "CONTADO", modalidadEntrega: "RETIRA" }).ok);
-  s().login("usr_pablo");
-  check("Ventas no puede ajustar stock", !s().crearAjuste({ depositoId: "dep_sur", items: [] }).ok);
-}
-
-console.log("\nIntegridad final");
-const res = verificarIntegridad(s().db);
-for (const c of res.chequeos) {
-  console.log(`  ${c.ok ? "✔" : "✘"} ${c.nombre} — ${c.detalle}`);
-  for (const e of c.errores.slice(0, 8)) console.log(`      · ${e}`);
-}
-if (!res.ok) fallas++;
-console.log(fallas ? `\n✘ ${fallas} fallas\n` : "\n✔ Todos los flujos OK\n");
-process.exit(fallas ? 1 : 0);
+console.log("\n✔ Todos los flujos verificados.\n");

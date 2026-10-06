@@ -1,8 +1,10 @@
 /**
  * Métricas de negocio puras para tablero y reportes.
+ * Ventas = facturado neto (facturas − notas de crédito de clientes, incluye la facturación de acopios).
+ * Margen = notas de pedido confirmadas (ventas nuevas a costo snapshot y retiros de acopio a precio congelado).
  */
 import { differenceInCalendarDays, parseISO, startOfDay, startOfWeek, format } from "date-fns";
-import type { Acopio, Comprobante, EstadoInicial, Pedido } from "./types";
+import type { Comprobante, EstadoInicial, NotaPedido } from "./types";
 import { calcularRentabilidadPedido, calcularRentabilidadItem } from "./ventas";
 
 export interface Rango {
@@ -10,60 +12,87 @@ export interface Rango {
   hasta: string;
 }
 
-const enRango = (f: string | undefined, r: Rango) => !!f && f >= r.desde && f <= r.hasta;
+export interface FiltroMetricas {
+  sucursalId: string | null;
+  /** Unidad de negocio (null = todas). */
+  unidadNegocioId?: string | null;
+  /** false = excluir circuito 2. */
+  circuito2?: boolean;
+}
 
-/** Facturas de venta (A/B) y notas de crédito de clientes, no anuladas. */
-export function comprobantesVenta(comprobantes: Comprobante[], sucursalId: string | null) {
+const enRango = (f: string | undefined, r: Rango) => !!f && f >= r.desde && f <= r.hasta;
+const filtroDe = (f: FiltroMetricas | string | null): FiltroMetricas => (typeof f === "string" || f === null ? { sucursalId: f } : f);
+
+/** Facturas y notas de crédito de clientes, no anuladas, según filtro. */
+export function comprobantesVenta(comprobantes: Comprobante[], filtro: FiltroMetricas | string | null) {
+  const f = filtroDe(filtro);
   return comprobantes.filter(
-    (c) => c.clienteId && (c.tipo === "FACTURA_A" || c.tipo === "FACTURA_B" || c.tipo === "NOTA_CREDITO") && (!sucursalId || c.sucursalId === sucursalId),
+    (c) => c.clienteId && (c.tipo === "FACTURA" || c.tipo === "NOTA_CREDITO") && (!f.sucursalId || c.sucursalId === f.sucursalId) && (f.circuito2 !== false || c.circuito !== 2),
   );
 }
 
-/** Importe neto (sin IVA) con signo: NC resta. Las facturas anuladas no suman (su NC tampoco). */
+/** Importe neto (sin IVA) con signo: NC resta. */
 export function netoVenta(c: Comprobante): number {
   if (c.estado === "ANULADO") return 0;
-  if (c.tipo === "NOTA_CREDITO") return c.comprobanteOrigenId && c.pedidoId ? 0 : -c.subtotal;
-  return c.subtotal;
+  return c.tipo === "NOTA_CREDITO" ? -c.subtotal : c.subtotal;
 }
 
-/** Ventas facturadas netas en el rango. */
-export function ventasFacturadas(comprobantes: Comprobante[], r: Rango, sucursalId: string | null): number {
-  return comprobantesVenta(comprobantes, sucursalId)
-    .filter((c) => enRango(c.fecha, r))
-    .reduce((a, c) => a + netoVenta(c), 0);
-}
-
-/**
- * Fecha de venta de un pedido: fecha de la factura si está facturado,
- * si no, la última entrega (o la confirmación).
- */
-export function fechaVentaPedido(p: Pedido, db: Pick<EstadoInicial, "comprobantes" | "despachos">): string {
-  if (p.comprobanteId) {
-    const c = db.comprobantes.find((x) => x.id === p.comprobanteId);
-    if (c) return c.fecha;
+/** Reparto del neto de un comprobante por unidad de negocio (según sus ítems, su NP o su acopio). */
+export function netoPorUN(c: Comprobante, db: Pick<EstadoInicial, "productos" | "notasPedido" | "acopios">): Record<string, number> {
+  const neto = netoVenta(c);
+  if (!neto) return {};
+  const unDe = new Map(db.productos.map((p) => [p.id, p.unidadNegocioId]));
+  if (c.acopioId && !c.notaPedidoId) {
+    const a = db.acopios.find((x) => x.id === c.acopioId);
+    return { [a?.unidadNegocioId ?? "un_cor"]: neto };
   }
-  let ult = "";
-  for (const d of db.despachos) if (d.origenTipo === "PEDIDO" && d.origenId === p.id && d.fechaEntrega && d.fechaEntrega > ult) ult = d.fechaEntrega;
-  return ult || p.fechaConfirmacion || p.fecha;
-}
-
-/** Pedidos vendidos (facturados o despachados) en el rango, con su rentabilidad. */
-export function pedidosVendidos(db: EstadoInicial, r: Rango, sucursalId: string | null) {
-  const fechas = new Map<string, string>();
-  const out: { pedido: Pedido; fecha: string; ingreso: number; costo: number; margen: number; margenPct: number }[] = [];
-  for (const p of db.pedidos) {
-    if (p.estado !== "FACTURADO" && p.estado !== "DESPACHADO") continue;
-    if (sucursalId && p.sucursalId !== sucursalId) continue;
-    const f = fechas.get(p.id) ?? fechaVentaPedido(p, db);
-    if (!enRango(f, r)) continue;
-    const rent = calcularRentabilidadPedido(p);
-    out.push({ pedido: p, fecha: f, ingreso: rent.ingreso, costo: rent.costo, margen: rent.margenBruto, margenPct: rent.margenPct });
+  const items = c.items ?? db.notasPedido.find((n) => n.id === c.notaPedidoId)?.items ?? [];
+  const total = items.reduce((a, i) => a + i.cantidad * i.precioUnitario, 0);
+  if (!total) return { un_cor: neto };
+  const out: Record<string, number> = {};
+  for (const i of items) {
+    const un = unDe.get(i.productoId) ?? "un_cor";
+    out[un] = (out[un] ?? 0) + (neto * i.cantidad * i.precioUnitario) / total;
   }
   return out;
 }
 
-export function margenPeriodo(db: EstadoInicial, r: Rango, sucursalId: string | null) {
-  const ps = pedidosVendidos(db, r, sucursalId);
+/** Ventas facturadas netas en el rango. */
+export function ventasFacturadas(db: Pick<EstadoInicial, "comprobantes" | "productos" | "notasPedido" | "acopios">, r: Rango, filtro: FiltroMetricas | string | null): number {
+  const f = filtroDe(filtro);
+  return comprobantesVenta(db.comprobantes, f)
+    .filter((c) => enRango(c.fecha, r))
+    .reduce((a, c) => a + (f.unidadNegocioId ? (netoPorUN(c, db)[f.unidadNegocioId] ?? 0) : netoVenta(c)), 0);
+}
+
+export function fechaVentaNP(np: NotaPedido): string {
+  return np.fechaConfirmacion ?? np.fecha;
+}
+
+/** Notas de pedido confirmadas en el rango, con su rentabilidad (filtradas por UN si corresponde). */
+export function notasVendidas(db: EstadoInicial, r: Rango, filtro: FiltroMetricas | string | null) {
+  const f = filtroDe(filtro);
+  const unDe = new Map(db.productos.map((p) => [p.id, p.unidadNegocioId]));
+  const out: { nota: NotaPedido; /** alias de `nota` */ pedido: NotaPedido; fecha: string; ingreso: number; costo: number; margen: number; margenPct: number }[] = [];
+  for (const np of db.notasPedido) {
+    if (np.estado === "BORRADOR" || np.estado === "ANULADA") continue;
+    if (f.sucursalId && np.sucursalId !== f.sucursalId) continue;
+    if (f.circuito2 === false && np.circuito === 2) continue;
+    const fecha = fechaVentaNP(np);
+    if (!enRango(fecha, r)) continue;
+    const items = f.unidadNegocioId ? np.items.filter((i) => unDe.get(i.productoId) === f.unidadNegocioId) : np.items;
+    if (!items.length) continue;
+    const rent = calcularRentabilidadPedido({ items, descuentoPct: np.descuentoPct });
+    out.push({ nota: np, pedido: np, fecha, ingreso: rent.ingreso, costo: rent.costo, margen: rent.margenBruto, margenPct: rent.margenPct });
+  }
+  return out;
+}
+
+/** @deprecated nombre anterior */
+export const pedidosVendidos = notasVendidas;
+
+export function margenPeriodo(db: EstadoInicial, r: Rango, filtro: FiltroMetricas | string | null) {
+  const ps = notasVendidas(db, r, filtro);
   const ingreso = ps.reduce((a, p) => a + p.ingreso, 0);
   const margen = ps.reduce((a, p) => a + p.margen, 0);
   return { ingreso, margen, margenPct: ingreso ? margen / ingreso : 0, pedidos: ps.length };
@@ -78,38 +107,52 @@ export function claveFecha(iso: string, g: Agrupacion): string {
   return format(d, "yyyy-MM");
 }
 
-/** Serie temporal de ventas netas y margen. */
-export function serieVentasMargen(db: EstadoInicial, r: Rango, sucursalId: string | null, g: Agrupacion) {
-  const buckets = new Map<string, { clave: string; ventas: number; margen: number; norte: number; sur: number }>();
-  // Pre-crear todas las claves del rango para que el gráfico no tenga huecos
+export interface PuntoSerie {
+  clave: string;
+  ventas: number;
+  margen: number;
+  /** Ventas por unidad de negocio (id → neto). */
+  porUN: Record<string, number>;
+  /** Ventas por sucursal (id → neto). */
+  porSucursal: Record<string, number>;
+}
+
+/** Serie temporal de ventas netas y margen, con desglose por unidad de negocio y sucursal. */
+export function serieVentasMargen(db: EstadoInicial, r: Rango, filtro: FiltroMetricas | string | null, g: Agrupacion): PuntoSerie[] {
+  const f = filtroDe(filtro);
+  const buckets = new Map<string, PuntoSerie>();
   const desde = startOfDay(parseISO(r.desde));
   const dias = differenceInCalendarDays(parseISO(r.hasta), desde);
   for (let i = 0; i <= dias; i++) {
     const k = claveFecha(new Date(desde.getTime() + i * 86_400_000).toISOString(), g);
-    if (!buckets.has(k)) buckets.set(k, { clave: k, ventas: 0, margen: 0, norte: 0, sur: 0 });
+    if (!buckets.has(k)) buckets.set(k, { clave: k, ventas: 0, margen: 0, porUN: {}, porSucursal: {} });
   }
-  for (const c of comprobantesVenta(db.comprobantes, sucursalId)) {
+  for (const c of comprobantesVenta(db.comprobantes, f)) {
     if (!enRango(c.fecha, r)) continue;
     const b = buckets.get(claveFecha(c.fecha, g));
     if (!b) continue;
-    const v = netoVenta(c);
+    const porUN = netoPorUN(c, db);
+    const v = f.unidadNegocioId ? (porUN[f.unidadNegocioId] ?? 0) : netoVenta(c);
     b.ventas += v;
-    if (c.sucursalId === "suc_norte") b.norte += v;
-    else b.sur += v;
+    for (const [un, x] of Object.entries(porUN)) if (!f.unidadNegocioId || un === f.unidadNegocioId) b.porUN[un] = (b.porUN[un] ?? 0) + x;
+    if (c.sucursalId) b.porSucursal[c.sucursalId] = (b.porSucursal[c.sucursalId] ?? 0) + v;
   }
-  for (const p of pedidosVendidos(db, r, sucursalId)) {
+  for (const p of notasVendidas(db, r, f)) {
     const b = buckets.get(claveFecha(p.fecha, g));
     if (b) b.margen += p.margen;
   }
   return [...buckets.values()].sort((a, b) => a.clave.localeCompare(b.clave));
 }
 
-/** Ranking de productos por margen y facturación (pedidos vendidos en el rango). */
-export function rankingProductos(db: EstadoInicial, r: Rango, sucursalId: string | null) {
+/** Ranking de productos por margen y facturación (NP confirmadas en el rango). */
+export function rankingProductos(db: EstadoInicial, r: Rango, filtro: FiltroMetricas | string | null) {
+  const f = filtroDe(filtro);
+  const unDe = new Map(db.productos.map((p) => [p.id, p.unidadNegocioId]));
   const m = new Map<string, { productoId: string; unidades: number; facturado: number; costo: number; margen: number }>();
-  for (const { pedido } of pedidosVendidos(db, r, sucursalId))
-    for (const it of pedido.items) {
-      const rent = calcularRentabilidadItem(it, pedido.descuentoPct);
+  for (const { nota } of notasVendidas(db, r, f))
+    for (const it of nota.items) {
+      if (f.unidadNegocioId && unDe.get(it.productoId) !== f.unidadNegocioId) continue;
+      const rent = calcularRentabilidadItem(it, nota.descuentoPct);
       const x = m.get(it.productoId) ?? { productoId: it.productoId, unidades: 0, facturado: 0, costo: 0, margen: 0 };
       x.unidades += it.cantidad;
       x.facturado += rent.ingreso;
@@ -118,15 +161,4 @@ export function rankingProductos(db: EstadoInicial, r: Rango, sucursalId: string
       m.set(it.productoId, x);
     }
   return [...m.values()].map((x) => ({ ...x, margenPct: x.facturado ? x.margen / x.facturado : 0 }));
-}
-
-/** Margen bruto de un acopio a costo snapshot (sobre todo lo acopiado). */
-export function margenAcopio(a: Acopio) {
-  let ingreso = 0;
-  let costo = 0;
-  for (const i of a.items) {
-    ingreso += i.cantidadAcopiada * i.precioUnitarioPactado;
-    costo += i.cantidadAcopiada * i.costoUnitarioSnapshot;
-  }
-  return { ingreso, costo, margen: ingreso - costo, margenPct: ingreso ? (ingreso - costo) / ingreso : 0 };
 }

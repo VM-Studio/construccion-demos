@@ -4,8 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, PackageSearch, Truck } from "lucide-react";
-import { useDb, usePosiciones, usePuede, type PosicionProducto } from "@/store/selectors";
-import { detalleComprometido } from "@/domain/stock";
+import { useDb, usePendientes, usePosiciones, usePuede, type PosicionProducto } from "@/store/selectors";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -21,6 +20,7 @@ const n = (v: number) => formatNumber(v, 2);
 /** Celda de comprometido con popover de trazabilidad (qué pedidos/acopios lo componen). */
 function CeldaComprometido({ pos, depositoId }: { pos: PosicionProducto; depositoId: string }) {
   const db = useDb();
+  const pendientes = usePendientes();
   const q = pos.porDeposito[depositoId]?.comprometido ?? 0;
   if (!q) return <span className="text-disabled">0</span>;
   return (
@@ -32,18 +32,20 @@ function CeldaComprometido({ pos, depositoId }: { pos: PosicionProducto; deposit
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[340px] p-0" onClick={(e) => e.stopPropagation()}>
         <div className="border-b border-border px-3 py-2 text-[12px] font-semibold">
-          Comprometido en {db.depositos.find((d) => d.id === depositoId)?.nombre} · {formatQty(q, pos.producto.unidad)}
+          Pendiente de entrega en {db.depositos.find((d) => d.id === depositoId)?.nombre} · {formatQty(q, pos.producto.unidad)}
         </div>
         <ul className="max-h-[260px] divide-y divide-border overflow-y-auto">
-          {detalleComprometido(pos.producto.id, depositoId, db.pedidos, db.acopios, db.despachos).map((d) => (
-            <li key={d.tipo + d.id}>
-              <Link href={d.tipo === "PEDIDO" ? `/ventas/pedidos/${d.id}` : `/acopios/${d.id}`} className="flex items-center gap-3 px-3 py-2 text-[12px] hover:bg-subtle">
-                <span className="w-[76px] shrink-0 font-mono">{d.numero}</span>
-                <span className="min-w-0 flex-1 truncate text-muted">{db.clientes.find((c) => c.id === d.clienteId)?.razonSocial}</span>
-                <span className="font-medium tnum">{n(d.cantidad)}</span>
-              </Link>
-            </li>
-          ))}
+          {pendientes
+            .filter((l) => l.productoId === pos.producto.id && l.depositoId === depositoId)
+            .map((l) => (
+              <li key={l.itemId}>
+                <Link href={`/ventas/notas-pedido/${l.notaPedidoId}`} className="flex items-center gap-3 px-3 py-2 text-[12px] hover:bg-subtle">
+                  <span className="w-[120px] shrink-0 font-mono">{db.notasPedido.find((x) => x.id === l.notaPedidoId)?.numero}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted">{db.clientes.find((c) => c.id === l.clienteId)?.razonSocial}</span>
+                  <span className="font-medium tnum">{n(l.pendiente)}</span>
+                </Link>
+              </li>
+            ))}
         </ul>
       </PopoverContent>
     </Popover>

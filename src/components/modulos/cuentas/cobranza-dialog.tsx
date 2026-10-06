@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { AlertTriangle, Plus, Printer, Trash2, Wand2 } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb } from "@/store/selectors";
-import type { MedioCobro, MedioPago } from "@/domain/types";
+import type { Circuito, MedioCobro, MedioPago } from "@/domain/types";
+import { CIRCUITO_LABEL } from "@/domain/estados";
 import { imputarAutomaticamente, diasAtraso } from "@/domain/cuentasCorrientes";
 import { MEDIO_PAGO_LABEL, TIPO_COMPROBANTE_LABEL, opciones } from "@/domain/estados";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -52,14 +53,15 @@ export function CobranzaDialog({
   const registrar = useStore((s) => s.registrarCobranza);
   const [clienteId, setClienteId] = React.useState(clienteInicial ?? "");
   const [fecha, setFecha] = React.useState(hoy());
+  const [circuito, setCircuito] = React.useState<Circuito>(1);
   const [medios, setMedios] = React.useState<FilaMedio[]>([]);
   const [imput, setImput] = React.useState<Record<string, number>>({});
   const [obs, setObs] = React.useState("");
   const [recibo, setRecibo] = React.useState<string | null>(null);
 
   const pendientes = React.useMemo(
-    () => db.comprobantes.filter((c) => c.clienteId === clienteId && c.saldoPendiente > 0.009 && c.estado !== "ANULADO" && (c.tipo === "FACTURA_A" || c.tipo === "FACTURA_B" || c.tipo === "NOTA_DEBITO")).sort((a, b) => a.fecha.localeCompare(b.fecha)),
-    [db.comprobantes, clienteId],
+    () => db.comprobantes.filter((c) => c.clienteId === clienteId && c.circuito === circuito && c.saldoPendiente > 0.009 && c.estado !== "ANULADO" && (c.tipo === "FACTURA" || c.tipo === "NOTA_DEBITO")).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [db.comprobantes, clienteId, circuito],
   );
 
   React.useEffect(() => {
@@ -69,6 +71,7 @@ export function CobranzaDialog({
     setFecha(hoy());
     setObs("");
     const c = comprobanteId ? db.comprobantes.find((x) => x.id === comprobanteId) : undefined;
+    setCircuito(c?.circuito ?? db.clientes.find((x) => x.id === cli)?.circuitoHabitual ?? 1);
     const imp = importeSugerido ?? c?.saldoPendiente ?? 0;
     setMedios([{ _id: newId("m"), medio: "TRANSFERENCIA", importe: Math.round(imp * 100) / 100 }]);
     setImput(c ? { [c.id]: Math.round(Math.min(imp, c.saldoPendiente) * 100) / 100 } : {});
@@ -90,6 +93,7 @@ export function CobranzaDialog({
   const confirmar = () => {
     const r = registrar({
       clienteId,
+      circuito,
       fecha: deInput(fecha),
       medios: medios.map(({ _id, ...m }) => {
         void _id;
@@ -141,6 +145,17 @@ export function CobranzaDialog({
               </FormField>
               <FormField label="Fecha" htmlFor="cob-fecha">
                 <Input id="cob-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </FormField>
+              <FormField label="Circuito">
+                <Select
+                  aria-label="Circuito"
+                  value={String(circuito)}
+                  onValueChange={(v) => {
+                    setCircuito(Number(v) as Circuito);
+                    setImput({});
+                  }}
+                  options={[1, 2].map((c) => ({ value: String(c), label: CIRCUITO_LABEL[c as Circuito] }))}
+                />
               </FormField>
             </div>
 

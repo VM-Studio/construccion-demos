@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { EstadoInicial } from "@/domain/types";
-import { crearSeed } from "@/data/seed";
+import { configInicial, crearSeed } from "@/data/seed";
 import { ejecutar } from "./helpers";
 import type { StoreBase, UIState } from "./types";
 import { crearSliceCatalogo } from "./slices/catalogo";
@@ -15,22 +15,32 @@ import { crearSliceAcopios } from "./slices/acopios";
 import { crearSliceDespachos } from "./slices/despachos";
 import { crearSliceFinanzas } from "./slices/finanzas";
 import { crearSliceConfig } from "./slices/config";
+import { crearSliceRemitos } from "./slices/remitos";
 
-export const STORAGE_KEY = "cd-demo-v1";
+export const STORAGE_KEY = "aceros-rnf-v1";
 
 /** Estado vacío para el primer render (antes de hidratar desde localStorage). */
 function estadoVacio(): EstadoInicial {
   return {
-    sucursales: [], depositos: [], usuarios: [], rubros: [], proveedores: [], productos: [], listasPrecios: [], precios: [],
-    stock: [], movimientos: [], transferencias: [], ajustes: [], ordenesCompra: [], recepciones: [], clientes: [], presupuestos: [],
-    pedidos: [], comprobantes: [], acopios: [], retiros: [], vehiculos: [], choferes: [], despachos: [], hojasRuta: [], cobranzas: [],
-    pagosProveedores: [], cheques: [], auditoria: [],
-    config: { ivaPct: 21, validezPresupuestoDias: 7, diasVencimientoAcopio: 180, alertaStockMinimo: true, umbralSubaCostoPct: 3, motivosAjuste: [], empresa: { empresa: "", razonSocial: "", cuit: "", direccion: "", telefono: "", email: "" } },
-    numeradores: { OC: 0, PRE: 0, PED: 0, ACO: 0, RET: 0, REM: 0, REC: 0, OP: 0, TRF: 0, AJU: 0, RCP: 0, fiscal: {} },
+    sucursales: [], depositos: [], usuarios: [], unidadesNegocio: [], rubros: [], proveedores: [], productos: [], listasPrecios: [], precios: [],
+    stock: [], movimientos: [], transferencias: [], ajustes: [], ordenesCompra: [], recepciones: [], acopiosProveedor: [], clientes: [], obras: [],
+    cotizaciones: [], notasPedido: [], devoluciones: [], ajustesAcopio: [], acopios: [], remitos: [], adjuntos: [], comprobantes: [], vehiculos: [],
+    choferes: [], despachos: [], hojasRuta: [], cobranzas: [], pagosProveedores: [], cheques: [], auditoria: [],
+    config: configInicial(),
+    numeradores: {},
   };
 }
 
-const UI_INICIAL: UIState = { usuarioId: null, sucursalActivaId: null, sidebarColapsado: false, tourVisto: {}, tourAbierto: false };
+const UI_INICIAL: UIState = {
+  usuarioId: null,
+  sucursalActivaId: null,
+  unidadNegocioId: null,
+  sidebarColapsado: false,
+  tourVisto: {},
+  tourAbierto: false,
+  favoritosModulos: {},
+  favoritosPaginas: {},
+};
 
 function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<StoreBase>)) => void, get: () => StoreBase) {
   return {
@@ -41,6 +51,21 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     },
     logout: () => set((s) => ({ ui: { ...s.ui, usuarioId: null, tourAbierto: false } })),
     setSucursalActiva: (sucursalActivaId: string | null) => set((s) => ({ ui: { ...s.ui, sucursalActivaId } })),
+    setUnidadNegocio: (unidadNegocioId: string | null) => set((s) => ({ ui: { ...s.ui, unidadNegocioId } })),
+    toggleFavoritoModulo: (moduloId: string) =>
+      set((s) => {
+        const u = s.ui.usuarioId ?? "";
+        const actual = s.ui.favoritosModulos[u] ?? [];
+        const nuevo = actual.includes(moduloId) ? actual.filter((x) => x !== moduloId) : [...actual, moduloId];
+        return { ui: { ...s.ui, favoritosModulos: { ...s.ui.favoritosModulos, [u]: nuevo } } };
+      }),
+    toggleFavoritoPagina: (href: string) =>
+      set((s) => {
+        const u = s.ui.usuarioId ?? "";
+        const actual = s.ui.favoritosPaginas[u] ?? [];
+        const nuevo = actual.includes(href) ? actual.filter((x) => x !== href) : [...actual, href];
+        return { ui: { ...s.ui, favoritosPaginas: { ...s.ui.favoritosPaginas, [u]: nuevo } } };
+      }),
     toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarColapsado: !s.ui.sidebarColapsado } })),
     abrirTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: true } })),
     cerrarTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: false, tourVisto: { ...s.ui.tourVisto, [s.ui.usuarioId ?? ""]: true } } })),
@@ -57,6 +82,7 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     ...crearSliceDespachos(set, get),
     ...crearSliceFinanzas(set, get),
     ...crearSliceConfig(set, get),
+    ...crearSliceRemitos(set, get),
   };
 }
 
@@ -73,7 +99,7 @@ export const useStore = create<Store>()(
     }),
     {
       name: STORAGE_KEY,
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false } }),
@@ -93,9 +119,11 @@ export async function hidratarStore() {
   hidratando = true;
   await useStore.persist.rehydrate();
   const { db } = useStore.getState();
-  if (!db.productos.length) useStore.setState({ db: crearSeed(new Date()) });
+  if (!db.productos.length || !db.unidadesNegocio?.length) useStore.setState({ db: crearSeed(new Date()) });
   useStore.setState({ hidratado: true });
   hidratando = false;
+  // Los remitos firmados de ejemplo se generan en runtime (jsPDF) y se guardan en IndexedDB.
+  void import("@/lib/adjuntos").then((m) => m.asegurarAdjuntosDemo()).catch(() => undefined);
 }
 
 /** true cuando el store ya se hidrató (evita mismatch SSR / flash de login). */

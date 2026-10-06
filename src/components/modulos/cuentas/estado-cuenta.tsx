@@ -40,15 +40,17 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
   const hoy = new Date();
   for (const c of db.comprobantes) {
     if (tipo === "cliente" ? c.clienteId !== id : c.proveedorId !== id) continue;
-    if (c.tipo === "RECIBO") continue;
+    if (c.tipo === "SALDO_A_FAVOR") continue;
+    // NC de devoluciones de acopio: vuelven al saldo del acopio, no a la cuenta corriente.
+    if (c.tipo === "NOTA_CREDITO" && c.acopioId && !c.aplicadoA?.length && Math.abs(c.saldoPendiente) < 0.01) continue;
     const esDebe = c.tipo !== "NOTA_CREDITO";
-    const ref = c.pedidoId ? db.pedidos.find((p) => p.id === c.pedidoId)?.numero : c.acopioId ? db.acopios.find((a) => a.id === c.acopioId)?.numero : c.recepcionId ? db.ordenesCompra.find((o) => o.id === db.recepciones.find((r) => r.id === c.recepcionId)?.ordenCompraId)?.numero : undefined;
+    const ref = c.notaPedidoId ? db.notasPedido.find((p) => p.id === c.notaPedidoId)?.numero : c.acopioId ? db.acopios.find((a) => a.id === c.acopioId)?.numero : c.recepcionId ? db.ordenesCompra.find((o) => o.id === db.recepciones.find((r) => r.id === c.recepcionId)?.ordenCompraId)?.numero : undefined;
     out.push({
       id: c.id,
       fecha: c.fecha,
       concepto: `${TIPO_COMPROBANTE_LABEL[c.tipo]}${ref ? ` · ${ref}` : ""}${c.estado === "ANULADO" ? " (anulada)" : ""}`,
       numero: c.numero,
-      href: c.pedidoId ? `/ventas/pedidos/${c.pedidoId}` : c.acopioId ? `/acopios/${c.acopioId}` : c.recepcionId ? `/compras?tab=recepciones&id=${c.recepcionId}` : undefined,
+      href: c.notaPedidoId ? `/ventas/notas-pedido/${c.notaPedidoId}` : c.acopioId ? `/acopios/${c.acopioId}` : c.recepcionId ? `/compras?tab=recepciones&id=${c.recepcionId}` : undefined,
       debe: esDebe ? c.total : 0,
       haber: esDebe ? 0 : c.total,
       pendiente: esDebe && c.estado !== "ANULADO" && c.saldoPendiente > 0.009 ? c.saldoPendiente : undefined,

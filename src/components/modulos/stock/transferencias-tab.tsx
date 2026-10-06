@@ -76,8 +76,8 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
   const db = useDb();
   const posiciones = usePosiciones();
   const crear = useStore((s) => s.crearTransferencia);
-  const [origen, setOrigen] = React.useState("dep_norte");
-  const [destino, setDestino] = React.useState("dep_sur");
+  const [origen, setOrigen] = React.useState("dep_central");
+  const [destino, setDestino] = React.useState("dep_2");
   const [items, setItems] = React.useState<Linea[]>([]);
   const [obs, setObs] = React.useState("");
   React.useEffect(() => {

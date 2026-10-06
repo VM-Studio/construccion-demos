@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { ArrowRight, Boxes, ChevronRight, DollarSign, Landmark, PackageCheck, PackageX, Percent, ShoppingCart, Truck, Warehouse } from "lucide-react";
-import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosConSaldo, usePosiciones, useUsuario } from "@/store/selectors";
+import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosResumen, usePosiciones, useUsuario } from "@/store/selectors";
 import { useAlertas } from "@/store/alertas";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCard } from "@/components/shared/kpi-card";
@@ -38,10 +38,10 @@ export function TableroView() {
   const verAcopios = usePuede("acopios.ver");
   const alertas = useAlertas();
   const saldos = useSaldosClientes();
-  const acopios = useAcopiosConSaldo();
+  const acopios = useAcopiosResumen();
 
-  const ventas = React.useMemo(() => ventasFacturadas(db.comprobantes, periodo, sucursalId), [db.comprobantes, periodo, sucursalId]);
-  const ventasAnt = React.useMemo(() => ventasFacturadas(db.comprobantes, anterior, sucursalId), [db.comprobantes, anterior, sucursalId]);
+  const ventas = React.useMemo(() => ventasFacturadas(db, periodo, sucursalId), [db, periodo, sucursalId]);
+  const ventasAnt = React.useMemo(() => ventasFacturadas(db, anterior, sucursalId), [db, anterior, sucursalId]);
   const margen = React.useMemo(() => margenPeriodo(db, periodo, sucursalId), [db, periodo, sucursalId]);
   const margenAnt = React.useMemo(() => margenPeriodo(db, anterior, sucursalId), [db, anterior, sucursalId]);
 
@@ -59,8 +59,8 @@ export function TableroView() {
   }, [db.clientes, saldos, sucursalId]);
 
   const deudaMercaderia = React.useMemo(() => {
-    const activos = acopios.filter((a) => (a.estado === "VIGENTE" || a.estado === "RETIRADO_PARCIAL" || a.estado === "VENCIDO") && (!sucursalId || a.acopio.sucursalId === sucursalId));
-    return { total: activos.reduce((s, a) => s + a.deuda.aPrecioPactado, 0), n: activos.length };
+    const activos = acopios.filter((a) => (a.estado === "VIGENTE" || a.estado === "VENCIDO") && (!sucursalId || a.acopio.sucursalId === sucursalId));
+    return { total: activos.reduce((s, a) => s + Math.max(0, a.saldo), 0), n: activos.length };
   }, [acopios, sucursalId]);
 
   const etiqueta = ETIQUETA_PERIODO[periodo.preset] ?? "período anterior";
@@ -114,7 +114,7 @@ export function TableroView() {
               label="Deuda de mercadería (acopios)"
               valor={formatMoney(deudaMercaderia.total, { compact: Math.abs(deudaMercaderia.total) >= 1_000_000 })}
               icono={Boxes}
-              subtexto={`${deudaMercaderia.n} acopios activos · a precio pactado`}
+              subtexto={`${deudaMercaderia.n} acopios vigentes · saldo disponible`}
               onClick={() => router.push("/acopios")}
             />
           )}
@@ -195,14 +195,14 @@ function GraficoVentas({ periodo, sucursalId, verMargen }: { periodo: Periodo; s
         {!hayDatos ? (
           <EmptyState titulo="Sin ventas en el período" descripcion="Elegí otro rango de fechas para ver la evolución." />
         ) : vista === "total" ? (
-          <VentasMargenChart data={verMargen ? serie : serie.map((s) => ({ ...s, margen: 0 }))} etiquetaX={etiquetaClave(agrEfectiva)} />
+          <VentasMargenChart data={serie.map((s) => ({ clave: s.clave, ventas: s.ventas, margen: verMargen ? s.margen : 0 }))} etiquetaX={etiquetaClave(agrEfectiva)} />
         ) : (
           <BarrasAgrupadasChart
-            data={serie}
+            data={serie.map((s) => ({ clave: s.clave, central: s.porSucursal.suc_central ?? 0, s2: s.porSucursal.suc_2 ?? 0 }))}
             etiquetaX={etiquetaClave(agrEfectiva)}
             series={[
-              { key: "norte", nombre: "Sucursal Norte", color: COLORES.barraAlt },
-              { key: "sur", nombre: "Sucursal Sur", color: COLORES.barra },
+              { key: "central", nombre: "Casa Central", color: COLORES.barraAlt },
+              { key: "s2", nombre: "Sucursal 2", color: COLORES.barra },
             ]}
           />
         )}
@@ -344,8 +344,8 @@ function StockPorRubro() {
       let norte = 0, sur = 0, bajo = 0;
       for (const pos of posiciones.values()) {
         if (pos.producto.rubroId !== r.id) continue;
-        norte += Math.max(0, pos.porDeposito.dep_norte?.fisico ?? 0) * pos.producto.costoPromedio;
-        sur += Math.max(0, pos.porDeposito.dep_sur?.fisico ?? 0) * pos.producto.costoPromedio;
+        norte += Math.max(0, pos.porDeposito.dep_central?.fisico ?? 0) * pos.producto.costoPromedio;
+        sur += Math.max(0, pos.porDeposito.dep_2?.fisico ?? 0) * pos.producto.costoPromedio;
         if (pos.estado !== "OK") bajo++;
       }
       return { id: r.id, nombre: r.nombre, norte, sur, total: norte + sur, bajo };
@@ -368,8 +368,8 @@ function StockPorRubro() {
           <thead className="bg-[#FAFAF8]">
             <tr className="text-[12px] text-muted">
               <th className="h-9 px-4 text-left font-medium">Rubro</th>
-              <th className="h-9 px-3 text-right font-medium">Depósito Norte</th>
-              <th className="h-9 px-3 text-right font-medium">Depósito Sur</th>
+              <th className="h-9 px-3 text-right font-medium">Casa Central</th>
+              <th className="h-9 px-3 text-right font-medium">Sucursal 2</th>
               <th className="h-9 px-3 text-right font-medium">Total</th>
               <th className="h-9 px-3 text-right font-medium">% del total</th>
               <th className="h-9 px-4 text-right font-medium">Bajo mínimo</th>
@@ -422,7 +422,7 @@ function KpisOperativos() {
   const posiciones = usePosiciones();
   const sucursalId = useSucursalActiva();
   const hoy = diaLocal(new Date());
-  const despHoy = db.despachos.filter((d) => (d.estado === "PENDIENTE" || d.estado === "EN_PREPARACION") && diaLocal(d.fechaProgramada) <= hoy && (!sucursalId || d.sucursalId === sucursalId)).length;
+  const despHoy = db.despachos.filter((d) => (d.estado === "ESPERA" || d.estado === "PREPARACION") && diaLocal(d.fechaProgramada) <= hoy && (!sucursalId || d.sucursalId === sucursalId)).length;
   const enViaje = db.despachos.filter((d) => d.estado === "EN_VIAJE" && (!sucursalId || d.sucursalId === sucursalId)).length;
   const ocPend = db.ordenesCompra.filter((o) => (o.estado === "CONFIRMADA" || o.estado === "RECIBIDA_PARCIAL") && (!sucursalId || o.sucursalId === sucursalId)).length;
   const bajo = [...posiciones.values()].filter((p) => p.estado !== "OK").length;

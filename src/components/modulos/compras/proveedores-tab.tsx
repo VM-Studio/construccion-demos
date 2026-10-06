@@ -82,7 +82,7 @@ export function ProveedoresTab({ abrirId }: { abrirId?: string | null }) {
 }
 
 type Form = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
-const VACIO: Form = { razonSocial: "", cuit: "", condicionIVA: "RI", email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", activo: true, notas: "" };
+const VACIO: Form = { codigo: "", razonSocial: "", tipo: "FABRICANTE", cuit: "", condicionIVA: "RI", circuitoHabitual: 1, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", unidadNegocioIds: ["un_cor"], activo: true, notas: "" };
 
 function ProveedorSheet({ id, nuevo, onClose }: { id?: string | null; nuevo: boolean; onClose: () => void }) {
   const db = useDb();

@@ -1,68 +1,52 @@
-import type { Numeradores, TipoComprobante } from "./types";
+import type { Circuito, CodigoDoc, Numeradores } from "./types";
 
-export const PREFIJOS = {
-  OC: "OC",
-  PRE: "PRE",
-  PED: "PED",
-  ACO: "ACO",
-  RET: "RET",
-  REM: "REM",
-  REC: "REC",
-  OP: "OP",
-  TRF: "TRF",
-  AJU: "AJU",
-  RCP: "RCP",
-} as const;
-
-export type EntidadNumerada = keyof typeof PREFIJOS;
-
-/** Formatea un número interno: `OC-00012`. */
-export function formatearNumero(entidad: EntidadNumerada, n: number): string {
-  return `${PREFIJOS[entidad]}-${String(n).padStart(5, "0")}`;
-}
-
-/** Extrae la parte numérica de `OC-00012` → 12. */
-export function parsearNumero(numero: string): number {
-  const m = numero.match(/(\d+)$/);
-  return m ? Number(m[1]) : 0;
+/** Clave del numerador: numeración independiente por código, circuito y punto de venta. */
+export function claveNumerador(codigo: CodigoDoc, circuito: Circuito | null, puntoVenta: string): string {
+  return `${codigo}|${circuito ?? 0}|${puntoVenta}`;
 }
 
 /**
- * Siguiente número para una entidad a partir de la lista existente
- * (toma el máximo y suma uno). Padding de 5 dígitos.
+ * Formatea el número de un documento: `${codigo}${circuito} ${puntoVenta}-${correlativo}`.
+ * Ej. `NP2 0001-00067299`, `RM2 00016-00013536`, `F1 0001-00088073`.
+ * Los documentos internos sin circuito (TRF, AJU, DES, RCP) no llevan sufijo.
  */
-export function siguienteNumero(entidad: EntidadNumerada, lista: { numero: string }[]): string {
-  const max = lista.reduce((m, x) => Math.max(m, parsearNumero(x.numero)), 0);
-  return formatearNumero(entidad, max + 1);
+export function formatearDoc(codigo: CodigoDoc, circuito: Circuito | null, puntoVenta: string, n: number): string {
+  return `${codigo}${circuito ?? ""} ${puntoVenta}-${String(n).padStart(8, "0")}`;
 }
 
-/** Punto de venta fiscal por sucursal: Norte 0001, Sur 0002. */
-export const PUNTO_VENTA_POR_DEFECTO: Record<string, string> = {
-  suc_norte: "0001",
-  suc_sur: "0002",
-};
-
-/** Número fiscal `0001-00001234`. */
-export function formatearNumeroFiscal(puntoVenta: string, n: number): string {
-  return `${puntoVenta.padStart(4, "0")}-${String(n).padStart(8, "0")}`;
-}
-
-/** Reserva el siguiente número fiscal y devuelve [numero, numeradoresActualizados]. */
-export function siguienteNumeroFiscal(
+/** Reserva el siguiente número y devuelve [numero, numeradoresActualizados]. */
+export function reservarNumeroDoc(
   numeradores: Numeradores,
+  codigo: CodigoDoc,
+  circuito: Circuito | null,
   puntoVenta: string,
-  tipo: TipoComprobante,
 ): [string, Numeradores] {
-  const actual = numeradores.fiscal[puntoVenta]?.[tipo] ?? 0;
-  const n = actual + 1;
-  return [
-    formatearNumeroFiscal(puntoVenta, n),
-    { ...numeradores, fiscal: { ...numeradores.fiscal, [puntoVenta]: { ...numeradores.fiscal[puntoVenta], [tipo]: n } } },
-  ];
+  const k = claveNumerador(codigo, circuito, puntoVenta);
+  const n = (numeradores[k] ?? 0) + 1;
+  return [formatearDoc(codigo, circuito, puntoVenta, n), { ...numeradores, [k]: n }];
 }
 
-/** Reserva el siguiente número interno y devuelve [numero, numeradoresActualizados]. */
-export function reservarNumero(numeradores: Numeradores, entidad: EntidadNumerada): [string, Numeradores] {
-  const n = numeradores[entidad] + 1;
-  return [formatearNumero(entidad, n), { ...numeradores, [entidad]: n }];
+/** Descompone un número de documento. */
+export function parsearNumeroDoc(numero: string): { codigo: string; circuito: Circuito | null; puntoVenta: string; correlativo: number } | null {
+  const m = numero.match(/^([A-Z]+?)([12])?\s+(\d+)-(\d+)/);
+  if (!m) return null;
+  return { codigo: m[1], circuito: m[2] ? (Number(m[2]) as Circuito) : null, puntoVenta: m[3], correlativo: Number(m[4]) };
+}
+
+/** Número corto para mostrar en espacios reducidos: "NP2 67299". */
+export function numeroCorto(numero: string): string {
+  const p = parsearNumeroDoc(numero);
+  return p ? `${p.codigo}${p.circuito ?? ""} ${p.correlativo}` : numero;
+}
+
+/** Actualiza los numeradores a partir de una lista de números existentes (para el seed). */
+export function numeradoresDesde(numeros: string[]): Numeradores {
+  const out: Numeradores = {};
+  for (const num of numeros) {
+    const p = parsearNumeroDoc(num);
+    if (!p) continue;
+    const k = `${p.codigo}|${p.circuito ?? 0}|${p.puntoVenta}`;
+    out[k] = Math.max(out[k] ?? 0, p.correlativo);
+  }
+  return out;
 }

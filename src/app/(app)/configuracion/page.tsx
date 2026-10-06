@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { ConfigView } from "@/components/modulos/config/config-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Configuración" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Configuración" descripcion="Empresa, usuarios, parámetros y datos del demo" permiso="config.ver" />;
+  return (
+    <RequierePermiso permiso="config.ver">
+      <Suspense>
+        <ConfigView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

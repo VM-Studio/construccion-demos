@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { PantallaCarga } from "./loader";
+import { DemoBanner } from "./demo-banner";
+import { Tour } from "./tour";
 
 const LOADER_KEY = "cd-loader-visto";
 
@@ -48,9 +50,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {loader && <PantallaCarga />}
       <Sidebar />
       <div className={cn("flex min-h-dvh flex-col transition-[padding] duration-150", colapsado ? "lg:pl-16" : "lg:pl-60")}>
+        <DemoBanner />
         <Header />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-6 sm:py-6">{children}</main>
       </div>
+      <Tour />
     </>
   );
 }

@@ -23,14 +23,15 @@ export interface Alerta {
 export const calcularAlertas = memo((db: EstadoInicial, sucursalId: string | null, usuario: Usuario | undefined, hoyK: string): Alerta[] => {
   const hoy = new Date(hoyK);
   const out: Alerta[] = [];
-  const dep = sucursalId ? db.sucursales.find((s) => s.id === sucursalId)?.depositoId : null;
 
   if (puede(usuario, "stock.ver") || puede(usuario, "productos.ver")) {
     if (db.config.alertaStockMinimo) {
+      // El mínimo es por empresa (suma de depósitos): se compara contra el físico total.
       const fis = new Map<string, number>();
-      for (const s of db.stock) if (!dep || s.depositoId === dep) fis.set(s.productoId, (fis.get(s.productoId) ?? 0) + s.cantidadFisica);
+      for (const s of db.stock) fis.set(s.productoId, (fis.get(s.productoId) ?? 0) + s.cantidadFisica);
       const bajo = db.productos.filter((p) => p.activo && estaBajoMinimo(p, fis.get(p.id) ?? 0)).length;
-      if (bajo) out.push({ id: "bajo-minimo", titulo: "Productos bajo stock mínimo", detalle: "Reponer antes de quedar sin stock", cantidad: bajo, href: "/stock?filtro=bajo-minimo", severidad: "alta", icono: PackageX });
+      const href = puede(usuario, "stock.ver") ? "/stock?filtro=bajo-minimo" : "/productos?filtro=bajo-minimo";
+      if (bajo) out.push({ id: "bajo-minimo", titulo: "Productos bajo stock mínimo", detalle: "Reponer antes de quedar sin stock", cantidad: bajo, href, severidad: "alta", icono: PackageX });
     }
   }
 

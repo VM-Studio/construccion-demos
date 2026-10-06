@@ -19,6 +19,19 @@ for (const c of res.chequeos) {
   if (c.errores.length > 10) console.log(`    · … y ${c.errores.length - 10} más`);
 }
 
+// Todo lo que está programado para salir tiene que tener stock físico en su depósito (para que la demo de hoja de ruta funcione).
+{
+  const necesita = new Map<string, number>();
+  for (const d of db.despachos)
+    if (!d.egresoGenerado && d.estado !== "CANCELADO") for (const it of d.items) necesita.set(`${it.productoId}|${d.depositoId}`, (necesita.get(`${it.productoId}|${d.depositoId}`) ?? 0) + it.cantidad);
+  const faltan = [...necesita.entries()].filter(([k, q]) => {
+    const [p, dep] = k.split("|");
+    return (db.stock.find((s) => s.productoId === p && s.depositoId === dep)?.cantidadFisica ?? 0) < q;
+  });
+  console.log(`${faltan.length ? "✘" : "✔"} Despachos programados con stock físico suficiente — ${necesita.size} posiciones`);
+  if (faltan.length) res.ok = false;
+}
+
 const fisicoTotal = (pid: string) => db.stock.filter((s) => s.productoId === pid).reduce((a, s) => a + s.cantidadFisica, 0);
 const bajoMinimo = db.productos.filter((p) => estaBajoMinimo(p, fisicoTotal(p.id)));
 const vencidos = db.comprobantes.filter((c) => c.clienteId && estaVencido(c, hoy));

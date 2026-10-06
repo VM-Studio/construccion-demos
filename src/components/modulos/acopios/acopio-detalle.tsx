@@ -318,7 +318,7 @@ function eventosAcopio(db: ReturnType<typeof useDb>, a: Acopio): EventoTimeline[
   return ev;
 }
 
-function RetiroDialog({ acopio, abierto, onClose, onHecho }: { acopio: Acopio; abierto: { itemId?: string } | null; onClose: () => void; onHecho: (retiroId: string) => void }) {
+export function RetiroDialog({ acopio, abierto, onClose, onHecho }: { acopio: Acopio; abierto: { itemId?: string } | null; onClose: () => void; onHecho: (retiroId: string) => void }) {
   const db = useDb();
   const posiciones = usePosiciones();
   const puedeAutorizar = usePuede("acopios.autorizar");

@@ -115,13 +115,18 @@ export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
     creadoEn: fechaApertura,
     actualizadoEn: fechaApertura,
   }));
+  // Lo que espera salir en despachos ya programados tiene que estar físicamente en el depósito.
+  const enDespachosPendientes = new Map<string, number>();
+  for (const d of ops.despachos)
+    if (!d.egresoGenerado && d.estado !== "CANCELADO")
+      for (const it of d.items) enDespachosPendientes.set(`${it.productoId}|${d.depositoId}`, (enDespachosPendientes.get(`${it.productoId}|${d.depositoId}`) ?? 0) + it.cantidad);
   for (const p of productos) {
     for (const [i, dep] of depositos.entries()) {
       const k = `${p.id}|${dep}`;
       const minimo = pasada1.minimos.get(k) ?? 0;
       const final0 = pasada1.finales.get(k) ?? 0;
       const comp = calcularComprometido(p.id, dep, ops.pedidos, ops.acopios, ops.despachos);
-      const meta = objetivo(p, dep) + (esBajoMinimo(p) ? 0 : comp);
+      const meta = objetivo(p, dep) + (esBajoMinimo(p) ? (enDespachosPendientes.get(k) ?? 0) : comp);
       const cantidad = Math.ceil(Math.max(-minimo, meta - final0));
       if (cantidad > 0) apertura[i].items.push({ productoId: p.id, cantidad, signo: 1, motivo: "OTRO" });
     }

@@ -35,6 +35,7 @@ const UI_INICIAL: UIState = {
   usuarioId: null,
   sucursalActivaId: null,
   unidadNegocioId: null,
+  moduloActivo: null,
   sidebarColapsado: false,
   tourVisto: {},
   tourAbierto: false,
@@ -52,6 +53,7 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     logout: () => set((s) => ({ ui: { ...s.ui, usuarioId: null, tourAbierto: false } })),
     setSucursalActiva: (sucursalActivaId: string | null) => set((s) => ({ ui: { ...s.ui, sucursalActivaId } })),
     setUnidadNegocio: (unidadNegocioId: string | null) => set((s) => ({ ui: { ...s.ui, unidadNegocioId } })),
+    setModuloActivo: (moduloActivo: string | null) => set((s) => (s.ui.moduloActivo === moduloActivo ? {} : { ui: { ...s.ui, moduloActivo } })),
     toggleFavoritoModulo: (moduloId: string) =>
       set((s) => {
         const u = s.ui.usuarioId ?? "";

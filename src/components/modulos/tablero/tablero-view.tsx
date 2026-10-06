@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowRight, Boxes, ChevronRight, DollarSign, Landmark, PackageCheck, PackageX, Percent, ShoppingCart, Truck, Warehouse } from "lucide-react";
-import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosResumen, usePosiciones, useUsuario } from "@/store/selectors";
+import { ArrowRight, Boxes, ChevronRight, DollarSign, Factory, Landmark, PackageCheck, PackageX, Percent, ShoppingCart, Timer, Truck, Warehouse } from "lucide-react";
+import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosResumen, useAcopiosProveedorResumen, usePendientes, usePosiciones, useUnidadNegocio, useUsuario, useVeCircuito2 } from "@/store/selectors";
+import { minutosPreparacion, promedio } from "@/domain/despachos";
 import { useAlertas } from "@/store/alertas";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCard } from "@/components/shared/kpi-card";
@@ -19,7 +20,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { VentasMargenChart, BarrasAgrupadasChart, COLORES } from "@/components/charts";
 import { periodoAnterior, periodoDesdePreset, variacion, diaLocal, type Periodo } from "@/lib/periodos";
-import { margenPeriodo, rankingProductos, serieVentasMargen, ventasFacturadas, type Agrupacion } from "@/domain/metricas";
+import { margenPeriodo, rankingProductos, serieVentasMargen, ventasFacturadas, type Agrupacion, type FiltroMetricas } from "@/domain/metricas";
 import { formatMoney, formatPercent, formatQty, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,9 @@ export function TableroView() {
   const db = useDb();
   const usuario = useUsuario();
   const sucursalId = useSucursalActiva();
+  const un = useUnidadNegocio();
+  const veC2 = useVeCircuito2();
+  const filtro: FiltroMetricas = React.useMemo(() => ({ sucursalId, unidadNegocioId: un, circuito2: veC2 }), [sucursalId, un, veC2]);
   const [periodo, setPeriodo] = React.useState<Periodo>(() => periodoDesdePreset("MES"));
   const anterior = React.useMemo(() => periodoAnterior(periodo), [periodo]);
   const verMargen = usePuede("margenes.ver");
@@ -39,11 +43,17 @@ export function TableroView() {
   const alertas = useAlertas();
   const saldos = useSaldosClientes();
   const acopios = useAcopiosResumen();
+  const acopiosProv = useAcopiosProveedorResumen();
+  const verProveedores = usePuede("proveedores.ver");
 
-  const ventas = React.useMemo(() => ventasFacturadas(db, periodo, sucursalId), [db, periodo, sucursalId]);
-  const ventasAnt = React.useMemo(() => ventasFacturadas(db, anterior, sucursalId), [db, anterior, sucursalId]);
-  const margen = React.useMemo(() => margenPeriodo(db, periodo, sucursalId), [db, periodo, sucursalId]);
-  const margenAnt = React.useMemo(() => margenPeriodo(db, anterior, sucursalId), [db, anterior, sucursalId]);
+  const ventas = React.useMemo(() => ventasFacturadas(db, periodo, filtro), [db, periodo, filtro]);
+  const ventasAnt = React.useMemo(() => ventasFacturadas(db, anterior, filtro), [db, anterior, filtro]);
+  const margen = React.useMemo(() => margenPeriodo(db, periodo, filtro), [db, periodo, filtro]);
+  const margenAnt = React.useMemo(() => margenPeriodo(db, anterior, filtro), [db, anterior, filtro]);
+  const prov = React.useMemo(() => {
+    const vig = acopiosProv.filter((a) => a.estado === "VIGENTE" || a.estado === "VENCIDO");
+    return { retirar: vig.reduce((s, a) => s + a.pendientePesos, 0), deuda: vig.reduce((s, a) => s + a.deuda, 0), n: vig.length };
+  }, [acopiosProv]);
 
   const porCobrar = React.useMemo(() => {
     let total = 0;
@@ -59,9 +69,9 @@ export function TableroView() {
   }, [db.clientes, saldos, sucursalId]);
 
   const deudaMercaderia = React.useMemo(() => {
-    const activos = acopios.filter((a) => (a.estado === "VIGENTE" || a.estado === "VENCIDO") && (!sucursalId || a.acopio.sucursalId === sucursalId));
+    const activos = acopios.filter((a) => (a.estado === "VIGENTE" || a.estado === "VENCIDO") && (!sucursalId || a.acopio.sucursalId === sucursalId) && (!un || a.acopio.unidadNegocioId === un) && (veC2 || a.acopio.circuito !== 2));
     return { total: activos.reduce((s, a) => s + Math.max(0, a.saldo), 0), n: activos.length };
-  }, [acopios, sucursalId]);
+  }, [acopios, sucursalId, un, veC2]);
 
   const etiqueta = ETIQUETA_PERIODO[periodo.preset] ?? "período anterior";
   const esOperativo = !verVentas; // Depósito
@@ -70,7 +80,7 @@ export function TableroView() {
     <div className="space-y-5">
       <PageHeader
         titulo={`Hola, ${usuario?.nombre.split(" ")[0] ?? ""}`}
-        descripcion={`Resumen del negocio · ${sucursalId ? db.sucursales.find((s) => s.id === sucursalId)?.nombre : "todas las sucursales"} · ${formatDate(new Date(), "EEEE d 'de' MMMM")}`}
+        descripcion={`Resumen de ${db.config.empresa.empresa} al ${formatDate(new Date(), "EEEE d 'de' MMMM 'de' yyyy")} · ${sucursalId ? db.sucursales.find((s) => s.id === sucursalId)?.nombre : "todas las sucursales"}${un ? ` · ${db.unidadesNegocio.find((u) => u.id === un)?.nombre}` : ""}`}
         acciones={<DateRangePicker value={periodo} onChange={setPeriodo} />}
       />
 
@@ -78,7 +88,7 @@ export function TableroView() {
       {esOperativo ? (
         <KpisOperativos />
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-tour="kpis">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-tour="kpis">
           <KpiCard
             label="Ventas del período"
             valor={formatMoney(ventas, { compact: Math.abs(ventas) >= 1_000_000 })}
@@ -114,8 +124,17 @@ export function TableroView() {
               label="Deuda de mercadería (acopios)"
               valor={formatMoney(deudaMercaderia.total, { compact: Math.abs(deudaMercaderia.total) >= 1_000_000 })}
               icono={Boxes}
-              subtexto={`${deudaMercaderia.n} acopios vigentes · saldo disponible`}
+              subtexto={`saldo disponible de ${deudaMercaderia.n} acopios vigentes`}
               onClick={() => router.push("/acopios")}
+            />
+          )}
+          {verProveedores && (
+            <KpiCard
+              label="Acopios con proveedores"
+              valor={formatMoney(prov.retirar, { compact: Math.abs(prov.retirar) >= 1_000_000 })}
+              icono={Factory}
+              subtexto={<span>nos falta retirar · <span className={prov.deuda > 0 ? "font-medium text-danger" : ""}>le debemos {formatMoney(prov.deuda, { compact: true })}</span></span>}
+              onClick={() => router.push("/proveedores/acopios")}
             />
           )}
         </div>
@@ -123,7 +142,7 @@ export function TableroView() {
 
       {/* Fila 2 */}
       <div className="grid gap-3 lg:grid-cols-12">
-        {verVentas ? <GraficoVentas periodo={periodo} sucursalId={sucursalId} verMargen={verMargen} /> : <div className="lg:col-span-8"><DespachosHoy grande /></div>}
+        {verVentas ? <GraficoVentas periodo={periodo} filtro={filtro} verMargen={verMargen} /> : <div className="lg:col-span-8"><DespachosHoy grande /></div>}
         <Card className="lg:col-span-4" data-tour="alertas">
           <CardHeader>
             <CardTitle>Alertas</CardTitle>
@@ -154,9 +173,10 @@ export function TableroView() {
       </div>
 
       {/* Fila 3 */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {verVentas && <DespachosHoy />}
-        {verVentas && <TopProductos periodo={periodo} sucursalId={sucursalId} verMargen={verMargen} />}
+        {verVentas && <PendientesEntregaCard />}
+        {verVentas && <TopProductos periodo={periodo} filtro={filtro} verMargen={verMargen} />}
         <ComprasPendientes />
       </div>
 
@@ -174,19 +194,23 @@ function etiquetaClave(g: Agrupacion) {
   };
 }
 
-function GraficoVentas({ periodo, sucursalId, verMargen }: { periodo: Periodo; sucursalId: string | null; verMargen: boolean }) {
+function GraficoVentas({ periodo, filtro, verMargen }: { periodo: Periodo; filtro: FiltroMetricas; verMargen: boolean }) {
   const db = useDb();
   const [agr, setAgr] = React.useState<Agrupacion>("dia");
   const [vista, setVista] = React.useState<"total" | "sucursal">("total");
+  const [unGrafico, setUnGrafico] = React.useState<string>(filtro.unidadNegocioId ?? "todas");
+  React.useEffect(() => setUnGrafico(filtro.unidadNegocioId ?? "todas"), [filtro.unidadNegocioId]);
   const dias = (new Date(periodo.hasta).getTime() - new Date(periodo.desde).getTime()) / 86_400_000;
   const agrEfectiva: Agrupacion = dias > 120 && agr === "dia" ? "semana" : agr;
-  const serie = React.useMemo(() => serieVentasMargen(db, periodo, sucursalId, agrEfectiva), [db, periodo, sucursalId, agrEfectiva]);
+  const filtroGrafico = React.useMemo(() => ({ ...filtro, unidadNegocioId: unGrafico === "todas" ? null : unGrafico }), [filtro, unGrafico]);
+  const serie = React.useMemo(() => serieVentasMargen(db, periodo, filtroGrafico, agrEfectiva), [db, periodo, filtroGrafico, agrEfectiva]);
   const hayDatos = serie.some((s) => s.ventas !== 0);
   return (
     <Card className="lg:col-span-8">
       <CardHeader className="flex-wrap">
         <CardTitle>{verMargen ? "Ventas y margen" : "Ventas"} por {agrEfectiva === "dia" ? "día" : agrEfectiva === "semana" ? "semana" : "mes"}</CardTitle>
         <div className="flex flex-wrap gap-2">
+          <Segmented value={unGrafico} onChange={setUnGrafico} options={[{ value: "todas", label: "Todas" }, ...db.unidadesNegocio.map((u) => ({ value: u.id, label: u.nombre }))]} />
           <Segmented value={agr} onChange={setAgr} options={[{ value: "dia", label: "Por día" }, { value: "semana", label: "Por semana" }]} />
           <Segmented value={vista} onChange={setVista} options={[{ value: "total", label: "Total" }, { value: "sucursal", label: "Por sucursal" }]} />
         </div>
@@ -194,6 +218,12 @@ function GraficoVentas({ periodo, sucursalId, verMargen }: { periodo: Periodo; s
       <CardContent className="pb-2">
         {!hayDatos ? (
           <EmptyState titulo="Sin ventas en el período" descripcion="Elegí otro rango de fechas para ver la evolución." />
+        ) : vista === "total" && unGrafico === "todas" ? (
+          <BarrasAgrupadasChart
+            data={serie.map((s) => Object.fromEntries([["clave", s.clave], ...db.unidadesNegocio.map((u) => [u.codigo, Math.round(s.porUN[u.id] ?? 0)])]))}
+            etiquetaX={etiquetaClave(agrEfectiva)}
+            series={db.unidadesNegocio.map((u, i) => ({ key: u.codigo, nombre: u.nombre, color: i === 0 ? COLORES.barra : COLORES.barraAlt }))}
+          />
         ) : vista === "total" ? (
           <VentasMargenChart data={serie.map((s) => ({ clave: s.clave, ventas: s.ventas, margen: verMargen ? s.margen : 0 }))} etiquetaX={etiquetaClave(agrEfectiva)} />
         ) : (
@@ -216,28 +246,45 @@ function DespachosHoy({ grande }: { grande?: boolean }) {
   const sucursalId = useSucursalActiva();
   const hoy = diaLocal(new Date());
   const cliente = (id: string) => db.clientes.find((c) => c.id === id);
-  const lista = db.despachos
-    .filter((d) => diaLocal(d.fechaProgramada) === hoy && d.estado !== "CANCELADO" && (!sucursalId || d.sucursalId === sucursalId))
-    .sort((a, b) => a.estado.localeCompare(b.estado));
+  const lista = db.despachos.filter((d) => diaLocal(d.fechaEspera) === hoy && d.estado !== "CANCELADO" && (!sucursalId || d.sucursalId === sucursalId));
+  const espera = lista.filter((d) => d.estado === "ESPERA");
+  const prep = lista.filter((d) => d.estado === "PREPARACION");
+  const fin = lista.filter((d) => d.estado === "FINALIZADO" || d.estado === "EN_VIAJE" || d.estado === "ENTREGADO");
+  const prom = promedio(lista.map((d) => minutosPreparacion(d)));
+  const orden = [...prep, ...espera, ...fin];
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" data-tour="despachos-hoy">
       <CardHeader>
         <CardTitle>Despachos de hoy</CardTitle>
-        <Link href="/despachos?tab=hoja" className="inline-flex items-center gap-1 text-[12px] font-medium text-muted hover:text-ink">
-          Ver hoja de ruta <ArrowRight className="size-3.5" />
+        <Link href="/despachos" className="inline-flex items-center gap-1 text-[12px] font-medium text-muted hover:text-ink">
+          Ver despachos <ArrowRight className="size-3.5" />
         </Link>
       </CardHeader>
-      {lista.length === 0 ? (
-        <EmptyState icono={Truck} titulo="Sin despachos para hoy" />
+      <div className="grid grid-cols-3 border-y border-border text-center">
+        {[
+          ["En espera", espera.length],
+          ["En preparación", prep.length],
+          ["Finalizados", fin.length],
+        ].map(([l, n]) => (
+          <div key={l as string} className="border-r border-border px-2 py-2.5 last:border-r-0">
+            <div className="text-[18px] font-semibold tnum">{n}</div>
+            <div className="text-[11px] text-muted">{l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 px-4 py-2 text-[12px] text-muted">
+        <Timer className="size-3.5" /> Preparación promedio: <span className="font-medium text-ink tnum">{prom === null ? "—" : `${prom} min`}</span>
+      </div>
+      {orden.length === 0 ? (
+        <EmptyState icono={Truck} titulo="Sin despachos hoy" />
       ) : (
-        <ul className={cn("divide-y divide-border overflow-y-auto", grande ? "max-h-[420px]" : "max-h-[300px]")}>
-          {lista.map((d) => (
+        <ul className={cn("divide-y divide-border overflow-y-auto border-t border-border", grande ? "max-h-[420px]" : "max-h-[220px]")}>
+          {orden.map((d) => (
             <li key={d.id}>
-              <Link href={`/despachos?despacho=${d.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#FAFAF8]">
-                <span className="w-[78px] shrink-0 font-mono text-[12px]">{d.numero}</span>
+              <Link href={`/despachos?despacho=${d.id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-[#FAFAF8]">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] text-ink">{cliente(d.clienteId)?.nombreFantasia ?? cliente(d.clienteId)?.razonSocial}</span>
-                  <span className="block truncate text-[11px] text-muted">{d.vehiculoId ? db.vehiculos.find((v) => v.id === d.vehiculoId)?.patente : d.direccionEntrega === "Retira en mostrador" ? "Mostrador" : "Sin vehículo"}</span>
+                  <span className="block truncate text-[11px] text-muted">{d.numero} · {d.posicion}</span>
                 </span>
                 <StatusBadge tipo="DESPACHO" estado={d.estado} />
               </Link>
@@ -249,10 +296,57 @@ function DespachosHoy({ grande }: { grande?: boolean }) {
   );
 }
 
-function TopProductos({ periodo, sucursalId, verMargen }: { periodo: Periodo; sucursalId: string | null; verMargen: boolean }) {
+function PendientesEntregaCard() {
+  const db = useDb();
+  const sucursalId = useSucursalActiva();
+  const pendientes = usePendientes();
+  const np = new Map(db.notasPedido.map((n) => [n.id, n]));
+  const lineas = pendientes.filter((l) => !sucursalId || np.get(l.notaPedidoId)?.sucursalId === sucursalId);
+  const pesos = lineas.reduce((a, l) => a + l.pendiente * l.precio, 0);
+  const programadas = new Set(db.despachos.filter((d) => d.estado === "ESPERA" || d.estado === "PREPARACION").map((d) => d.notaPedidoId));
+  const sinProgramar = lineas.filter((l) => !programadas.has(l.notaPedidoId)).length;
+  const porCliente = new Map<string, number>();
+  for (const l of lineas) porCliente.set(l.clienteId, (porCliente.get(l.clienteId) ?? 0) + l.pendiente * l.precio);
+  const top = [...porCliente.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  return (
+    <Card className="flex flex-col">
+      <CardHeader>
+        <CardTitle>Pendientes de entrega</CardTitle>
+        <Link href="/pendientes-entrega" className="inline-flex items-center gap-1 text-[12px] font-medium text-muted hover:text-ink">
+          Ver todo <ArrowRight className="size-3.5" />
+        </Link>
+      </CardHeader>
+      <div className="grid grid-cols-2 border-y border-border">
+        <div className="border-r border-border px-4 py-2.5">
+          <div className="text-[18px] font-semibold tnum">{formatMoney(pesos, { compact: true })}</div>
+          <div className="text-[11px] text-muted">a entregar · {lineas.length} líneas</div>
+        </div>
+        <div className="px-4 py-2.5">
+          <div className={cn("text-[18px] font-semibold tnum", sinProgramar > 0 && "text-warning")}>{sinProgramar}</div>
+          <div className="text-[11px] text-muted">líneas sin programar</div>
+        </div>
+      </div>
+      <ul className="divide-y divide-border">
+        {top.map(([cid, v]) => {
+          const c = db.clientes.find((x) => x.id === cid);
+          return (
+            <li key={cid}>
+              <Link href={`/clientes/${cid}`} className="flex items-center gap-3 px-4 py-2 text-[13px] hover:bg-[#FAFAF8]">
+                <span className="min-w-0 flex-1 truncate">{c?.nombreFantasia ?? c?.razonSocial}</span>
+                <span className="tnum text-muted">{formatMoney(v, { compact: true })}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+function TopProductos({ periodo, filtro, verMargen }: { periodo: Periodo; filtro: FiltroMetricas; verMargen: boolean }) {
   const db = useDb();
   const [orden, setOrden] = React.useState<"margen" | "facturado">(verMargen ? "margen" : "facturado");
-  const ranking = React.useMemo(() => rankingProductos(db, periodo, sucursalId), [db, periodo, sucursalId]);
+  const ranking = React.useMemo(() => rankingProductos(db, periodo, filtro), [db, periodo, filtro]);
   const top = [...ranking].sort((a, b) => b[orden] - a[orden]).slice(0, 10);
   const prod = (id: string) => db.productos.find((p) => p.id === id);
   return (
@@ -305,7 +399,7 @@ function ComprasPendientes() {
     <Card>
       <CardHeader>
         <CardTitle>Compras pendientes de ingreso</CardTitle>
-        <Link href="/compras" className="text-[12px] font-medium text-muted hover:text-ink">Ver todo</Link>
+        <Link href="/compras/ordenes" className="text-[12px] font-medium text-muted hover:text-ink">Ver todo</Link>
       </CardHeader>
       {lista.length === 0 ? (
         <EmptyState icono={ShoppingCart} titulo="No hay compras en camino" />

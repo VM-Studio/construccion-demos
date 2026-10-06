@@ -1,15 +1,15 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { ComprasView } from "@/components/modulos/compras/compras-view";
+import { CuentasView } from "@/components/modulos/cuentas/cuentas-view";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
-export const metadata: Metadata = { title: "Compras" };
+export const metadata: Metadata = { title: "Cuentas corrientes de proveedores" };
 
 export default function Page() {
   return (
-    <RequierePermiso permiso="compras.ver">
+    <RequierePermiso permiso="ctacte.pagar">
       <Suspense>
-        <ComprasView />
+        <CuentasView tab="proveedores" />
       </Suspense>
     </RequierePermiso>
   );

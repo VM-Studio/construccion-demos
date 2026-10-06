@@ -22,7 +22,7 @@ export function LoginView() {
   const { confirmar, dialog } = useConfirm();
 
   React.useEffect(() => {
-    if (hidratado && usuarioId) router.replace("/tablero");
+    if (hidratado && usuarioId) router.replace("/inicio");
   }, [hidratado, usuarioId, router]);
 
   const rolLegible = (u: (typeof usuarios)[number]) => {
@@ -57,7 +57,7 @@ export function LoginView() {
                       <button
                         onClick={() => {
                           login(u.id);
-                          router.push("/tablero");
+                          router.push("/inicio");
                         }}
                         className="group flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left transition-colors hover:bg-subtle focus-visible:bg-subtle"
                       >

@@ -5,6 +5,8 @@ export interface UIState {
   sucursalActivaId: string | null;
   /** Unidad de negocio activa (null = todas). */
   unidadNegocioId: string | null;
+  /** Último módulo elegido (desambigua páginas compartidas entre módulos). */
+  moduloActivo: string | null;
   /** Módulos favoritos por usuario (se muestran primero en /inicio). */
   favoritosModulos: Record<string, string[]>;
   /** Páginas favoritas (href) por usuario. */

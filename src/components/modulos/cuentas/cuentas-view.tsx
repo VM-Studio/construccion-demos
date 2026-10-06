@@ -13,7 +13,6 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -24,24 +23,21 @@ import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { CobranzaDialog } from "./cobranza-dialog";
 
-export function CuentasView() {
+const TITULOS_CC = {
+  clientes: ["Cuentas corrientes de clientes", "Saldos, antigüedad de deuda y cobros con imputación a facturas y acopios."],
+  proveedores: ["Cuentas corrientes de proveedores", "Lo que les debemos, vencimientos y órdenes de pago."],
+  cheques: ["Cartera de cheques", "Cheques y eCheqs recibidos: en cartera, depositados y entregados a proveedores."],
+} as const;
+
+export function CuentasView({ tab }: { tab: keyof typeof TITULOS_CC }) {
   const params = useSearchParams();
-  const router = useRouter();
-  const verPagos = usePuede("ctacte.pagar");
-  const tab = params.get("tab") ?? "clientes";
+  const [titulo, descripcion] = TITULOS_CC[tab];
   return (
     <>
-      <PageHeader titulo="Cuentas corrientes" descripcion="Saldos, antigüedad de deuda, cobranzas con imputación, pagos a proveedores y cartera de cheques." />
-      <Tabs value={tab} onValueChange={(v) => router.replace(`/cuentas-corrientes?tab=${v}`, { scroll: false })}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="clientes">Clientes</TabsTrigger>
-          {verPagos && <TabsTrigger value="proveedores">Proveedores</TabsTrigger>}
-          <TabsTrigger value="cheques">Cartera de cheques</TabsTrigger>
-        </TabsList>
-        <TabsContent value="clientes"><ClientesCC filtroInicial={params.get("filtro")} /></TabsContent>
-        {verPagos && <TabsContent value="proveedores"><ProveedoresCC /></TabsContent>}
-        <TabsContent value="cheques"><Cheques /></TabsContent>
-      </Tabs>
+      <PageHeader titulo={titulo} descripcion={descripcion} />
+      {tab === "clientes" && <ClientesCC filtroInicial={params.get("filtro")} />}
+      {tab === "proveedores" && <ProveedoresCC />}
+      {tab === "cheques" && <Cheques />}
     </>
   );
 }

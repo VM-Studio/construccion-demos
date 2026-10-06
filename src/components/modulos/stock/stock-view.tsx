@@ -1,41 +1,29 @@
 "use client";
 
-import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PosicionTab } from "./posicion-tab";
 import { MovimientosTab } from "./movimientos-tab";
 import { TransferenciasTab } from "./transferencias-tab";
 import { AjustesTab } from "./ajustes-tab";
 
-export function StockView() {
+const TITULOS = {
+  posicion: ["Listado de stock", "Físico, pendiente de entrega, reservado y disponible por depósito."],
+  movimientos: ["Movimientos de stock", "Kardex con la trazabilidad completa de cada movimiento."],
+  transferencias: ["Transferencias", "Movimientos de mercadería entre depósitos."],
+  ajustes: ["Ajustes e inventarios", "Roturas, faltantes, sobrantes y conteos."],
+} as const;
+
+export function StockView({ tab }: { tab: keyof typeof TITULOS }) {
   const params = useSearchParams();
-  const router = useRouter();
-  const tab = params.get("tab") ?? "posicion";
+  const [titulo, descripcion] = TITULOS[tab];
   return (
     <>
-      <PageHeader titulo="Stock" descripcion="Físico, comprometido y disponible por depósito, con trazabilidad completa de cada movimiento." />
-      <Tabs value={tab} onValueChange={(v) => router.replace(`/stock?tab=${v}`, { scroll: false })}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="posicion">Posición de stock</TabsTrigger>
-          <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
-          <TabsTrigger value="transferencias">Transferencias</TabsTrigger>
-          <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
-        </TabsList>
-        <TabsContent value="posicion">
-          <PosicionTab filtroInicial={params.get("filtro")} />
-        </TabsContent>
-        <TabsContent value="movimientos">
-          <MovimientosTab />
-        </TabsContent>
-        <TabsContent value="transferencias">
-          <TransferenciasTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />
-        </TabsContent>
-        <TabsContent value="ajustes">
-          <AjustesTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />
-        </TabsContent>
-      </Tabs>
+      <PageHeader titulo={titulo} descripcion={descripcion} />
+      {tab === "posicion" && <PosicionTab filtroInicial={params.get("filtro")} />}
+      {tab === "movimientos" && <MovimientosTab />}
+      {tab === "transferencias" && <TransferenciasTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />}
+      {tab === "ajustes" && <AjustesTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />}
     </>
   );
 }

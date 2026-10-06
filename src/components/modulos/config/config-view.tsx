@@ -15,7 +15,6 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { useConfirm } from "@/components/shared/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, NumberInput } from "@/components/ui/input";
@@ -29,34 +28,53 @@ import { cn, descargarArchivo } from "@/lib/utils";
 
 const ok = (r: { ok: boolean; error?: string }, msg: string) => (r.ok ? toast.success(msg) : toast.error(r.error));
 
+const TITULOS: Record<string, [string, string]> = {
+  empresa: ["Empresa", "Datos de la empresa que se usan en todas las impresiones."],
+  sucursales: ["Sucursales y depósitos", "Puntos de venta, depósitos y posiciones de carga."],
+  unidades: ["Unidades de negocio", "Ferretería y Corralón: rubros asociados y motivos de ajuste."],
+  usuarios: ["Usuarios y roles", "Usuarios del sistema y matriz de permisos por rol."],
+  parametros: ["Parámetros", "IVA, vencimiento de acopios, avisos y adjuntos."],
+  numeracion: ["Numeración", "Último número usado por código de documento, circuito y punto de venta."],
+  demo: ["Datos del demo", "Restablecer, exportar e importar respaldos y verificar integridad."],
+};
+
+/** Configuración: cada página del módulo es una sección (`?tab=`), navegada desde la barra lateral. */
 export function ConfigView() {
   const params = useSearchParams();
-  const router = useRouter();
   const tab = params.get("tab") ?? "empresa";
   const verUsuarios = usePuede("config.usuarios");
+  const [titulo, descripcion] = TITULOS[tab] ?? TITULOS.empresa;
   return (
     <>
-      <PageHeader titulo="Configuración" descripcion="Datos de la empresa, sucursales, usuarios y permisos, listas de precios, parámetros y datos del demo." />
-      <Tabs value={tab} onValueChange={(v) => router.replace(`/configuracion?tab=${v}`, { scroll: false })}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="empresa">Empresa</TabsTrigger>
-          <TabsTrigger value="sucursales">Sucursales y depósitos</TabsTrigger>
-          <TabsTrigger value="usuarios">Usuarios y roles</TabsTrigger>
-          <TabsTrigger value="listas">Listas de precios</TabsTrigger>
-          <TabsTrigger value="parametros">Parámetros</TabsTrigger>
-          <TabsTrigger value="tablas">Rubros y motivos</TabsTrigger>
-          <TabsTrigger value="flota">Vehículos y choferes</TabsTrigger>
-          <TabsTrigger value="demo">Datos del demo</TabsTrigger>
-        </TabsList>
-        <TabsContent value="empresa"><Empresa /></TabsContent>
-        <TabsContent value="sucursales"><Sucursales /></TabsContent>
-        <TabsContent value="usuarios"><Usuarios editable={verUsuarios} /></TabsContent>
-        <TabsContent value="listas"><Listas /></TabsContent>
-        <TabsContent value="parametros"><Parametros /></TabsContent>
-        <TabsContent value="tablas"><Tablas /></TabsContent>
-        <TabsContent value="flota"><FlotaTab onAbrirDespacho={(id) => router.push(`/despachos?despacho=${id}`)} /></TabsContent>
-        <TabsContent value="demo"><DatosDemo /></TabsContent>
-      </Tabs>
+      <PageHeader titulo={titulo} descripcion={descripcion} />
+      {tab === "empresa" && <Empresa />}
+      {tab === "sucursales" && <Sucursales />}
+      {tab === "unidades" && <Tablas />}
+      {tab === "usuarios" && <Usuarios editable={verUsuarios} />}
+      {tab === "parametros" && <Parametros />}
+      {tab === "numeracion" && <Numeracion />}
+      {tab === "demo" && <DatosDemo />}
+    </>
+  );
+}
+
+/** Listas de precios (página del módulo Ventas). */
+export function ListasPreciosView() {
+  return (
+    <>
+      <PageHeader titulo="Listas de precios" descripcion="Mayorista, General y Público: markup por defecto sobre el costo de reposición." />
+      <Listas />
+    </>
+  );
+}
+
+/** Vehículos y choferes (página del módulo Logística). */
+export function VehiculosView() {
+  const router = useRouter();
+  return (
+    <>
+      <PageHeader titulo="Vehículos y choferes" descripcion="Flota propia, capacidad de carga y choferes asignados." />
+      <FlotaTab onAbrirDespacho={(id) => router.push(`/despachos?despacho=${id}`)} />
     </>
   );
 }
@@ -264,15 +282,9 @@ function Parametros() {
   const db = useDb();
   const c = db.config;
   const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0 });
-  const numeradores = Object.entries(db.numeradores)
-    .map(([k, n]) => {
-      const [codigo, circ, pv] = k.split("|");
-      return { k, codigo: codigo as CodigoDoc, circ: Number(circ) as 0 | 1 | 2, pv, n };
-    })
-    .sort((a, b) => a.codigo.localeCompare(b.codigo) || a.circ - b.circ || a.pv.localeCompare(b.pv));
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
+      <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Parámetros generales</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <FormField label="IVA (%)" htmlFor="p-iva"><NumberInput id="p-iva" value={f.ivaPct} min={0} onValueChange={(v) => setF({ ...f, ivaPct: v })} /></FormField>
@@ -283,17 +295,6 @@ function Parametros() {
           <label className="flex items-center gap-3 self-end pb-2 text-[13px]"><Switch checked={f.alertaStockMinimo} onCheckedChange={(v) => setF({ ...f, alertaStockMinimo: v })} /> Alertar stock bajo mínimo</label>
           <div className="flex justify-end sm:col-span-2"><Button onClick={() => ok(useStore.getState().actualizarConfig(f), "Parámetros guardados")}><Save /> Guardar</Button></div>
         </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Numeración actual</CardTitle><span className="text-[12px] text-muted">Sólo lectura · próximo número</span></CardHeader>
-        <ul className="max-h-[420px] divide-y divide-border overflow-y-auto text-[13px]">
-          {numeradores.map((x) => (
-            <li key={x.k} className="flex justify-between px-4 py-2">
-              <span className="text-muted">{x.codigo}{x.circ || ""} · PV {x.pv}</span>
-              <span className="font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</span>
-            </li>
-          ))}
-        </ul>
       </Card>
     </div>
   );
@@ -354,6 +355,31 @@ function Tablas() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Numeracion() {
+  const db = useDb();
+  const numeradores = Object.entries(db.numeradores)
+    .map(([k, n]) => {
+      const [codigo, circ, pv] = k.split("|");
+      return { k, codigo: codigo as CodigoDoc, circ: Number(circ) as 0 | 1 | 2, pv, n };
+    })
+    .sort((a, b) => a.codigo.localeCompare(b.codigo) || a.circ - b.circ || a.pv.localeCompare(b.pv));
+  return (
+    <div className="max-w-[720px]">
+      <Card>
+        <CardHeader><CardTitle>Numeración actual</CardTitle><span className="text-[12px] text-muted">Sólo lectura · próximo número</span></CardHeader>
+        <ul className="max-h-[420px] divide-y divide-border overflow-y-auto text-[13px]">
+          {numeradores.map((x) => (
+            <li key={x.k} className="flex justify-between px-4 py-2">
+              <span className="text-muted">{x.codigo}{x.circ || ""} · PV {x.pv}</span>
+              <span className="font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 }

@@ -1,15 +1,15 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { StockView } from "@/components/modulos/stock/stock-view";
+import { VehiculosView } from "@/components/modulos/config/config-view";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
-export const metadata: Metadata = { title: "Listado de stock" };
+export const metadata: Metadata = { title: "Vehículos y choferes" };
 
 export default function Page() {
   return (
-    <RequierePermiso permiso="stock.ver">
+    <RequierePermiso permiso="despachos.ver">
       <Suspense>
-        <StockView tab="posicion" />
+        <VehiculosView />
       </Suspense>
     </RequierePermiso>
   );

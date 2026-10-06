@@ -7,7 +7,7 @@ export const REPORTES: { slug: string; titulo: string; descripcion: string; icon
   { slug: "rentabilidad-productos", titulo: "Rentabilidad por producto", descripcion: "Margen, rotación y días de stock: qué conviene empujar.", icono: ClipboardList, permiso: "margenes.ver" },
   { slug: "rentabilidad-clientes", titulo: "Rentabilidad por cliente", descripcion: "Facturación, margen, ticket y Pareto de concentración.", icono: Users, permiso: "margenes.ver" },
   { slug: "valorizacion", titulo: "Valorización de inventario", descripcion: "Stock por depósito y rubro a costo promedio, último y precio de venta.", icono: Warehouse, permiso: "margenes.ver", destacado: true },
-  { slug: "deuda-mercaderia", titulo: "Deuda de mercadería", descripcion: "Saldos de acopio a precio pactado, a costo actual y exposición.", icono: Boxes, permiso: "acopios.ver", destacado: true },
+  { slug: "deuda-mercaderia", titulo: "Acopios de clientes", descripcion: "Saldo disponible, pendiente de entrega y exposición por suba de precios, por cliente y obra.", icono: Boxes, permiso: "acopios.ver", destacado: true },
   { slug: "compras", titulo: "Compras", descripcion: "Por proveedor: emitido, recibido, cumplimiento de plazo y evolución de costos.", icono: ShoppingCart, permiso: "compras.editar" },
   { slug: "stock-critico", titulo: "Stock crítico y reposición", descripcion: "Bajo mínimo, cobertura en días y OC borrador sugerida por proveedor.", icono: PackageX, permiso: "stock.ver" },
   { slug: "cobranzas", titulo: "Cobranzas y antigüedad", descripcion: "Cobrado por medio y por día, antigüedad por cliente y días de cobro.", icono: Landmark, permiso: "ctacte.ver" },

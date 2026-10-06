@@ -86,7 +86,7 @@ export function ReporteCompras() {
         foot: ["Total", t.n, Math.round(t.e), Math.round(t.r), Math.round(t.e - t.r), "", ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.prov.id} onRowClick={(f) => router.push(`/compras?tab=proveedores&proveedor=${f.prov.id}`)} initialSort={{ key: "e", dir: "desc" }} showFooter empty={{ titulo: "Sin compras en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.prov.id} onRowClick={(f) => router.push(`/proveedores/${f.prov.id}`)} initialSort={{ key: "e", dir: "desc" }} showFooter empty={{ titulo: "Sin compras en el período" }} />
     </ReporteLayout>
   );
 }

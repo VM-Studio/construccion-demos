@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { ProveedoresView } from "@/components/modulos/proveedores/proveedores-view";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Proveedores" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Proveedores" descripcion="Lo que les debemos y lo que nos falta retirar" permiso="proveedores.ver" />;
+  return (
+    <RequierePermiso permiso="proveedores.ver">
+      <Suspense>
+        <ProveedoresView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

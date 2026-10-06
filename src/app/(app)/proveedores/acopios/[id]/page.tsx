@@ -1,16 +1,16 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { OCEditor } from "@/components/modulos/compras/oc-editor";
+import { AcopioProveedorDetalle } from "@/components/modulos/proveedores/acopios-proveedor";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
-export const metadata: Metadata = { title: "Orden de compra" };
+export const metadata: Metadata = { title: "Acopio con proveedor" };
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <RequierePermiso permiso="compras.ver">
+    <RequierePermiso permiso="proveedores.ver">
       <Suspense>
-        <OCEditor key={id} id={id} />
+        <AcopioProveedorDetalle key={id} id={id} />
       </Suspense>
     </RequierePermiso>
   );

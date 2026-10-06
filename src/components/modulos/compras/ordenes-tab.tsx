@@ -9,10 +9,12 @@ import { ESTADOS } from "@/domain/estados";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { Combobox } from "@/components/shared/combobox";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -67,11 +69,14 @@ export function OrdenesTab({ filtroInicial }: { filtroInicial?: string | null })
   const abiertas = base.filter((o) => ["ENVIADA", "CONFIRMADA", "RECIBIDA_PARCIAL"].includes(o.estado));
   const comprometido = abiertas.reduce((a, o) => a + o.total * (1 - pctRecibido(o)), 0);
   const mesActual = diaLocal(new Date()).slice(0, 7);
+  const retirosAcopioMes = base.filter((o) => o.origen === "ACOPIO" && diaLocal(o.fechaEmision).slice(0, 7) === diaLocal(new Date()).slice(0, 7)).length;
   const recibidasMes = db.recepciones.filter((r) => diaLocal(r.fecha).slice(0, 7) === mesActual && (!sucursalId || db.ordenesCompra.find((o) => o.id === r.ordenCompraId)?.sucursalId === sucursalId)).length;
   const prov = (id: string) => db.proveedores.find((p) => p.id === id)?.razonSocial ?? "";
 
   const columnas: Column<OrdenCompra>[] = [
     { key: "numero", header: "Número", sortable: true, sortValue: (o) => o.numero, cell: (o) => <span className="whitespace-nowrap font-mono text-[12px]">{o.numero}</span> },
+    { key: "origen", header: "Origen", cell: (o) => (o.origen === "ACOPIO" ? <Badge variant="accent" className="whitespace-nowrap">Acopio {db.acopiosProveedor.find((a) => a.id === o.acopioProveedorId)?.numero.replace(/^ACP\d /, "")}</Badge> : <Badge>Nueva</Badge>) },
+    { key: "circ", header: "Circuito", cell: (o) => <CircuitoBadge circuito={o.circuito} corto /> },
     { key: "proveedor", header: "Proveedor", sortable: true, sortValue: (o) => prov(o.proveedorId), cell: (o) => <span className="block min-w-[180px]">{prov(o.proveedorId)}</span> },
     { key: "deposito", header: "Destino", hideOnMobile: true, cell: (o) => <span className="whitespace-nowrap text-muted">{db.depositos.find((d) => d.id === o.depositoDestinoId)?.nombre}</span> },
     { key: "emision", header: "Emisión", sortable: true, sortValue: (o) => o.fechaEmision, cell: (o) => <span className="text-muted">{formatDate(o.fechaEmision)}</span> },
@@ -102,7 +107,7 @@ export function OrdenesTab({ filtroInicial }: { filtroInicial?: string | null })
         <KpiCard label="OC abiertas" valor={String(abiertas.length)} subtexto="enviadas, confirmadas o parciales" />
         {verCostos ? <KpiCard label="$ comprometido en compras" valor={formatMoney(comprometido, { compact: true })} acento subtexto="saldo sin recibir" /> : <KpiCard label="Por recibir" valor={String(pendientes.length)} acento />}
         <KpiCard label="Atrasadas" valor={String(base.filter(esAtrasada).length)} subtexto={<button className="font-medium text-danger hover:underline" onClick={() => setAtrasadas(true)}>Ver atrasadas</button>} />
-        <KpiCard label="Recepciones este mes" valor={String(recibidasMes)} />
+        <KpiCard label="Retiradas de acopio este mes" valor={String(retirosAcopioMes)} subtexto={`${recibidasMes} recepciones este mes`} />
       </div>
       <DataTable
         rows={filas}

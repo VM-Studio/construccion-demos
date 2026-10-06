@@ -330,13 +330,13 @@ function TabStock({ producto }: { producto: Producto }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {puedeTransferir && (
-          <Button variant="secondary" onClick={() => router.push(`/stock?tab=transferencias&nuevo=1&producto=${producto.id}`)}>
+          <Button variant="secondary" onClick={() => router.push(`/stock/transferencias?nuevo=1&producto=${producto.id}`)}>
             <ArrowLeftRight />
             Transferir
           </Button>
         )}
         {puedeAjustar && (
-          <Button variant="secondary" onClick={() => router.push(`/stock?tab=ajustes&nuevo=1&producto=${producto.id}`)}>
+          <Button variant="secondary" onClick={() => router.push(`/stock/ajustes?nuevo=1&producto=${producto.id}`)}>
             <SlidersHorizontal />
             Ajustar
           </Button>

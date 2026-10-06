@@ -149,8 +149,16 @@ const separar = (href: string) => {
   return { path, params: new URLSearchParams(q) };
 };
 
+/** Rutas de documentos que pertenecen a una página con otro path (ej. /compras/oc/:id → Órdenes de compra). */
+const ALIAS: [string, string][] = [["/compras/oc", "/compras/ordenes"]];
+const normalizar = (pathname: string) => {
+  for (const [de, a] of ALIAS) if (pathname === de || pathname.startsWith(de + "/")) return a + pathname.slice(de.length);
+  return pathname;
+};
+
 /** ¿La página coincide con la ruta actual? 2 = exacta (path + query), 1 = por prefijo de path, 0 = no. */
-export function coincidencia(pag: PaginaModulo, pathname: string, search: URLSearchParams): number {
+export function coincidencia(pag: PaginaModulo, ruta: string, search: URLSearchParams): number {
+  const pathname = normalizar(ruta);
   const { path, params } = separar(pag.href);
   const queryOk = [...params.entries()].every(([k, v]) => search.get(k) === v);
   if (pathname === path) {

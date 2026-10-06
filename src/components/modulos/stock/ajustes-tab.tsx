@@ -50,7 +50,7 @@ export function AjustesTab({ abrirId, nuevo, productoInicial }: { abrirId?: stri
         columns={columnas}
         getRowId={(a) => a.id}
         searchText={(a) => `${a.numero} ${a.observacion ?? ""}`}
-        onRowClick={(a) => router.replace(`/stock?tab=ajustes&id=${a.id}`, { scroll: false })}
+        onRowClick={(a) => router.replace(`/stock/ajustes?id=${a.id}`, { scroll: false })}
         initialSort={{ key: "fecha", dir: "desc" }}
         empty={{ icono: SlidersHorizontal, titulo: "Sin ajustes de stock" }}
         actions={puede && <Button size="sm" onClick={() => setCreando(true)}><Plus /> Nuevo ajuste</Button>}
@@ -60,10 +60,10 @@ export function AjustesTab({ abrirId, nuevo, productoInicial }: { abrirId?: stri
         productoInicial={productoInicial}
         onClose={(id) => {
           setCreando(false);
-          router.replace(id ? `/stock?tab=ajustes&id=${id}` : "/stock?tab=ajustes", { scroll: false });
+          router.replace(id ? `/stock/ajustes?id=${id}` : "/stock/ajustes", { scroll: false });
         }}
       />
-      <DetalleAjuste id={abrirId} onClose={() => router.replace("/stock?tab=ajustes", { scroll: false })} />
+      <DetalleAjuste id={abrirId} onClose={() => router.replace("/stock/ajustes", { scroll: false })} />
     </>
   );
 }

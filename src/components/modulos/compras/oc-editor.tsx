@@ -2,12 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { addDays } from "date-fns";
 import { toast } from "sonner";
 import { ArrowLeft, Ban, CheckCircle2, Info, Mail, PackageCheck, Printer, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb, usePosiciones, usePuede } from "@/store/selectors";
+import { useAcopiosProveedorResumen, useDb, usePosiciones, usePuede } from "@/store/selectors";
+import type { Circuito, OrigenVenta } from "@/domain/types";
+import { Segmented } from "@/components/ui/tabs";
+import { CircuitoBadge } from "@/components/shared/circuito-badge";
+import { AdjuntosPanel } from "@/components/shared/adjuntos-panel";
 import type { ItemOC } from "@/domain/types";
 import { cantidadReposicion } from "@/domain/productos";
 import { CONDICION_PAGO_LABEL } from "@/domain/estados";
@@ -46,6 +50,8 @@ export function OCEditor({ id }: { id: string }) {
   const db = useDb();
   const router = useRouter();
   const posiciones = usePosiciones();
+  const params = useSearchParams();
+  const acps = useAcopiosProveedorResumen();
   const esNueva = id === "nueva";
   const oc = esNueva ? undefined : db.ordenesCompra.find((o) => o.id === id);
   const usuario = db.usuarios.find((u) => u.id === useStore.getState().ui.usuarioId);
@@ -60,13 +66,36 @@ export function OCEditor({ id }: { id: string }) {
   const [recibir, setRecibir] = React.useState(false);
 
   const sucursalUsuario = usuario?.sucursalId ?? "suc_central";
-  const [proveedorId, setProveedorId] = React.useState(oc?.proveedorId ?? "");
+  const acpParam = params.get("acopio") ? db.acopiosProveedor.find((a) => a.id === params.get("acopio")) : undefined;
+  const [proveedorId, setProveedorId] = React.useState(oc?.proveedorId ?? acpParam?.proveedorId ?? params.get("proveedor") ?? "");
+  const [origen, setOrigen] = React.useState<OrigenVenta>(oc?.origen ?? (acpParam || params.get("origen") === "acopio" ? "ACOPIO" : "NUEVA"));
+  const [acpId, setAcpId] = React.useState(oc?.acopioProveedorId ?? acpParam?.id ?? "");
+  const [circuito, setCircuito] = React.useState<Circuito>(oc?.circuito ?? acpParam?.circuito ?? db.proveedores.find((p) => p.id === (acpParam?.proveedorId ?? params.get("proveedor")))?.circuitoHabitual ?? 1);
   const [sucursalId, setSucursalId] = React.useState(oc?.sucursalId ?? sucursalUsuario);
   const [depositoId, setDepositoId] = React.useState(oc?.depositoDestinoId ?? db.sucursales.find((s) => s.id === sucursalUsuario)?.depositoId ?? "dep_central");
   const [fecha, setFecha] = React.useState(aInput(oc?.fechaEmision ?? new Date().toISOString()));
   const [entrega, setEntrega] = React.useState(aInput(oc?.fechaEntregaEstimada ?? new Date().toISOString()));
   const [obs, setObs] = React.useState(oc?.observaciones ?? "");
-  const [items, setItems] = React.useState<Linea[]>(() => (oc?.items ?? []).map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida })));
+  const [items, setItems] = React.useState<Linea[]>(() => {
+    if (oc) return oc.items.map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida }));
+    const pid = params.get("producto");
+    if (!pid) return [];
+    const costo = acpParam?.preciosCongelados.find((c) => c.productoId === pid)?.costo ?? db.productos.find((p) => p.id === pid)?.costoUltimo ?? 0;
+    return [{ id: newId("ioc"), productoId: pid, cantidad: Number(params.get("cantidad")) || 1, precio: costo, descuentoPct: 0, cantidadRecibida: 0 }];
+  });
+  const acp = origen === "ACOPIO" ? db.acopiosProveedor.find((a) => a.id === acpId) : undefined;
+  const acpRes = acps.find((a) => a.acopio.id === acpId);
+  const acpsProveedor = acps.filter((a) => a.acopio.proveedorId === proveedorId && a.estado === "VIGENTE" && (a.saldo > 0.5 || a.pendienteUnidades > 0));
+  React.useEffect(() => {
+    if (!acp) return;
+    setCircuito(acp.circuito);
+    setDepositoId(acp.depositoDestinoId);
+    setItems((its) => its.filter((i) => acp.preciosCongelados.some((c) => c.productoId === i.productoId)).map((i) => ({ ...i, precio: acp.preciosCongelados.find((c) => c.productoId === i.productoId)!.costo, descuentoPct: 0 })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acp?.id]);
+  React.useEffect(() => {
+    if (origen === "ACOPIO" && !acpId && acpsProveedor.length === 1) setAcpId(acpsProveedor[0].acopio.id);
+  }, [origen, acpId, acpsProveedor]);
 
   React.useEffect(() => {
     if (!oc) return;
@@ -76,13 +105,15 @@ export function OCEditor({ id }: { id: string }) {
   if (!esNueva && !oc)
     return (
       <div className="rounded-card border border-border bg-surface">
-        <EmptyState titulo="La orden de compra no existe" accion={<Button onClick={() => router.push("/compras")}>Volver a compras</Button>} />
+        <EmptyState titulo="La orden de compra no existe" accion={<Button onClick={() => router.push("/compras/ordenes")}>Volver a compras</Button>} />
       </div>
     );
 
   const editable = (esNueva || oc?.estado === "BORRADOR") && puedeEditar;
   const prov = db.proveedores.find((p) => p.id === proveedorId);
-  const t = totalesOC(items.map((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: 0, costoUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct ?? 0 })), db.config.ivaPct);
+  const t = totalesOC(items.map((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: 0, costoUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct ?? 0 })), circuito === 1 ? db.config.ivaPct : 0);
+  const saldoAcpAntes = acpRes ? acpRes.saldo + (oc && oc.estado !== "BORRADOR" ? t.subtotal : 0) : 0;
+  const saldoAcpDespues = saldoAcpAntes - t.subtotal;
   const recepciones = oc ? db.recepciones.filter((r) => r.ordenCompraId === oc.id) : [];
   const pedido = items.reduce((a, i) => a + i.cantidad * (i.precio ?? 0), 0);
   const recibido = items.reduce((a, i) => a + Math.min(i.cantidad, i.cantidadRecibida) * (i.precio ?? 0), 0);
@@ -90,8 +121,12 @@ export function OCEditor({ id }: { id: string }) {
 
   const elegirProveedor = (v: string) => {
     setProveedorId(v);
+    setAcpId("");
     const p = db.proveedores.find((x) => x.id === v);
-    if (p) setEntrega(aInput(addDays(new Date(deInput(fecha)), p.plazoEntregaDias).toISOString()));
+    if (p) {
+      setEntrega(aInput(addDays(new Date(deInput(fecha)), p.plazoEntregaDias).toISOString()));
+      setCircuito(p.circuitoHabitual);
+    }
   };
 
   const sugerir = () => {
@@ -111,9 +146,9 @@ export function OCEditor({ id }: { id: string }) {
 
   const datos = () => ({
     proveedorId,
-    circuito: oc?.circuito ?? db.proveedores.find((p) => p.id === proveedorId)?.circuitoHabitual ?? 1,
-    origen: oc?.origen ?? ("NUEVA" as const),
-    acopioProveedorId: oc?.acopioProveedorId,
+    circuito,
+    origen,
+    acopioProveedorId: origen === "ACOPIO" ? acpId || undefined : undefined,
     sucursalId,
     depositoDestinoId: depositoId,
     fechaEmision: deInput(fecha),
@@ -141,7 +176,7 @@ export function OCEditor({ id }: { id: string }) {
 
   return (
     <div>
-      <Link href="/compras" className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
+      <Link href="/compras/ordenes" className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
         <ArrowLeft className="size-4" /> Compras
       </Link>
       <PageHeader
@@ -149,6 +184,8 @@ export function OCEditor({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-2">
             {oc ? `Orden de compra ${oc.numero}` : "Nueva orden de compra"}
             {oc && <StatusBadge tipo="OC" estado={oc.estado} />}
+            {oc && <CircuitoBadge circuito={oc.circuito} corto />}
+            {oc?.origen === "ACOPIO" && <Badge variant="accent">Retiro de acopio</Badge>}
             {atrasada && <Badge variant="danger">Atrasada</Badge>}
           </span>
         }
@@ -194,6 +231,32 @@ export function OCEditor({ id }: { id: string }) {
               <FormField label="Condición de pago">
                 <Input disabled value={prov ? CONDICION_PAGO_LABEL[prov.condicionPago] : "—"} />
               </FormField>
+              <FormField label="Origen">
+                {editable ? (
+                  <Segmented value={origen} onChange={(v) => { setOrigen(v); if (v === "NUEVA") setAcpId(""); }} options={[{ value: "NUEVA", label: "Nueva" }, { value: "ACOPIO", label: "Acopio" }]} />
+                ) : (
+                  <div className="flex h-9 items-center text-[13px]">{origen === "ACOPIO" ? "Retiro de acopio con proveedor" : "Compra nueva"}</div>
+                )}
+              </FormField>
+              <FormField label="Circuito">
+                {editable && origen === "NUEVA" ? (
+                  <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
+                ) : (
+                  <div className="flex h-9 items-center"><CircuitoBadge circuito={circuito} /></div>
+                )}
+              </FormField>
+              {origen === "ACOPIO" && (
+                <FormField label="Acopio con el proveedor" error={editable && proveedorId && !acpsProveedor.length ? "El proveedor no tiene acopios vigentes con saldo." : undefined}>
+                  <Select
+                    aria-label="Acopio con el proveedor"
+                    disabled={!editable}
+                    value={acpId}
+                    onValueChange={setAcpId}
+                    placeholder="Elegí el acopio…"
+                    options={(editable ? acpsProveedor : acps.filter((a) => a.acopio.id === acpId)).map((a) => ({ value: a.acopio.id, label: `${a.acopio.numero} · ${a.acopio.modalidad === "CANTIDAD" ? `${a.pendienteUnidades} u. por retirar` : `saldo ${formatMoney(a.saldo, { compact: true })}`}` }))}
+                  />
+                </FormField>
+              )}
               <FormField label="Observaciones" htmlFor="oc-obs" className="sm:col-span-2 lg:col-span-3">
                 <Textarea id="oc-obs" disabled={!editable} value={obs} onChange={(e) => setObs(e.target.value)} rows={2} />
               </FormField>
@@ -219,6 +282,10 @@ export function OCEditor({ id }: { id: string }) {
                 crearItem={(p) => ({ id: newId("ioc"), productoId: p.id, cantidad: p.unidadesPorPallet ?? 1, precio: p.costoUltimo, descuentoPct: 0, cantidadRecibida: 0 })}
                 depositoId={depositoId}
                 proveedorId={proveedorId || undefined}
+                filtroProductos={acp ? (p) => acp.preciosCongelados.some((c) => c.productoId === p.id) : undefined}
+                precioDe={acp ? (p) => acp.preciosCongelados.find((c) => c.productoId === p.id)?.costo : undefined}
+                precioFijo={acp ? () => `Costo congelado del acopio ${acp.numero}` : undefined}
+                conDescuento={!acp}
                 mostrarCosto
                 precioLabel="Costo unit."
                 conPrecio={verCostos}
@@ -232,6 +299,12 @@ export function OCEditor({ id }: { id: string }) {
             </CardContent>
           </Card>
 
+          {oc && (
+            <Card className="p-4">
+              <h3 className="mb-3 text-[14px] font-semibold">Adjuntos</h3>
+              <AdjuntosPanel entidadTipo="ORDEN_COMPRA" entidadId={oc.id} categoriaDefecto="FACTURA_PROVEEDOR" />
+            </Card>
+          )}
           {recepciones.length > 0 && (
             <Card>
               <CardHeader>
@@ -240,7 +313,7 @@ export function OCEditor({ id }: { id: string }) {
               <ul className="divide-y divide-border">
                 {recepciones.map((r) => (
                   <li key={r.id}>
-                    <Link href={`/compras?tab=recepciones&id=${r.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px] hover:bg-[#FAFAF8]">
+                    <Link href={`/compras/recepciones?id=${r.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px] hover:bg-[#FAFAF8]">
                       <span className="font-mono text-[12px]">{r.numero}</span>
                       <span className="flex-1 text-muted">Remito {r.remitoProveedor} · {formatDateTime(r.fecha)}</span>
                       <span className="text-muted">{r.items.length} ítems</span>
@@ -262,11 +335,31 @@ export function OCEditor({ id }: { id: string }) {
                 <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-[13px]">
                   <dt className="text-muted">Subtotal</dt>
                   <dd className="text-right tnum">{formatMoney(t.subtotal)}</dd>
-                  <dt className="text-muted">IVA {db.config.ivaPct} %</dt>
+                  <dt className="text-muted">IVA {circuito === 1 ? db.config.ivaPct : 0} %</dt>
                   <dd className="text-right tnum">{formatMoney(t.iva)}</dd>
                   <dt className="border-t border-border pt-1.5 font-semibold">Total</dt>
                   <dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(t.total)}</dd>
                 </dl>
+              )}
+              {acp && acpRes && (
+                <div className={`rounded-control border p-3 text-[13px] ${saldoAcpDespues < -0.5 && acp.modalidad === "MONTO" ? "border-danger/30 bg-danger-soft" : "border-accent/30 bg-accent-soft"}`}>
+                  <div className="font-mono text-[12px] font-medium">{acp.numero}</div>
+                  {acp.modalidad === "MONTO" ? (
+                    <div className="mt-1">Saldo <span className="font-semibold tnum">{formatMoney(saldoAcpAntes)}</span> → luego de esta OC <span className={`font-semibold tnum ${saldoAcpDespues < -0.5 ? "text-danger" : ""}`}>{formatMoney(saldoAcpDespues)}</span></div>
+                  ) : (
+                    <ul className="mt-1 space-y-0.5">
+                      {acp.items?.map((it) => {
+                        const pedidoOtras = db.ordenesCompra.filter((o) => o.acopioProveedorId === acp.id && o.id !== oc?.id && o.estado !== "BORRADOR" && o.estado !== "CANCELADA").flatMap((o) => o.items).filter((x) => x.productoId === it.productoId).reduce((a, x) => a + x.cantidadPedida, 0);
+                        const enEsta = items.filter((x) => x.productoId === it.productoId).reduce((a, x) => a + x.cantidad, 0);
+                        const quedan = it.cantidadPactada - pedidoOtras;
+                        return (
+                          <li key={it.productoId}>{db.productos.find((p) => p.id === it.productoId)?.nombre}: quedan <b className="tnum">{quedan}</b> → <b className={`tnum ${quedan - enEsta < 0 ? "text-danger" : ""}`}>{quedan - enEsta}</b></li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <p className="mt-1 text-[11px] text-muted">Costos congelados · no genera deuda nueva al recibir</p>
+                </div>
               )}
               {oc && oc.estado !== "BORRADOR" && (
                 <div>
@@ -295,7 +388,7 @@ export function OCEditor({ id }: { id: string }) {
                       </Button>
                     )}
                     {oc && (
-                      <Button variant="ghost" onClick={() => confirmar({ titulo: `Eliminar ${oc.numero}`, descripcion: "La orden en borrador se elimina definitivamente.", confirmLabel: "Eliminar", variant: "danger", onConfirm: () => { const r = acciones.eliminarOC(oc.id); if (r.ok) { toast.success("Orden eliminada"); router.push("/compras"); } else toast.error(r.error); } })}>
+                      <Button variant="ghost" onClick={() => confirmar({ titulo: `Eliminar ${oc.numero}`, descripcion: "La orden en borrador se elimina definitivamente.", confirmLabel: "Eliminar", variant: "danger", onConfirm: () => { const r = acciones.eliminarOC(oc.id); if (r.ok) { toast.success("Orden eliminada"); router.push("/compras/ordenes"); } else toast.error(r.error); } })}>
                         <Trash2 /> Eliminar
                       </Button>
                     )}

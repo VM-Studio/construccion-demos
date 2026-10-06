@@ -50,7 +50,7 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
       fecha: c.fecha,
       concepto: `${TIPO_COMPROBANTE_LABEL[c.tipo]}${ref ? ` · ${ref}` : ""}${c.estado === "ANULADO" ? " (anulada)" : ""}`,
       numero: c.numero,
-      href: c.notaPedidoId ? `/ventas/notas-pedido/${c.notaPedidoId}` : c.acopioId ? `/acopios/${c.acopioId}` : c.recepcionId ? `/compras?tab=recepciones&id=${c.recepcionId}` : undefined,
+      href: c.notaPedidoId ? `/ventas/notas-pedido/${c.notaPedidoId}` : c.acopioId ? `/acopios/${c.acopioId}` : c.recepcionId ? `/compras/recepciones?id=${c.recepcionId}` : undefined,
       debe: esDebe ? c.total : 0,
       haber: esDebe ? 0 : c.total,
       pendiente: esDebe && c.estado !== "ANULADO" && c.saldoPendiente > 0.009 ? c.saldoPendiente : undefined,

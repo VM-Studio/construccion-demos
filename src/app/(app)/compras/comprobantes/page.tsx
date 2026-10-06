@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { ComprobantesCompraView } from "@/components/modulos/compras/compras-listados";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Comprobantes de compra" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Comprobantes de compra" descripcion="Facturas y notas de crédito de proveedores" permiso="compras.editar" />;
+  return (
+    <RequierePermiso permiso="compras.editar">
+      <Suspense>
+        <ComprobantesCompraView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

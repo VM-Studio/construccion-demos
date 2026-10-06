@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { AlertTriangle, PackageCheck, TrendingUp } from "lucide-react";
 import { useStore } from "@/store";
+import { guardarAdjunto } from "@/lib/adjuntos";
 import { useDb, usePuede } from "@/store/selectors";
 import type { AvisoSubaCosto } from "@/store/slices/compras";
 import type { DiferenciaRecepcion } from "@/domain/types";
@@ -44,6 +45,8 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
   const verCostos = usePuede("margenes.ver");
   const oc = ordenCompraId ? db.ordenesCompra.find((o) => o.id === ordenCompraId) : undefined;
   const [remito, setRemito] = React.useState("");
+  const [factura, setFactura] = React.useState("");
+  const [archivos, setArchivos] = React.useState<File[]>([]);
   const [fecha, setFecha] = React.useState(hoyInput());
   const [deposito, setDeposito] = React.useState("");
   const [obs, setObs] = React.useState("");
@@ -54,6 +57,8 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
   React.useEffect(() => {
     if (!open || !oc) return;
     setRemito("");
+    setFactura("");
+    setArchivos([]);
     setFecha(hoyInput());
     setDeposito(oc.depositoDestinoId);
     setObs("");
@@ -96,6 +101,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
     const r = recibir({
       ordenCompraId: oc.id,
       remitoProveedor: remito,
+      facturaProveedor: factura || undefined,
       fecha: f,
       depositoId: deposito,
       observaciones: obs || undefined,
@@ -103,6 +109,9 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
     });
     if (!r.ok) return toast.error(r.error);
     toast.success(`Recepción ${r.data.numero} registrada`, { description: r.data.completa ? "La orden quedó recibida completa." : "La orden quedó recibida parcial." });
+    for (const a of archivos) {
+      void guardarAdjunto(a, { entidadTipo: "RECEPCION", entidadId: r.data.recepcionId, categoria: "FACTURA_PROVEEDOR" }).then((x) => !x.ok && toast.error(x.error));
+    }
     onDone?.(r.data.recepcionId);
     onOpenChange(false);
     if (r.data.avisos.length && verCostos) setAvisos(r.data.avisos);
@@ -132,11 +141,23 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
               <FormField label="Remito del proveedor" required htmlFor="rec-remito" hint="Número del remito que trae el camión">
                 <Input id="rec-remito" autoFocus value={remito} onChange={(e) => setRemito(e.target.value)} placeholder="R-0001-00012345" />
               </FormField>
+              {oc.origen === "ACOPIO" ? (
+                <FormField label="Factura del proveedor" hint="Retiro de acopio: no genera deuda nueva">
+                  <Input disabled value={db.acopiosProveedor.find((a) => a.id === oc.acopioProveedorId)?.numero ?? "Acopio"} />
+                </FormField>
+              ) : (
+                <FormField label="Factura del proveedor" htmlFor="rec-fac" hint="Opcional: número de la factura recibida">
+                  <Input id="rec-fac" value={factura} onChange={(e) => setFactura(e.target.value)} placeholder="FC A 0003-00045123" />
+                </FormField>
+              )}
               <FormField label="Fecha" htmlFor="rec-fecha">
                 <Input id="rec-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </FormField>
               <FormField label="Depósito">
                 <Select value={deposito} onValueChange={setDeposito} options={db.depositos.map((x) => ({ value: x.id, label: x.nombre }))} />
+              </FormField>
+              <FormField label="Adjuntar remito y factura" hint={archivos.length ? archivos.map((a) => a.name).join(", ") : "Foto o PDF del remito/factura del proveedor"} className="sm:col-span-2">
+                <Input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setArchivos(Array.from(e.target.files ?? []))} />
               </FormField>
             </div>
             <label className="flex w-fit items-center gap-2 text-[13px]">

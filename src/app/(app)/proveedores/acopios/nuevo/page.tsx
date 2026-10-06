@@ -1,15 +1,15 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { AcopiosProveedorView } from "@/components/modulos/proveedores/acopios-proveedor";
+import { AcopioProveedorNuevo } from "@/components/modulos/proveedores/acopios-proveedor";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
-export const metadata: Metadata = { title: "Acopios con proveedores" };
+export const metadata: Metadata = { title: "Nuevo acopio con proveedor" };
 
 export default function Page() {
   return (
-    <RequierePermiso permiso="proveedores.ver">
+    <RequierePermiso permiso="acopiosProveedor.editar">
       <Suspense>
-        <AcopiosProveedorView />
+        <AcopioProveedorNuevo />
       </Suspense>
     </RequierePermiso>
   );

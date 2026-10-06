@@ -46,7 +46,7 @@ export function TransferenciasTab({ abrirId, nuevo, productoInicial }: { abrirId
         columns={columnas}
         getRowId={(t) => t.id}
         searchText={(t) => `${t.numero} ${t.items.map((i) => db.productos.find((p) => p.id === i.productoId)?.nombre).join(" ")}`}
-        onRowClick={(t) => router.replace(`/stock?tab=transferencias&id=${t.id}`, { scroll: false })}
+        onRowClick={(t) => router.replace(`/stock/transferencias?id=${t.id}`, { scroll: false })}
         initialSort={{ key: "fecha", dir: "desc" }}
         empty={{ icono: ArrowLeftRight, titulo: "Sin transferencias", descripcion: "Mové mercadería entre depósitos con trazabilidad completa.", accion: puede ? <Button size="sm" onClick={() => setCreando(true)}><Plus />Nueva transferencia</Button> : undefined }}
         actions={
@@ -62,10 +62,10 @@ export function TransferenciasTab({ abrirId, nuevo, productoInicial }: { abrirId
         productoInicial={productoInicial}
         onClose={(id) => {
           setCreando(false);
-          router.replace(id ? `/stock?tab=transferencias&id=${id}` : "/stock?tab=transferencias", { scroll: false });
+          router.replace(id ? `/stock/transferencias?id=${id}` : "/stock/transferencias", { scroll: false });
         }}
       />
-      <DetalleTransferencia id={abrirId} onClose={() => router.replace("/stock?tab=transferencias", { scroll: false })} />
+      <DetalleTransferencia id={abrirId} onClose={() => router.replace("/stock/transferencias", { scroll: false })} />
     </>
   );
 }

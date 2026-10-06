@@ -136,7 +136,7 @@ export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }
             <Truck className="size-4" /> En tránsito entre depósitos
           </span>
           {enTransferencia.map((t) => (
-            <button key={t.id} onClick={() => router.push(`/stock?tab=transferencias&id=${t.id}`)} className="text-ink underline-offset-2 hover:underline">
+            <button key={t.id} onClick={() => router.push(`/stock/transferencias?id=${t.id}`)} className="text-ink underline-offset-2 hover:underline">
               {t.numero}: {t.items.map((i) => `${formatQty(i.cantidad, db.productos.find((p) => p.id === i.productoId)?.unidad ?? "UN")} ${db.productos.find((p) => p.id === i.productoId)?.nombre}`).join(", ")}
             </button>
           ))}

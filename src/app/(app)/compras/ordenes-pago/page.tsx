@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { OrdenesPagoView } from "@/components/modulos/compras/compras-listados";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Órdenes de pago" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Órdenes de pago" descripcion="Salida de fondos con imputación" permiso="ctacte.pagar" />;
+  return (
+    <RequierePermiso permiso="ctacte.pagar">
+      <Suspense>
+        <OrdenesPagoView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

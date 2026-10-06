@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { PendientesRetirarView } from "@/components/modulos/proveedores/acopios-proveedor";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Pendientes de retirar" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Pendientes de retirar" descripcion="Todo lo que la empresa tiene derecho a retirar" permiso="proveedores.ver" />;
+  return (
+    <RequierePermiso permiso="proveedores.ver">
+      <Suspense>
+        <PendientesRetirarView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

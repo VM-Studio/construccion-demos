@@ -40,8 +40,8 @@ export function PageHeader({
   favorito?: boolean;
 }) {
   return (
-    <div className={cn("mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", className)}>
-      <div className="min-w-0">
+    <div className={cn("mb-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
+      <div className="min-w-0 flex-1 basis-[320px]">
         <div className="flex items-start gap-1.5">
           <h1 className="text-title font-semibold tracking-tight text-ink">{titulo}</h1>
           {favorito && (
@@ -53,7 +53,7 @@ export function PageHeader({
         {descripcion && <p className="mt-0.5 text-[13px] text-muted">{descripcion}</p>}
         {children}
       </div>
-      {acciones && <div className="flex shrink-0 flex-wrap items-center gap-2">{acciones}</div>}
+      {acciones && <div className="flex max-w-full flex-wrap items-center gap-2">{acciones}</div>}
     </div>
   );
 }

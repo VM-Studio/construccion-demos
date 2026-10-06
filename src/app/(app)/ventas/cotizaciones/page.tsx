@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { CotizacionesView } from "@/components/modulos/ventas/ventas-listados";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Cotizaciones de venta" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Cotizaciones de venta" descripcion="Cotizaciones con obra y circuito" permiso="ventas.ver" />;
+  return (
+    <RequierePermiso permiso="ventas.ver">
+      <Suspense>
+        <CotizacionesView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

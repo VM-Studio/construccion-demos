@@ -70,7 +70,7 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
   return out.map((m) => ({ ...m, saldo: (saldo += m.debe - m.haber) }));
 }
 
-export function EstadoCuenta({ tipo, id }: { tipo: "cliente" | "proveedor"; id: string }) {
+export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "proveedor"; id: string; embebido?: boolean }) {
   const db = useDb();
   const router = useRouter();
   const saldosC = useSaldosClientes();
@@ -95,21 +95,32 @@ export function EstadoCuenta({ tipo, id }: { tipo: "cliente" | "proveedor"; id: 
 
   return (
     <div>
-      <Link href={tipo === "cliente" ? "/cuentas-corrientes" : "/cuentas-corrientes?tab=proveedores"} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
-        <ArrowLeft className="size-4" /> Cuentas corrientes
-      </Link>
-      <PageHeader
-        titulo={`Estado de cuenta · ${tipo === "cliente" ? (entidad as EstadoInicial["clientes"][number]).nombreFantasia ?? entidad.razonSocial : entidad.razonSocial}`}
-        descripcion={`${entidad.razonSocial} · CUIT ${entidad.cuit} · ${CONDICION_PAGO_LABEL[entidad.condicionPago]}`}
-        acciones={
-          <>
+      {!embebido && (
+        <Link href={tipo === "cliente" ? "/cuentas-corrientes/clientes" : "/cuentas-corrientes/proveedores"} className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink">
+          <ArrowLeft className="size-4" /> Cuentas corrientes
+        </Link>
+      )}
+      {embebido ? (
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => setImprimir(true)}><Printer /> Imprimir resumen</Button>
             {tipo === "cliente" && <Button variant="secondary" onClick={() => setEmail(true)}><Mail /> Enviar por email</Button>}
             {tipo === "cliente" && puedeCobrar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar cobro</Button>}
             {tipo === "proveedor" && puedePagar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar pago</Button>}
-          </>
-        }
-      />
+        </div>
+      ) : (
+      <PageHeader
+          titulo={`Estado de cuenta · ${tipo === "cliente" ? (entidad as EstadoInicial["clientes"][number]).nombreFantasia ?? entidad.razonSocial : entidad.razonSocial}`}
+          descripcion={`${entidad.razonSocial} · CUIT ${entidad.cuit} · ${CONDICION_PAGO_LABEL[entidad.condicionPago]}`}
+          acciones={
+            <>
+              <Button variant="secondary" onClick={() => setImprimir(true)}><Printer /> Imprimir resumen</Button>
+              {tipo === "cliente" && <Button variant="secondary" onClick={() => setEmail(true)}><Mail /> Enviar por email</Button>}
+              {tipo === "cliente" && puedeCobrar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar cobro</Button>}
+              {tipo === "proveedor" && puedePagar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar pago</Button>}
+            </>
+          }
+        />
+      )}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard label="Saldo" valor={formatMoney(s.saldo, { decimals: false })} acento subtexto={s.saldo < 0 ? "a favor" : `${s.comprobantesPendientes} comprobantes pendientes`} />
         <KpiCard label="Vencido" valor={<span className={s.vencido > 0 ? "text-danger" : ""}>{formatMoney(s.vencido, { decimals: false })}</span>} />

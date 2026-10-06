@@ -1,16 +1,16 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { NotaPedidoPage } from "@/components/modulos/ventas/nota-pedido-page";
+import { ClienteFicha } from "@/components/modulos/clientes/cliente-ficha";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
-export const metadata: Metadata = { title: "Nota de pedido" };
+export const metadata: Metadata = { title: "Cliente" };
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <RequierePermiso permiso="ventas.ver">
+    <RequierePermiso permiso="clientes.ver">
       <Suspense>
-        <NotaPedidoPage key={id} id={id} />
+        <ClienteFicha key={id} id={id} />
       </Suspense>
     </RequierePermiso>
   );

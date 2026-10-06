@@ -17,6 +17,15 @@ export const PRESETS: { value: PresetPeriodo; label: string }[] = [
 ];
 
 /** Rango de fechas de un preset. */
+/** Presets para listados de documentos (incluye 30 y 90 días). */
+export const PRESETS_LISTADO: { value: PresetPeriodo; label: string }[] = [
+  { value: "HOY", label: "Hoy" },
+  { value: "7D", label: "7 días" },
+  { value: "30D", label: "30 días" },
+  { value: "90D", label: "90 días" },
+  { value: "PERSONALIZADO", label: "Personalizado" },
+];
+
 export function periodoDesdePreset(preset: PresetPeriodo, hoy = new Date(), custom?: { desde: string; hasta: string }): Periodo {
   const h = startOfDay(hoy);
   switch (preset) {

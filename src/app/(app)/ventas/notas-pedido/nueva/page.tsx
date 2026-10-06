@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { NotaPedidoEditor } from "@/components/modulos/ventas/nota-pedido-editor";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Nueva nota de pedido" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Nueva nota de pedido" descripcion="Venta con origen, forma de pago y entrega" permiso="ventas.editar" />;
+  return (
+    <RequierePermiso permiso="ventas.editar">
+      <Suspense>
+        <NotaPedidoEditor />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

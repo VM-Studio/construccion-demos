@@ -22,6 +22,8 @@ export function ProductoPicker({
   proveedorId,
   mostrarCosto,
   excluir,
+  filtro,
+  precioDe,
   label = "Agregar producto",
   disabled,
   className,
@@ -32,20 +34,25 @@ export function ProductoPicker({
   proveedorId?: string;
   mostrarCosto?: boolean;
   excluir?: Set<string>;
+  /** Limita los productos ofrecidos (unidad de negocio, lista congelada…). */
+  filtro?: (p: Producto) => boolean;
+  /** Precio a mostrar (p. ej. congelado del acopio). */
+  precioDe?: (p: Producto) => number | undefined;
   label?: string;
   disabled?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [busqueda, setBusqueda] = React.useState("");
   const db = useDb();
   const posiciones = usePosiciones();
-  const activos = React.useMemo(() => db.productos.filter((p) => p.activo && !excluir?.has(p.id)), [db.productos, excluir]);
+  const activos = React.useMemo(() => db.productos.filter((p) => p.activo && !excluir?.has(p.id) && (!filtro || filtro(p))), [db.productos, excluir, filtro]);
   const delProveedor = proveedorId ? activos.filter((p) => p.proveedorHabitualId === proveedorId) : [];
   const otros = proveedorId ? activos.filter((p) => p.proveedorHabitualId !== proveedorId) : activos;
 
   const item = (p: Producto) => {
     const pos = posicionEn(posiciones.get(p.id), depositoId ?? null);
-    const valor = mostrarCosto ? p.costoUltimo : listaId ? obtenerPrecio(p.id, listaId, db.precios) : undefined;
+    const valor = precioDe ? precioDe(p) : mostrarCosto ? p.costoUltimo : listaId ? obtenerPrecio(p.id, listaId, db.precios) : undefined;
     return (
       <Command.Item
         key={p.id}
@@ -78,10 +85,10 @@ export function ProductoPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[min(560px,calc(100vw-32px))] p-0" align="start">
-        <Command loop className="flex flex-col">
+        <Command loop className="flex flex-col" filter={(value, search) => (search.toLowerCase().split(/\s+/).filter(Boolean).every((w) => value.toLowerCase().includes(w)) ? 1 : 0)}>
           <div className="flex items-center gap-2 border-b border-border px-3">
             <Search className="size-4 text-disabled" />
-            <Command.Input autoFocus placeholder="Buscar por código, nombre, marca o código de barras…" className="h-10 w-full bg-transparent text-[13px] outline-none placeholder:text-disabled" />
+            <Command.Input autoFocus value={busqueda} onValueChange={setBusqueda} placeholder="Buscar por código, nombre, marca o código de barras…" className="h-10 w-full bg-transparent text-[13px] outline-none placeholder:text-disabled" />
           </div>
           <Command.List className="max-h-[340px] overflow-y-auto p-1">
             <Command.Empty className="py-6 text-center text-[13px] text-muted">No se encontraron productos.</Command.Empty>

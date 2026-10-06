@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { EnConstruccion } from "@/components/modulos/en-construccion";
+import { DevolucionesView } from "@/components/modulos/ventas/ventas-listados";
+import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Devoluciones" };
 
 export default function Page() {
-  return <EnConstruccion titulo="Devoluciones" descripcion="Devoluciones de notas de pedido (DP)" permiso="ventas.ver" />;
+  return (
+    <RequierePermiso permiso="ventas.ver">
+      <Suspense>
+        <DevolucionesView />
+      </Suspense>
+    </RequierePermiso>
+  );
 }

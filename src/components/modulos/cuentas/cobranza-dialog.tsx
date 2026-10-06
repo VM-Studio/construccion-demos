@@ -227,7 +227,7 @@ export function CobranzaDialog({
                         return (
                           <tr key={c.id} className="border-t border-border">
                             <td className="px-3 py-1.5">
-                              <span className="text-muted">{TIPO_COMPROBANTE_LABEL[c.tipo]}</span> <span className="font-mono text-[12px]">{c.numero}</span>
+                              <span className="text-muted">{c.acopioId ? `Acopio ${db.acopios.find((a) => a.id === c.acopioId)?.numero ?? ""} ·` : TIPO_COMPROBANTE_LABEL[c.tipo]}</span> <span className="font-mono text-[12px]">{c.numero}</span>
                             </td>
                             <td className="px-3 py-1.5 text-muted">{formatDate(c.fecha)}</td>
                             <td className={cn("px-3 py-1.5", atraso > 0 ? "font-medium text-danger" : "text-muted")}>

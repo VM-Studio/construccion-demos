@@ -46,6 +46,10 @@ export function ItemsGrid<T extends LineaBase>({
   totales,
   readOnly,
   vacio = "Agregá productos con el buscador.",
+  precioFijo,
+  filtroProductos,
+  precioDe,
+  ocultarTotales,
 }: {
   items: T[];
   onChange: (items: T[]) => void;
@@ -63,6 +67,11 @@ export function ItemsGrid<T extends LineaBase>({
   totales?: { descuentoPct: number; ivaPct: number; onDescuentoChange?: (v: number) => void; extra?: React.ReactNode };
   readOnly?: boolean;
   vacio?: string;
+  /** Si devuelve texto, el precio no es editable (y se muestra ese tooltip). */
+  precioFijo?: (item: T) => string | undefined;
+  filtroProductos?: (p: Producto) => boolean;
+  precioDe?: (p: Producto) => number | undefined;
+  ocultarTotales?: boolean;
 }) {
   const db = useDb();
   const posiciones = usePosiciones();
@@ -134,8 +143,11 @@ export function ItemsGrid<T extends LineaBase>({
                   ))}
                   {conPrecio && (
                     <td className="px-3 py-2">
-                      {readOnly ? (
-                        <div className="text-right tnum">{formatMoney(i.precio ?? 0)}</div>
+                      {readOnly || precioFijo?.(i) ? (
+                        <div className="pt-1.5 text-right tnum" title={precioFijo?.(i)}>
+                          {formatMoney(i.precio ?? 0)}
+                          {precioFijo?.(i) && <span className="block text-[10px] text-muted">congelado</span>}
+                        </div>
                       ) : (
                         <NumberInput aria-label={`${precioLabel} de ${p.nombre}`} value={i.precio ?? 0} min={0} onValueChange={(v) => update(i.id, { precio: v } as Partial<T>)} className="h-8" />
                       )}
@@ -182,10 +194,12 @@ export function ItemsGrid<T extends LineaBase>({
               proveedorId={proveedorId}
               mostrarCosto={mostrarCosto}
               excluir={usados}
+              filtro={filtroProductos}
+              precioDe={precioDe}
             />
           )}
         </div>
-        {t && totales && (
+        {t && totales && !ocultarTotales && (
           <dl className="grid w-full max-w-[320px] grid-cols-[1fr_auto] gap-x-6 gap-y-1.5 text-[13px] sm:ml-auto">
             <dt className="text-muted">Subtotal</dt>
             <dd className="text-right tnum">{formatMoney(t.subtotal)}</dd>

@@ -57,7 +57,9 @@ export function actualizarEstadoNP(tx: Tx, npId: string) {
   const pend = np.items.some((i) => pendienteLinea(i) > 0.0005);
   const algo = np.items.some((i) => i.entregados > 0);
   const estado: NotaPedido["estado"] = !pend ? "ENTREGADA" : algo ? "ENTREGADA_PARCIAL" : "PENDIENTE";
-  if (estado !== np.estado || pend !== np.pendienteEntrega) return tx.patch("notasPedido", np.id, { estado, pendienteEntrega: pend });
+  // pendienteEntrega es la intención del vendedor (retira después / entrega programada); se apaga al completar.
+  const pendienteEntrega = pend && np.pendienteEntrega;
+  if (estado !== np.estado || pendienteEntrega !== np.pendienteEntrega) return tx.patch("notasPedido", np.id, { estado, pendienteEntrega });
   return np;
 }
 

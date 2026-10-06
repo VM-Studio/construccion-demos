@@ -18,12 +18,12 @@ export function SheetContent({
   hideClose,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-  width?: 280 | 480 | 640 | 760;
+  width?: 280 | 480 | 640 | 760 | 960;
   side?: "right" | "left";
   title: string;
   hideClose?: boolean;
 }) {
-  const w = { 280: "sm:w-[280px]", 480: "sm:w-[480px]", 640: "sm:w-[640px]", 760: "sm:w-[760px]" }[width];
+  const w = { 280: "sm:w-[280px]", 480: "sm:w-[480px]", 640: "sm:w-[640px]", 760: "sm:w-[760px]", 960: "sm:w-[min(960px,95vw)]" }[width];
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/30 animate-fade-in" />

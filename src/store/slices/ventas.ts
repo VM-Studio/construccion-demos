@@ -203,7 +203,6 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
       numero,
       estado: "PENDIENTE",
       fechaConfirmacion: tx.ahora,
-      pendienteEntrega: true,
       forzadoSinDisponible: faltantes.length > 0 || undefined,
       autorizadoSaldoNegativo: opts.autorizarSaldoNegativo || undefined,
       excepcionCredito: opts.excepcionCredito || undefined,
@@ -255,7 +254,8 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "ventas.editar");
         const np = tx.must("notasPedido", npId);
-        const estado = opts.estado ?? (np.modalidadEntrega === "RETIRA" && !np.pendienteEntrega ? "HECHO" : "PICKING");
+        // Entrega inmediata → picking; pendiente con "cliente retira" → hecho directo cuando viene a buscarlo.
+        const estado = opts.estado ?? (np.pendienteEntrega && np.modalidadEntrega === "RETIRA" ? "HECHO" : "PICKING");
         const r = crearRemitoNP(tx, npId, opts.lineas ?? null, estado);
         return { id: r.id, numero: r.numero, estado: r.estado };
       }),

@@ -7,7 +7,7 @@ import { addDays } from "date-fns";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Ban, CheckCircle2, FileText, Mail, Printer, Receipt, Save, ShieldAlert, ThumbsDown, ThumbsUp, Truck, Wallet } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb, usePosiciones, usePuede, useSaldosClientes } from "@/store/selectors";
+import { useDb, usePuede, useSaldosClientes } from "@/store/selectors";
 import type { CondicionPago, ItemVenta, ModalidadEntrega, Pedido, Presupuesto, TipoComprobante } from "@/domain/types";
 import { calcularRentabilidadItem, calcularTotales, diasCondicionPago, porcentajeDespachado, tipoFacturaPara } from "@/domain/ventas";
 import { obtenerPrecio } from "@/domain/precios";
@@ -54,7 +54,6 @@ const aItem = (l: Linea): ItemVenta => ({ id: l.id, productoId: l.productoId, ca
 export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: string }) {
   const db = useDb();
   const router = useRouter();
-  const posiciones = usePosiciones();
   const saldos = useSaldosClientes();
   const usuarioId = useStore((s) => s.ui.usuarioId);
   const usuario = db.usuarios.find((u) => u.id === usuarioId);
@@ -63,6 +62,7 @@ export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: 
   const puedeConfirmar = usePuede("ventas.confirmar");
   const puedeFacturar = usePuede("ventas.facturar");
   const puedeCobrar = usePuede("ctacte.cobrar");
+  const puedeClientes = usePuede("clientes.editar");
   const { confirmar, dialog } = useConfirm();
   const esNuevo = id === "nuevo";
   const doc: Pedido | Presupuesto | undefined = esNuevo ? undefined : tipo === "pedido" ? db.pedidos.find((p) => p.id === id) : db.presupuestos.find((p) => p.id === id);
@@ -162,12 +162,12 @@ export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: 
   const avisoPrecio = (l: Linea) => {
     const p = db.productos.find((x) => x.id === l.productoId);
     if (!p) return undefined;
+    if (pedido && l.backorder) return { texto: `Backorder: faltaban ${formatQty(l.backorder, p.unidad)} al confirmar`, tono: "warning" as const };
     const lista = obtenerPrecio(p.id, listaId, db.precios);
     const precio = (l.precio ?? 0) * (1 - (l.descuentoPct ?? 0) / 100) * (1 - descuento / 100);
     if (precio < p.costoPromedio * 1.05)
       return { texto: verMargen ? `Precio por debajo del costo promedio + 5 % (${formatMoney(p.costoPromedio * 1.05)})` : "Precio por debajo del mínimo permitido", tono: "danger" as const };
     if (lista && precio < lista - 0.01) return { texto: `${formatPercent((lista - precio) / lista)} de descuento sobre lista (${formatMoney(lista)})`, tono: "muted" as const };
-    if (pedido && l.backorder) return { texto: `Backorder: faltan ${formatQty(l.backorder, p.unidad)} al confirmar`, tono: "warning" as const };
     return undefined;
   };
 
@@ -214,7 +214,7 @@ export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: 
                   onChange={elegirCliente}
                   placeholder="Buscar cliente…"
                   opciones={db.clientes.filter((c) => c.activo).map((c) => ({ value: c.id, label: c.nombreFantasia ?? c.razonSocial, detalle: c.cuit, buscar: c.razonSocial }))}
-                  accionNuevo={usePuedeLocal("clientes.editar") ? { label: "Nuevo cliente", onSelect: () => setNuevoCliente(true) } : undefined}
+                  accionNuevo={puedeClientes ? { label: "Nuevo cliente", onSelect: () => setNuevoCliente(true) } : undefined}
                 />
               </FormField>
               <FormField label="Sucursal">
@@ -268,7 +268,7 @@ export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: 
                 onChange={setItems}
                 readOnly={!editable}
                 crearItem={(p) => ({ id: newId("itv"), productoId: p.id, cantidad: 1, precio: obtenerPrecio(p.id, listaId, db.precios), descuentoPct: 0, costoUnitarioSnapshot: 0 })}
-                depositoId={tipo === "pedido" ? depositoId : undefined}
+                depositoId={tipo === "pedido" && editable ? depositoId : undefined}
                 listaId={listaId}
                 avisoLinea={avisoPrecio}
                 totales={{ descuentoPct: descuento, ivaPct: db.config.ivaPct, onDescuentoChange: editable ? setDescuento : undefined }}
@@ -552,10 +552,6 @@ export function VentaEditor({ tipo, id }: { tipo: "presupuesto" | "pedido"; id: 
   );
 }
 
-// Hook auxiliar (evita llamar hooks en JSX condicional)
-function usePuedeLocal(p: Parameters<typeof usePuede>[0]) {
-  return usePuede(p);
-}
 
 function RentabilidadPedido({ pedido }: { pedido: Pedido }) {
   const db = useDb();

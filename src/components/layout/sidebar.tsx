@@ -160,9 +160,9 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
                 <DropdownMenuItem
                   onSelect={() =>
                     confirmar({
-                      titulo: "Restablecer datos del demo",
-                      descripcion: "Se borran todas las operaciones cargadas y se vuelve al estado inicial.",
-                      confirmLabel: "Restablecer",
+                      titulo: "Vaciar datos del demo",
+                      descripcion: "Se borran todos los datos cargados y queda solo la estructura de la empresa, lista para cargar de cero.",
+                      confirmLabel: "Vaciar datos",
                       variant: "danger",
                       onConfirm: () => {
                         resetear();
@@ -172,7 +172,7 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
                   }
                 >
                   <RotateCcw />
-                  Restablecer demo
+                  Vaciar datos del demo
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />

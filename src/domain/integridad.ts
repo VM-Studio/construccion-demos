@@ -103,7 +103,7 @@ export function verificarIntegridad(db: EstadoInicial): ResultadoIntegridad {
     for (const p of db.pagosProveedores) for (const i of p.imputaciones) add(i.comprobanteId, i.importe);
     for (const nc of db.comprobantes) for (const i of nc.aplicadoA ?? []) add(i.comprobanteId, i.importe);
     for (const c of db.comprobantes) {
-      if (c.estado === "ANULADO" || (c.tipo !== "FACTURA" && c.tipo !== "NOTA_DEBITO")) continue;
+      if (c.estado === "ANULADO" || (c.tipo !== "FACTURA" && c.tipo !== "NOTA_DEBITO" && c.tipo !== "SALDO_INICIAL")) continue;
       const esperado = c.total - (imputado.get(c.id) ?? 0);
       if (Math.abs(esperado - c.saldoPendiente) > 1) errores.push(`${c.numero}: saldo ${c.saldoPendiente.toFixed(2)} ≠ total − imputado ${esperado.toFixed(2)}`);
     }

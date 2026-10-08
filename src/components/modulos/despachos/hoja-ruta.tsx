@@ -9,11 +9,12 @@ import type { HojaRuta } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { SelectorChofer, SelectorVehiculo } from "@/components/shared/alta-rapida";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { formatDate, formatNumber } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
@@ -36,17 +37,27 @@ export function HojaRutaView() {
   const hojas = db.hojasRuta.filter((h) => diaLocal(h.fecha) === fecha);
   const asignados = new Set(hojas.flatMap((h) => h.despachoIds));
   const sinAsignar = db.despachos.filter((d) => d.modalidad === "ENVIO" && ["ESPERA", "PREPARACION", "FINALIZADO"].includes(d.estado) && !asignados.has(d.id) && (!sucursal || d.sucursalId === sucursal) && diaLocal(d.fechaProgramada) <= fecha);
+  const vehiculos = db.vehiculos.filter((v) => v.activo);
   const cli = (id: string) => db.clientes.find((c) => c.id === id);
   const run = (r: { ok: boolean; error?: string }, msg?: string) => (!r.ok ? toast.error(r.error) : msg && toast.success(msg));
 
   return (
     <>
       <PageHeader titulo="Hoja de ruta" descripcion="Envíos del día por vehículo: se cargan al finalizar en el depósito y salen en recorrido." acciones={<Input type="date" aria-label="Fecha" value={fecha} onChange={(e) => setFecha(e.target.value)} className="h-9 w-[160px]" />} />
+      {(!vehiculos.length || (!db.hojasRuta.length && !sinAsignar.length)) && (
+        <div className="mb-4 rounded-card border border-border bg-surface">
+          <VacioGuiado pagina="hojaRuta" icono={Route} className="py-6" />
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card>
           <CardHeader><CardTitle>Envíos sin asignar ({sinAsignar.length})</CardTitle></CardHeader>
           {sinAsignar.length === 0 ? (
-            <EmptyState icono={Route} titulo="Todo asignado" />
+            <EmptyState
+              icono={Route}
+              titulo={db.despachos.some((d) => d.modalidad === "ENVIO") ? "Todo asignado" : "No hay envíos para asignar"}
+              descripcion={db.despachos.some((d) => d.modalidad === "ENVIO") ? undefined : "Los envíos a obra aparecen acá cuando una venta tiene entrega con envío o programás una entrega pendiente."}
+            />
           ) : (
             <ul className="divide-y divide-border">
               {sinAsignar.map((d) => (
@@ -58,7 +69,7 @@ export function HojaRutaView() {
                   <div className="text-[11px] text-muted">{d.numero} · {d.direccionEntrega} · {formatNumber(pesoDespacho(d, db.productos), 0)} kg</div>
                   {puede && (
                     <div className="mt-1.5 w-[200px]">
-                      <Select size="sm" aria-label="Asignar a vehículo" value="" placeholder="Asignar a vehículo…" onValueChange={(v) => run(useStore.getState().asignarAHojaRuta(d.id, v, fechaISO()), "Asignado a la hoja de ruta")} options={db.vehiculos.filter((v) => v.activo).map((v) => ({ value: v.id, label: `${v.patente} · ${v.descripcion.split(" ").slice(0, 2).join(" ")}` }))} />
+                      <SelectorVehiculo aria-label="Asignar a vehículo" value="" placeholder="Asignar a vehículo…" onChange={(v) => v && run(useStore.getState().asignarAHojaRuta(d.id, v, fechaISO()), "Asignado a la hoja de ruta")} />
                     </div>
                   )}
                 </li>
@@ -67,7 +78,7 @@ export function HojaRutaView() {
           )}
         </Card>
         <div className="space-y-4">
-          {db.vehiculos.filter((v) => v.activo).map((v) => {
+          {vehiculos.map((v) => {
             const h = hojas.find((x) => x.vehiculoId === v.id);
             const paradas = (h?.despachoIds ?? []).map((id) => db.despachos.find((d) => d.id === id)!).filter(Boolean);
             const carga = paradas.reduce((a, d) => a + pesoDespacho(d, db.productos), 0);
@@ -82,7 +93,7 @@ export function HojaRutaView() {
                   </div>
                   {h && (
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="w-[170px]"><Select size="sm" aria-label="Chofer" disabled={h.estado !== "PLANIFICADA"} value={h.choferId} onValueChange={(c) => run(useStore.getState().cambiarChoferHoja(h.id, c))} options={db.choferes.map((c) => ({ value: c.id, label: c.nombre }))} /></div>
+                      <div className="w-[190px]"><SelectorChofer aria-label="Chofer" placeholder="Elegí el chofer…" disabled={h.estado !== "PLANIFICADA" || !puede} value={h.choferId} onChange={(c) => c && run(useStore.getState().cambiarChoferHoja(h.id, c), "Chofer asignado")} /></div>
                       <StatusBadge tipo="HOJA" estado={h.estado} />
                       <Button size="sm" variant="ghost" onClick={() => setImprimir(h)}><Printer /> Imprimir</Button>
                       {puede && h.estado === "PLANIFICADA" && <Button size="sm" onClick={() => run(useStore.getState().iniciarRecorrido(h.id), "Recorrido iniciado")}><Play /> Iniciar recorrido</Button>}

@@ -19,7 +19,7 @@ const thR = "h-9 px-2 text-right font-medium whitespace-nowrap";
  * Movimientos del acopio agrupados por documento (NP / DP / ACD) con saldo corrido,
  * idéntico en estructura al documento "Detalle de acopio".
  */
-export function MovimientosAcopio({ acopio }: { acopio: Acopio }) {
+export function MovimientosAcopio({ acopio, accionVacio }: { acopio: Acopio; /** Acción a mostrar cuando el acopio todavía no tiene retiros. */ accionVacio?: React.ReactNode }) {
   const db = useDb();
   const [obra, setObra] = React.useState("");
   const [buscar, setBuscar] = React.useState("");
@@ -102,7 +102,18 @@ export function MovimientosAcopio({ acopio }: { acopio: Acopio }) {
                 </React.Fragment>
               ))}
               {!visibles.length && (
-                <tr><td colSpan={11} className="py-10 text-center text-muted">Sin movimientos para el filtro.</td></tr>
+                <tr>
+                  <td colSpan={11} className="px-4 py-10 text-center text-muted">
+                    {grupos.length ? (
+                      "Sin movimientos para el filtro."
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <span>Todavía no hay retiros. Cada nota de pedido contra este acopio aparece acá con el saldo corrido.</span>
+                        {accionVacio}
+                      </div>
+                    )}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -158,6 +169,22 @@ export function ArticulosAcopio({ acopio }: { acopio: Acopio }) {
                   <td className={cn("px-2 py-1.5 text-right tnum", f.pendiente > 0 ? "text-warning" : "text-disabled")}>{f.pendiente || "—"}</td>
                 </tr>
               ))}
+              {!vis.length && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted">
+                    {!filas.length ? (
+                      "El acopio no tiene precios congelados."
+                    ) : conMov && !q ? (
+                      <>
+                        Todavía no se retiró ningún artículo.{" "}
+                        <button type="button" className="font-medium text-ink underline underline-offset-2" onClick={() => setConMov(false)}>Ver toda la lista congelada</button>
+                      </>
+                    ) : (
+                      "Ningún artículo coincide con la búsqueda."
+                    )}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

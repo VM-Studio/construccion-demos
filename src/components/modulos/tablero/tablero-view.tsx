@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowRight, Boxes, ChevronRight, DollarSign, Factory, Landmark, PackageCheck, PackageX, Percent, ShoppingCart, Timer, Truck, Warehouse } from "lucide-react";
+import { ArrowRight, BarChart3, Boxes, ChevronRight, DollarSign, Factory, Landmark, PackageCheck, PackageX, Percent, ShoppingCart, Timer, Truck, Warehouse } from "lucide-react";
 import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosResumen, useAcopiosProveedorResumen, usePendientes, usePosiciones, useUnidadNegocio, useUsuario, useVeCircuito2 } from "@/store/selectors";
 import { minutosPreparacion, promedio } from "@/domain/despachos";
 import { useAlertas } from "@/store/alertas";
 import { PageHeader } from "@/components/shared/page-header";
+import { GuiaCargaInicial } from "@/components/modulos/inicio/guia-carga";
+import { estaVacio } from "@/domain/prerequisitos";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -74,6 +76,12 @@ export function TableroView() {
   }, [acopios, sucursalId, un, veC2]);
 
   const etiqueta = ETIQUETA_PERIODO[periodo.preset] ?? "período anterior";
+  // Con el sistema recién arrancado, cada KPI muestra "—" hasta que exista su primer movimiento.
+  const sinVentas = !db.notasPedido.some((n) => n.estado !== "BORRADOR") && !db.comprobantes.some((c) => c.clienteId);
+  const sinCuentas = !db.comprobantes.some((c) => c.clienteId);
+  const sinAcopios = !db.acopios.length;
+  const sinAcopiosProv = !db.acopiosProveedor.length;
+  const SIN_MOV = "Sin movimientos todavía";
   const esOperativo = !verVentas; // Depósito
 
   return (
@@ -84,6 +92,8 @@ export function TableroView() {
         acciones={<DateRangePicker value={periodo} onChange={setPeriodo} />}
       />
 
+      <GuiaCargaInicial />
+
       {/* Fila 1 — KPIs */}
       {esOperativo ? (
         <KpisOperativos />
@@ -91,49 +101,49 @@ export function TableroView() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-tour="kpis">
           <KpiCard
             label="Ventas del período"
-            valor={formatMoney(ventas, { compact: Math.abs(ventas) >= 1_000_000 })}
-            variacion={{ valor: variacion(ventas, ventasAnt), periodo: etiqueta }}
+            valor={sinVentas ? "—" : formatMoney(ventas, { compact: Math.abs(ventas) >= 1_000_000 })}
+            variacion={sinVentas ? undefined : { valor: variacion(ventas, ventasAnt), periodo: etiqueta }}
             acento
             icono={DollarSign}
-            subtexto="facturado neto de IVA"
+            subtexto={sinVentas ? SIN_MOV : "facturado neto de IVA"}
             onClick={() => router.push("/reportes/ventas")}
           />
           {verMargen ? (
             <KpiCard
               label="Margen bruto"
-              valor={formatMoney(margen.margen, { compact: Math.abs(margen.margen) >= 1_000_000 })}
-              variacion={{ valor: variacion(margen.margen, margenAnt.margen), periodo: etiqueta }}
+              valor={sinVentas ? "—" : formatMoney(margen.margen, { compact: Math.abs(margen.margen) >= 1_000_000 })}
+              variacion={sinVentas ? undefined : { valor: variacion(margen.margen, margenAnt.margen), periodo: etiqueta }}
               icono={Percent}
-              subtexto={`${formatPercent(margen.margenPct)} sobre ${margen.pedidos} pedidos`}
+              subtexto={sinVentas ? SIN_MOV : `${formatPercent(margen.margenPct)} sobre ${margen.pedidos} pedidos`}
               onClick={() => router.push("/reportes/rentabilidad-pedidos")}
             />
           ) : (
-            <KpiCard label="Pedidos vendidos" valor={String(margen.pedidos)} icono={ShoppingCart} subtexto="facturados o despachados" />
+            <KpiCard label="Pedidos vendidos" valor={sinVentas ? "—" : String(margen.pedidos)} icono={ShoppingCart} subtexto={sinVentas ? SIN_MOV : "facturados o despachados"} />
           )}
           {verCtaCte && (
             <KpiCard
               label="Por cobrar"
-              valor={formatMoney(porCobrar.total, { compact: Math.abs(porCobrar.total) >= 1_000_000 })}
+              valor={sinCuentas ? "—" : formatMoney(porCobrar.total, { compact: Math.abs(porCobrar.total) >= 1_000_000 })}
               icono={Landmark}
-              subtexto={porCobrar.vencido > 0 ? <span className="font-medium text-danger">{formatMoney(porCobrar.vencido, { compact: true })} vencido</span> : "sin deuda vencida"}
+              subtexto={sinCuentas ? SIN_MOV : porCobrar.vencido > 0 ? <span className="font-medium text-danger">{formatMoney(porCobrar.vencido, { compact: true })} vencido</span> : "sin deuda vencida"}
               onClick={() => router.push("/cuentas-corrientes")}
             />
           )}
           {verAcopios && (
             <KpiCard
               label="Deuda de mercadería (acopios)"
-              valor={formatMoney(deudaMercaderia.total, { compact: Math.abs(deudaMercaderia.total) >= 1_000_000 })}
+              valor={sinAcopios ? "—" : formatMoney(deudaMercaderia.total, { compact: Math.abs(deudaMercaderia.total) >= 1_000_000 })}
               icono={Boxes}
-              subtexto={`saldo disponible de ${deudaMercaderia.n} acopios vigentes`}
+              subtexto={sinAcopios ? SIN_MOV : `saldo disponible de ${deudaMercaderia.n} acopios vigentes`}
               onClick={() => router.push("/acopios")}
             />
           )}
           {verProveedores && (
             <KpiCard
               label="Acopios con proveedores"
-              valor={formatMoney(prov.retirar, { compact: Math.abs(prov.retirar) >= 1_000_000 })}
+              valor={sinAcopiosProv ? "—" : formatMoney(prov.retirar, { compact: Math.abs(prov.retirar) >= 1_000_000 })}
               icono={Factory}
-              subtexto={<span>nos falta retirar · <span className={prov.deuda > 0 ? "font-medium text-danger" : ""}>le debemos {formatMoney(prov.deuda, { compact: true })}</span></span>}
+              subtexto={sinAcopiosProv ? SIN_MOV : <span>nos falta retirar · <span className={prov.deuda > 0 ? "font-medium text-danger" : ""}>le debemos {formatMoney(prov.deuda, { compact: true })}</span></span>}
               onClick={() => router.push("/proveedores/acopios")}
             />
           )}
@@ -149,7 +159,7 @@ export function TableroView() {
             <Badge variant={alertas.length ? "danger" : "success"}>{alertas.length ? `${alertas.reduce((a, x) => a + x.cantidad, 0)} pendientes` : "Todo en orden"}</Badge>
           </CardHeader>
           {alertas.length === 0 ? (
-            <EmptyState icono={PackageCheck} titulo="Sin alertas" descripcion="No hay stock crítico, vencimientos ni atrasos." />
+            <EmptyState icono={PackageCheck} titulo="Sin alertas" descripcion={estaVacio(db) ? "Acá van a aparecer el stock bajo mínimo, los acopios por vencer, las compras atrasadas y las facturas vencidas." : "No hay stock crítico, vencimientos ni atrasos."} />
           ) : (
             <ul className="divide-y divide-border">
               {alertas.map((a) => (
@@ -216,7 +226,9 @@ function GraficoVentas({ periodo, filtro, verMargen }: { periodo: Periodo; filtr
         </div>
       </CardHeader>
       <CardContent className="pb-2">
-        {!hayDatos ? (
+        {!db.notasPedido.some((n) => n.estado !== "BORRADOR") ? (
+          <EmptyState icono={BarChart3} titulo="Todavía no hay ventas" descripcion="Las ventas van a aparecer acá a medida que se confirmen notas de pedido." />
+        ) : !hayDatos ? (
           <EmptyState titulo="Sin ventas en el período" descripcion="Elegí otro rango de fechas para ver la evolución." />
         ) : vista === "total" && unGrafico === "todas" ? (
           <BarrasAgrupadasChart
@@ -356,7 +368,7 @@ function TopProductos({ periodo, filtro, verMargen }: { periodo: Periodo; filtro
         {verMargen && <Segmented value={orden} onChange={setOrden} options={[{ value: "margen", label: "Por margen" }, { value: "facturado", label: "Por facturación" }]} />}
       </CardHeader>
       {top.length === 0 ? (
-        <EmptyState titulo="Sin ventas en el período" />
+        <EmptyState titulo={db.notasPedido.length ? "Sin ventas en el período" : "Todavía no hay ventas"} descripcion={db.notasPedido.length ? undefined : "El ranking se arma con las notas de pedido confirmadas."} />
       ) : (
         <table className="w-full text-table">
           <thead>

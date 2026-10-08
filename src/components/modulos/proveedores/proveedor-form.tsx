@@ -19,7 +19,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 type Form = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
 const VACIO: Form = { codigo: "", razonSocial: "", tipo: "FABRICANTE", cuit: "", condicionIVA: "RI", circuitoHabitual: 1, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", unidadNegocioIds: ["un_cor"], activo: true, notas: "" };
 
-export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; onSaved: () => void }) {
+export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; onSaved: (id: string) => void }) {
   const db = useDb();
   const guardar = useStore((s) => s.guardarProveedor);
   const puede = usePuede("proveedores.editar");
@@ -41,7 +41,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
     const r = guardar({ ...f, cuit: formatearCUIT(f.cuit) }, proveedor?.id);
     if (r.ok) {
       toast.success(proveedor ? "Proveedor actualizado" : "Proveedor creado");
-      onSaved();
+      onSaved(r.data);
     } else toast.error(r.error);
   };
   const ro = !puede;

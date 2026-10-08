@@ -11,18 +11,21 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { ItemsGrid, type LineaBase } from "@/components/shared/items-grid";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
-import { Textarea } from "@/components/ui/input";
+import { NumberInput, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime, formatMoney, formatQty } from "@/lib/format";
 import { nombreUsuario } from "@/lib/referencias";
 import { cn, newId } from "@/lib/utils";
 
-type Linea = LineaBase & { signo: 1 | -1; motivo: string };
+type Linea = LineaBase & { signo: 1 | -1; motivo: string; costoUnitario?: number };
 
-export function AjustesTab({ abrirId, nuevo, productoInicial }: { abrirId?: string | null; nuevo?: boolean; productoInicial?: string | null }) {
+const INVENTARIO = "INVENTARIO_INICIAL";
+
+export function AjustesTab({ abrirId, nuevo, productoInicial, motivoInicial }: { abrirId?: string | null; nuevo?: boolean; productoInicial?: string | null; motivoInicial?: string | null }) {
   const db = useDb();
   const router = useRouter();
   const puede = usePuede("stock.ajustar");
@@ -52,12 +55,13 @@ export function AjustesTab({ abrirId, nuevo, productoInicial }: { abrirId?: stri
         searchText={(a) => `${a.numero} ${a.observacion ?? ""}`}
         onRowClick={(a) => router.replace(`/stock/ajustes?id=${a.id}`, { scroll: false })}
         initialSort={{ key: "fecha", dir: "desc" }}
-        empty={{ icono: SlidersHorizontal, titulo: "Sin ajustes de stock" }}
+        empty={filas.length ? { icono: SlidersHorizontal, titulo: "No hay ajustes para la búsqueda" } : <VacioGuiado pagina="ajustes" icono={SlidersHorizontal} puedeAccion={puede} />}
         actions={puede && <Button size="sm" onClick={() => setCreando(true)}><Plus /> Nuevo ajuste</Button>}
       />
       <NuevoAjuste
         open={creando}
         productoInicial={productoInicial}
+        inventario={motivoInicial === INVENTARIO}
         onClose={(id) => {
           setCreando(false);
           router.replace(id ? `/stock/ajustes?id=${id}` : "/stock/ajustes", { scroll: false });
@@ -68,26 +72,33 @@ export function AjustesTab({ abrirId, nuevo, productoInicial }: { abrirId?: stri
   );
 }
 
-function NuevoAjuste({ open, onClose, productoInicial }: { open: boolean; onClose: (id?: string) => void; productoInicial?: string | null }) {
+function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boolean; onClose: (id?: string) => void; productoInicial?: string | null; inventario?: boolean }) {
   const db = useDb();
   const posiciones = usePosiciones();
   const crear = useStore((s) => s.crearAjuste);
-  const [deposito, setDeposito] = React.useState("dep_central");
+  const [deposito, setDeposito] = React.useState(db.depositos[0]?.id ?? "");
   const [items, setItems] = React.useState<Linea[]>([]);
   const [obs, setObs] = React.useState("");
   const motivos = db.config.motivosAjuste.filter((m) => m.activo);
+  const producto = React.useCallback((id: string) => db.productos.find((p) => p.id === id), [db.productos]);
+  const lineaInventario = React.useCallback((productoId: string): Linea => ({ id: newId("l"), productoId, cantidad: 1, signo: 1, motivo: INVENTARIO, costoUnitario: producto(productoId)?.costoUltimo ?? 0 }), [producto]);
   React.useEffect(() => {
     if (!open) return;
-    setItems(productoInicial ? [{ id: newId("l"), productoId: productoInicial, cantidad: 1, signo: -1, motivo: "ROTURA" }] : []);
+    if (inventario) setItems(productoInicial ? [lineaInventario(productoInicial)] : []);
+    else setItems(productoInicial ? [{ id: newId("l"), productoId: productoInicial, cantidad: 1, signo: -1, motivo: "ROTURA" }] : []);
     setObs("");
-  }, [open, productoInicial]);
-  const valor = items.reduce((s, i) => s + i.cantidad * (db.productos.find((p) => p.id === i.productoId)?.costoPromedio ?? 0), 0);
-  const requiereObs = valor > 500_000;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, productoInicial, inventario]);
+  const costo = (i: Linea) => (i.motivo === INVENTARIO ? (i.costoUnitario ?? 0) : (producto(i.productoId)?.costoPromedio ?? 0));
+  const valor = items.reduce((s, i) => s + i.cantidad * costo(i), 0);
+  const soloInventario = items.length > 0 && items.every((i) => i.motivo === INVENTARIO);
+  const requiereObs = valor > 500_000 && !soloInventario;
+  const sinCargar = db.productos.filter((p) => p.activo && !items.some((i) => i.productoId === p.id));
 
   const guardar = () => {
-    const r = crear({ depositoId: deposito, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, signo: i.signo, motivo: i.motivo })), observacion: obs || undefined });
+    const r = crear({ depositoId: deposito, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, signo: i.motivo === INVENTARIO ? 1 : i.signo, motivo: i.motivo, ...(i.motivo === INVENTARIO ? { costoUnitario: i.costoUnitario ?? 0 } : {}) })), observacion: obs || undefined });
     if (r.ok) {
-      toast.success(`Ajuste ${r.data.numero} registrado`, { description: "El stock y el kardex ya están actualizados." });
+      toast.success(`${soloInventario ? "Inventario inicial" : "Ajuste"} ${r.data.numero} registrado`, { description: "El stock y el kardex ya están actualizados." });
       onClose(r.data.id);
     } else toast.error(r.error);
   };
@@ -96,29 +107,46 @@ function NuevoAjuste({ open, onClose, productoInicial }: { open: boolean; onClos
     <EntitySheet
       open={open}
       onOpenChange={(v) => !v && onClose()}
-      titulo="Nuevo ajuste de stock"
-      subtitulo="Se valoriza al costo promedio vigente y queda en el kardex."
+      titulo={inventario ? "Cargar inventario inicial" : "Nuevo ajuste de stock"}
+      subtitulo={inventario ? "Lo que ya tienen en el galpón entra al stock físico al costo que indiques y queda en el kardex." : "Se valoriza al costo promedio vigente y queda en el kardex."}
       width={760}
       footer={
         <>
           <Button variant="secondary" onClick={() => onClose()}>Cancelar</Button>
-          <Button onClick={guardar} disabled={!items.length || (requiereObs && !obs.trim())}>Registrar ajuste</Button>
+          <Button onClick={guardar} disabled={!items.length || (requiereObs && !obs.trim())}>{inventario ? "Registrar inventario inicial" : "Registrar ajuste"}</Button>
         </>
       }
     >
       <div className="space-y-4">
-        <FormField label="Depósito" className="max-w-xs">
-          <Select value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
-        </FormField>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <FormField label="Depósito" className="w-full max-w-xs">
+            <Select value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
+          </FormField>
+          {inventario && sinCargar.length > 0 && (
+            <Button size="sm" variant="secondary" onClick={() => setItems([...items, ...sinCargar.map((p) => lineaInventario(p.id))])}>
+              <Plus /> Agregar todos los artículos ({sinCargar.length})
+            </Button>
+          )}
+        </div>
         <ItemsGrid
           items={items}
           onChange={setItems}
-          crearItem={(p): Linea => ({ id: newId("l"), productoId: p.id, cantidad: 1, signo: -1, motivo: "FALTANTE" })}
+          crearItem={(p): Linea => (inventario ? lineaInventario(p.id) : { id: newId("l"), productoId: p.id, cantidad: 1, signo: -1, motivo: "FALTANTE" })}
           depositoId={deposito}
           conPrecio={false}
+          vacio={inventario ? "Agregá los artículos que ya están en el depósito con el buscador, o todos de una vez." : undefined}
           extras={[
-            { header: "Signo", width: 120, cell: (i, up) => <Select size="sm" aria-label="Signo" value={String(i.signo)} onValueChange={(v) => up({ signo: Number(v) as 1 | -1 })} options={[{ value: "1", label: "+ Suma" }, { value: "-1", label: "− Resta" }]} /> },
-            { header: "Motivo", width: 190, cell: (i, up) => <Select size="sm" aria-label="Motivo" value={i.motivo} onValueChange={(v) => up({ motivo: v })} options={motivos.map((m) => ({ value: m.codigo, label: m.nombre }))} /> },
+            {
+              header: "Signo / costo",
+              width: 130,
+              cell: (i, up) =>
+                i.motivo === INVENTARIO ? (
+                  <NumberInput aria-label="Costo unitario" className="h-8" value={i.costoUnitario ?? 0} min={0} onValueChange={(v) => up({ costoUnitario: v })} />
+                ) : (
+                  <Select size="sm" aria-label="Signo" value={String(i.signo)} onValueChange={(v) => up({ signo: Number(v) as 1 | -1 })} options={[{ value: "1", label: "+ Suma" }, { value: "-1", label: "− Resta" }]} />
+                ),
+            },
+            { header: "Motivo", width: 190, cell: (i, up) => <Select size="sm" aria-label="Motivo" value={i.motivo} onValueChange={(v) => up(v === INVENTARIO ? { motivo: v, signo: 1, costoUnitario: i.costoUnitario ?? producto(i.productoId)?.costoUltimo ?? 0 } : { motivo: v })} options={motivos.map((m) => ({ value: m.codigo, label: m.nombre }))} /> },
           ]}
           avisoLinea={(i, p) => {
             const pos = posiciones.get(p.id)?.porDeposito[deposito];
@@ -130,7 +158,7 @@ function NuevoAjuste({ open, onClose, productoInicial }: { open: boolean; onClos
           }}
         />
         <div className="flex items-center justify-between rounded-control border border-border bg-subtle px-3 py-2 text-[13px]">
-          <span className="text-muted">Valor del ajuste a costo promedio</span>
+          <span className="text-muted">{soloInventario ? "Valor del inventario al costo indicado" : "Valor del ajuste a costo promedio"}</span>
           <span className="font-semibold tnum">{formatMoney(valor)}</span>
         </div>
         <FormField label="Observación" required={requiereObs} error={requiereObs && !obs.trim() ? "Obligatoria: el ajuste supera $ 500.000." : undefined} htmlFor="aju-obs">

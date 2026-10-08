@@ -4,7 +4,7 @@
  * Adjuntos: los archivos (blobs) viven en IndexedDB con `idb-keyval`; en el store
  * (localStorage) solo se guarda la metadata. Así no se llena el almacenamiento.
  */
-import { del, get, set } from "idb-keyval";
+import { clear, del, get, set } from "idb-keyval";
 import { nanoid } from "nanoid";
 import type { CategoriaAdjunto, EntidadAdjunto, EstadoInicial, Remito } from "@/domain/types";
 import { useStore } from "@/store";
@@ -86,6 +86,11 @@ export async function obtenerBlob(blobKey: string): Promise<Blob | undefined> {
 }
 
 let generando: Promise<void> | null = null;
+
+/** Borra todos los blobs de IndexedDB (al vaciar los datos del demo). */
+export async function limpiarBlobs() {
+  await clear().catch(() => undefined);
+}
 
 /** Genera en runtime (jsPDF) los remitos firmados de ejemplo del seed que falten en IndexedDB. */
 export function asegurarAdjuntosDemo(): Promise<void> {

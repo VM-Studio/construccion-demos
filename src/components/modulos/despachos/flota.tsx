@@ -2,17 +2,18 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Plus, Save, Truck, UserRound } from "lucide-react";
+import { Plus, Save, Truck, UserRound, X } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede } from "@/store/selectors";
 import type { Chofer, Vehiculo } from "@/domain/types";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { SelectorChofer } from "@/components/shared/alta-rapida";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, NumberInput } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -43,11 +44,11 @@ export function FlotaTab({ onAbrirDespacho }: { onAbrirDespacho: (id: string) =>
     <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
       <div>
         <h3 className="mb-2 text-[14px] font-semibold">Vehículos</h3>
-        <DataTable rows={db.vehiculos} columns={colV} getRowId={(v) => v.id} onRowClick={(v) => setVeh(v.id)} empty={{ icono: Truck, titulo: "Sin vehículos" }} actions={puede && <Button size="sm" onClick={() => setVeh("nuevo")}><Plus /> Nuevo vehículo</Button>} searchText={(v) => `${v.patente} ${v.descripcion}`} />
+        <DataTable rows={db.vehiculos} columns={colV} getRowId={(v) => v.id} onRowClick={(v) => setVeh(v.id)} empty={db.vehiculos.length ? { icono: Truck, titulo: "No hay vehículos para la búsqueda" } : <VacioGuiado pagina="vehiculos" icono={Truck} puedeAccion={puede} onAccion={() => setVeh("nuevo")} />} actions={puede && <Button size="sm" onClick={() => setVeh("nuevo")}><Plus /> Nuevo vehículo</Button>} searchText={(v) => `${v.patente} ${v.descripcion}`} />
       </div>
       <div>
         <h3 className="mb-2 text-[14px] font-semibold">Choferes</h3>
-        <DataTable rows={db.choferes} columns={colC} getRowId={(c) => c.id} onRowClick={(c) => setCho(c.id)} empty={{ icono: UserRound, titulo: "Sin choferes" }} actions={puede && <Button size="sm" onClick={() => setCho("nuevo")}><Plus /> Nuevo chofer</Button>} searchText={(c) => c.nombre} />
+        <DataTable rows={db.choferes} columns={colC} getRowId={(c) => c.id} onRowClick={(c) => setCho(c.id)} empty={db.choferes.length ? { icono: UserRound, titulo: "No hay choferes para la búsqueda" } : { icono: UserRound, titulo: "Todavía no hay choferes", descripcion: "Cada vehículo puede tener un chofer habitual, que se propone al armar la hoja de ruta.", accion: puede ? <Button size="sm" onClick={() => setCho("nuevo")}><Plus /> Nuevo chofer</Button> : undefined }} actions={puede && <Button size="sm" onClick={() => setCho("nuevo")}><Plus /> Nuevo chofer</Button>} searchText={(c) => c.nombre} />
       </div>
       {veh && <VehiculoSheet id={veh} onClose={() => setVeh(null)} onAbrirDespacho={onAbrirDespacho} />}
       {cho && <ChoferSheet id={cho} onClose={() => setCho(null)} />}
@@ -74,7 +75,12 @@ function VehiculoSheet({ id, onClose, onAbrirDespacho }: { id: string; onClose: 
         <FormField label="Patente" required htmlFor="vh-p"><Input id="vh-p" disabled={!puede} value={f.patente} onChange={(e) => setF({ ...f, patente: e.target.value })} placeholder="AE 412 KD" /></FormField>
         <FormField label="Capacidad (kg)" htmlFor="vh-c"><NumberInput id="vh-c" disabled={!puede} value={f.capacidadKg} min={0} onValueChange={(x) => setF({ ...f, capacidadKg: x })} /></FormField>
         <FormField label="Descripción" htmlFor="vh-d" className="sm:col-span-2"><Input id="vh-d" disabled={!puede} value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} /></FormField>
-        <FormField label="Chofer habitual"><Select disabled={!puede} value={f.choferId} onValueChange={(x) => setF({ ...f, choferId: x })} options={[{ value: "", label: "Sin chofer habitual" }, ...db.choferes.map((c) => ({ value: c.id, label: c.nombre }))]} /></FormField>
+        <FormField label="Chofer habitual">
+          <div className="flex items-center gap-1">
+            <SelectorChofer className="min-w-0 flex-1" disabled={!puede} value={f.choferId} placeholder="Sin chofer habitual" onChange={(x) => setF((prev) => ({ ...prev, choferId: x }))} />
+            {f.choferId && puede && <Button variant="ghost" size="icon-sm" aria-label="Quitar chofer habitual" onClick={() => setF((prev) => ({ ...prev, choferId: "" }))}><X /></Button>}
+          </div>
+        </FormField>
       </div>
       <label className="flex items-center gap-3 text-[13px]"><Switch disabled={!puede} checked={f.activo} onCheckedChange={(x) => setF({ ...f, activo: x })} /> Vehículo activo</label>
       {puede && <div className="flex justify-end"><Button onClick={guardar}><Save /> Guardar</Button></div>}

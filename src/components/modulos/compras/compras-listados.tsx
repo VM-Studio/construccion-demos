@@ -10,7 +10,8 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { KpiCard } from "@/components/shared/kpi-card";
-import { Combobox } from "@/components/shared/combobox";
+import { SelectorProveedor } from "@/components/shared/alta-rapida";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { AdjuntosPanel, ClipContador } from "@/components/shared/adjuntos-panel";
 import { PrintPreview } from "@/components/shared/print-layout";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export function ComprobantesCompraView() {
         <KpiCard label="Vencido" valor={formatMoney(filas.filter((c) => estaVencido(c, hoy)).reduce((a, c) => a + c.saldoPendiente, 0), { compact: true })} />
         <KpiCard label="Comprobantes" valor={String(filas.length)} />
       </div>
-      <DataTable rows={filas} columns={columnas} getRowId={(c) => c.id} onRowClick={setVer} searchText={(c) => `${c.numero} ${prov(c.proveedorId)}`} initialSort={{ key: "f", dir: "desc" }} showFooter empty={{ icono: Receipt, titulo: "Sin comprobantes de compra" }} filters={<div className="w-[140px]"><Select size="sm" aria-label="Circuito" value={circuito} onValueChange={setCircuito} options={[{ value: "", label: "AC1 y AC2" }, { value: "1", label: "AC1 · Fiscal" }, ...(veC2 ? [{ value: "2", label: "AC2 · Interno" }] : [])]} /></div>} />
+      <DataTable rows={filas} columns={columnas} getRowId={(c) => c.id} onRowClick={setVer} searchText={(c) => `${c.numero} ${prov(c.proveedorId)}`} initialSort={{ key: "f", dir: "desc" }} showFooter empty={db.comprobantes.some((c) => c.proveedorId) ? { icono: Receipt, titulo: "No hay comprobantes de compra para el filtro" } : <VacioGuiado pagina="comprobantesCompra" icono={Receipt} />} filters={<div className="w-[140px]"><Select size="sm" aria-label="Circuito" value={circuito} onValueChange={setCircuito} options={[{ value: "", label: "AC1 y AC2" }, { value: "1", label: "AC1 · Fiscal" }, ...(veC2 ? [{ value: "2", label: "AC2 · Interno" }] : [])]} /></div>} />
       <Dialog open={!!ver} onOpenChange={(v) => !v && setVer(null)}>
         {ver && (
           <DialogContent size="lg" title={`${TIPO_COMPROBANTE_LABEL[ver.tipo]} ${ver.numero}`} description={`${prov(ver.proveedorId)} · ${formatDate(ver.fecha)} · total ${formatMoney(ver.total)} · saldo ${formatMoney(ver.saldoPendiente)}`}>
@@ -86,10 +87,10 @@ export function OrdenesPagoView() {
   return (
     <>
       <PageHeader titulo="Órdenes de pago" descripcion="Salida de fondos: pagos a proveedores imputados a facturas de compra y a acopios en cuenta corriente." acciones={puede && <Button onClick={() => setElegir(true)}><Wallet /> Nueva orden de pago</Button>} />
-      <DataTable rows={filas} columns={columnas} getRowId={(o) => o.id} onRowClick={setVer} searchText={(o) => `${o.numero} ${prov(o.proveedorId)} ${imputado(o)}`} initialSort={{ key: "f", dir: "desc" }} showFooter empty={{ icono: Wallet, titulo: "Sin órdenes de pago" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(o) => o.id} onRowClick={setVer} searchText={(o) => `${o.numero} ${prov(o.proveedorId)} ${imputado(o)}`} initialSort={{ key: "f", dir: "desc" }} showFooter empty={db.pagosProveedores.length ? { icono: Wallet, titulo: "No hay órdenes de pago para el filtro" } : <VacioGuiado pagina="ordenesPago" icono={Wallet} extra={puede && db.proveedores.some((p) => p.activo) ? <Button size="sm" onClick={() => setElegir(true)}><Wallet /> Nueva orden de pago</Button> : undefined} />} />
       <Dialog open={elegir} onOpenChange={setElegir}>
         <DialogContent size="sm" title="Nueva orden de pago" description="Elegí el proveedor." footer={<><Button variant="secondary" onClick={() => setElegir(false)}>Cancelar</Button><Button disabled={!provId} onClick={() => { setPagar(provId); setElegir(false); }}>Continuar</Button></>}>
-          <Combobox aria-label="Proveedor" value={provId} onChange={setProvId} opciones={db.proveedores.map((p) => ({ value: p.id, label: p.razonSocial, detalle: p.codigo }))} />
+          <SelectorProveedor aria-label="Proveedor" value={provId} onChange={setProvId} />
         </DialogContent>
       </Dialog>
       {pagar && <PagoDialog open onOpenChange={(v) => !v && setPagar(null)} proveedorId={pagar} />}

@@ -10,6 +10,14 @@ import { saldoDisponible } from "../src/domain/acopios";
 import { pendienteRetirar } from "../src/domain/acopiosProveedor";
 import { posicionesDe, acopiosResumenDe } from "../src/store/selectors";
 import { minutosPreparacion } from "../src/domain/despachos";
+import { readFileSync } from "node:fs";
+import Papa from "papaparse";
+import { generarCUIT } from "../src/domain/cuit";
+import { seedBase } from "../src/data/seed";
+import { mapearColumnas, validarArchivo } from "../src/domain/importacion";
+import { calcularActualizacionMasiva } from "../src/domain/precios";
+import { pasosCargaInicial } from "../src/domain/cargaInicial";
+import { prerequisitos } from "../src/domain/prerequisitos";
 
 const s = () => useStore.getState();
 let fallas = 0;
@@ -172,6 +180,61 @@ console.log("\n9) Integridad final");
     check(c.nombre, c.ok, c.detalle);
     for (const e of c.errores.slice(0, 5)) console.log(`      · ${e}`);
   }
+}
+
+console.log("\n10) Desde el sistema vacío: importar → precios → proveedor → OC → ingreso → cliente y obra → acopio → retiro → remito → hecho → cobro");
+{
+  useStore.setState({ db: seedBase(new Date()) });
+  s().login("usr_felipe");
+  check("Arranca vacío y NP pide cliente y artículo con precio", prerequisitos("notasPedido", s().db).length === 2);
+  const csv = (f: string) => Papa.parse<Record<string, unknown>>(readFileSync(`public/plantillas/${f}`, "utf8").replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true });
+  for (const [archivo, n] of [["articulos-ejemplo-corralon.csv", 40], ["articulos-ejemplo-ferreteria.csv", 30]] as const) {
+    const p = csv(archivo);
+    const filas = validarArchivo("articulos", p.data, mapearColumnas("articulos", p.meta.fields ?? []), s().db);
+    check(`${archivo}: ${n} filas válidas`, filas.length === n && filas.every((f) => f.ok), filas.filter((f) => !f.ok).map((f) => f.errores.join(" ")).slice(0, 2).join(" | "));
+    paso(`Importar ${n} artículos`, s().importarArticulos(filas.map((f) => f.datos!)));
+  }
+  check("70 artículos y stock en 0", s().db.productos.length === 70 && s().db.stock.every((x) => x.cantidadFisica === 0));
+  const listas = s().db.listasPrecios.map((l) => l.id);
+  const cambios = calcularActualizacionMasiva(s().db.precios, s().db.productos, { productoIds: s().db.productos.map((p) => p.id), listaIds: listas }, { tipo: "MARKUP", markups: Object.fromEntries(s().db.listasPrecios.map((l) => [l.id, l.markupPorDefecto])) }, 10);
+  paso("Calcular precios desde costo + markup", s().aplicarCambiosPrecios(cambios, "Recalculado desde costo + markup"));
+  check("Paso «Precios» de la guía tildado", pasosCargaInicial(s().db).find((x) => x.id === "precios")!.hecho);
+  const provId = paso("Crear proveedor", s().guardarProveedor({ codigo: "", razonSocial: "Cementos del Plata S.A.", tipo: "FABRICANTE", cuit: generarCUIT("30", 52087399), condicionIVA: "RI", circuitoHabitual: 1, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", unidadNegocioIds: ["un_cor"], activo: true }));
+  const cemento = s().db.productos.find((p) => p.unidad === "BOLSA" && p.unidadNegocioId === "un_cor")!;
+  const ocId = paso("OC por 400 bolsas", s().guardarOC({ proveedorId: provId, circuito: 1, origen: "NUEVA", depositoDestinoId: "dep_central", sucursalId: "suc_central", fechaEmision: hoy, fechaEntregaEstimada: hoy, items: [{ id: "i1", productoId: cemento.id, cantidadPedida: 400, cantidadRecibida: 0, costoUnitario: 9800, descuentoPct: 0 }] }));
+  paso("Enviar OC", s().cambiarEstadoOC(ocId, "ENVIADA"));
+  paso("Confirmar OC", s().cambiarEstadoOC(ocId, "CONFIRMADA"));
+  check("En tránsito 0 → 400", pos(cemento.id, "dep_central").enTransito === 400);
+  const oc = s().db.ordenesCompra.find((o) => o.id === ocId)!;
+  paso("Ingreso de mercadería", s().recibirMercaderia({ ordenCompraId: ocId, remitoProveedor: "R 0001-00000001", facturaProveedor: "A 0001-00000001", fecha: hoy, depositoId: "dep_central", items: [{ itemOCId: oc.items[0].id, cantidad: 400, costoUnitario: 9800, diferencia: "OK" }] }));
+  check("Físico 400, en tránsito 0", pos(cemento.id, "dep_central").fisico === 400 && pos(cemento.id, "dep_central").enTransito === 0);
+  const deuda = s().db.comprobantes.filter((c) => c.proveedorId === provId).reduce((a, c) => a + c.saldoPendiente, 0);
+  check("Le debemos = $ 3.920.000 + IVA", Math.abs(deuda - 400 * 9800 * 1.21) < 1, String(deuda));
+  paso("Inventario inicial con costo en Sucursal 2", s().crearAjuste({ depositoId: "dep_2", items: [{ productoId: cemento.id, cantidad: 100, signo: 1, motivo: "INVENTARIO_INICIAL", costoUnitario: 9500 }] }));
+  check("Físico en Sucursal 2 = 100", pos(cemento.id, "dep_2").fisico === 100);
+  const cliId = paso("Crear cliente", s().guardarCliente({ codigo: "", razonSocial: "Constructora del Sur S.R.L.", tipo: "CONSTRUCTORA", cuit: generarCUIT("30", 71234599), condicionIVA: "RI", circuitoHabitual: 2, email: "", telefono: "", direccion: "", localidad: "", listaPreciosId: "lst_may", condicionPago: "CTA_CTE_30", limiteCredito: 10_000_000, sucursalPreferidaId: "suc_central", activo: true }));
+  const obraId = paso("Crear obra", s().guardarObra({ clienteId: cliId, nombre: "Edificio Boedo", activa: true }));
+  const acoId = paso("Acopio por $ 4.500.000", s().crearAcopio({ clienteId: cliId, sucursalId: "suc_central", depositoId: "dep_central", fechaCreacion: hoy, fechaVencimiento: new Date(Date.now() + 180 * 86400000).toISOString(), circuito: 2, obraIds: [obraId], importe: 4_500_000, alicuotaIIBBPct: 0, formaPago: "ANTICIPO", listaPreciosBaseId: "lst_may", unidadNegocioId: "un_cor", medios: [{ medio: "TRANSFERENCIA", importe: 4_500_000 }] })).id;
+  check("Saldo del acopio $ 4.500.000", saldoAco(acoId) === 4_500_000);
+  const npId = paso("Retiro de 40 bolsas", s().crearNotaPedido({ clienteId: cliId, sucursalId: "suc_central", depositoId: "dep_central", fecha: hoy, circuito: 2, origen: "ACOPIO", acopioId: acoId, formaPago: "ACOPIO", items: [{ productoId: cemento.id, obraId, cantidad: 40, precioUnitario: 1 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "RETIRA" }));
+  check("Pendiente +40 y disponible 400 → 360", pos(cemento.id, "dep_central").pendiente === 40 && pos(cemento.id, "dep_central").disponible === 360);
+  check("Saldo del acopio baja", saldoAco(acoId) < 4_500_000);
+  const rem = paso("Remito en picking", s().generarRemito(npId, { estado: "PICKING" }));
+  check("Reservado +40", pos(cemento.id, "dep_central").reservado === 40);
+  paso("Remito hecho", s().marcarRemitoHecho(rem.id));
+  const p2 = pos(cemento.id, "dep_central");
+  check("Físico 400 → 360, pendiente y reservado en 0", p2.fisico === 360 && p2.pendiente === 0 && p2.reservado === 0);
+  paso("Saldo inicial de cliente", s().cargarSaldoInicial({ tipo: "cliente", entidadId: cliId, importe: 250_000, fecha: hoy, circuito: 1 }));
+  const si = s().db.comprobantes.find((c) => c.tipo === "SALDO_INICIAL")!;
+  paso("Cobro del saldo inicial", s().registrarCobranza({ clienteId: cliId, circuito: 1, fecha: hoy, medios: [{ medio: "EFECTIVO", importe: 250_000 }], imputaciones: [{ comprobanteId: si.id, importe: 250_000 }] }));
+  check("Guía de carga inicial completa", pasosCargaInicial(s().db).every((x) => x.hecho), pasosCargaInicial(s().db).filter((x) => !x.hecho).map((x) => x.titulo).join(", "));
+  const res = verificarIntegridad(s().db);
+  check("Integridad desde vacío", res.ok, res.chequeos.filter((c) => !c.ok).map((c) => c.errores[0]).join(" | "));
+  paso("Cargar datos de ejemplo con datos: pide confirmación", s().cargarDatosEjemplo(), "HAY_DATOS");
+  paso("Reemplazar por datos de ejemplo", s().cargarDatosEjemplo({ reemplazar: true }));
+  check("Ejemplo cargado", s().db.productos.length > 100);
+  s().resetearDemo();
+  check("Vaciar deja solo estructura", !s().db.productos.length && !s().db.clientes.length && s().db.usuarios.length === 4 && s().ui.usuarioId === "usr_felipe");
 }
 
 if (fallas) {

@@ -15,6 +15,8 @@ export interface UIState {
   /** Usuarios que ya vieron el tour guiado. */
   tourVisto: Record<string, boolean>;
   tourAbierto: boolean;
+  /** Usuarios que ocultaron la guía de carga inicial ("No mostrar más"). */
+  guiaOculta: Record<string, boolean>;
 }
 
 export type Resultado<T = void> = { ok: true; data: T; mensaje?: string } | { ok: false; error: string; codigo?: string };

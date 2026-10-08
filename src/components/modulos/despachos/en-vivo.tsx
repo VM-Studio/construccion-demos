@@ -1,11 +1,12 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Flag, Minimize2, PlayCircle } from "lucide-react";
+import { Flag, Minimize2, PlayCircle, Warehouse } from "lucide-react";
 import { useDb, usePuede, useSucursalActiva } from "@/store/selectors";
 import type { Despacho } from "@/domain/types";
 import { minutosEspera, minutosPreparacion, minutosTotal, nivelTiempo, promedio } from "@/domain/despachos";
 import { useEmpresa } from "@/store/selectors";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -22,7 +23,7 @@ export function DepositoEnVivo() {
   const puede = usePuede("despachos.operar");
   const ahora = useAhora(15_000);
   const { iniciar, finalizar, dialogo } = useAccionesDespacho();
-  const [deposito, setDeposito] = React.useState(db.sucursales.find((s) => s.id === sucursal)?.depositoId ?? "dep_central");
+  const [deposito, setDeposito] = React.useState(db.sucursales.find((s) => s.id === sucursal)?.depositoId ?? db.depositos[0]?.id ?? "");
   const hoy = diaLocal(new Date());
   const ds = db.despachos.filter((d) => d.depositoId === deposito && (d.estado === "ESPERA" || d.estado === "PREPARACION" || (["FINALIZADO", "EN_VIAJE", "ENTREGADO"].includes(d.estado) && d.fechaFin && diaLocal(d.fechaFin) === hoy)));
   const cols: { titulo: string; estados: Despacho["estado"][]; tono: string }[] = [
@@ -46,6 +47,11 @@ export function DepositoEnVivo() {
         <div className="ml-auto w-[220px]"><Select aria-label="Depósito" value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} /></div>
         <Button variant="secondary" onClick={() => router.push("/despachos")}><Minimize2 /> Salir</Button>
       </header>
+      {!ds.length && (
+        <div className="mb-4 rounded-card border border-border bg-surface">
+          <VacioGuiado pagina="enVivo" icono={Warehouse} className="py-6" />
+        </div>
+      )}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-3">
         {cols.map((c) => {
           const lista = ds.filter((d) => c.estados.includes(d.estado)).sort((a, b) => (a.fechaInicioPreparacion ?? a.fechaEspera).localeCompare(b.fechaInicioPreparacion ?? b.fechaEspera));

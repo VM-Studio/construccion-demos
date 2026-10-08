@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { EstadoInicial } from "@/domain/types";
-import { configInicial, crearSeed } from "@/data/seed";
+import { configInicial, seedBase } from "@/data/seed";
 import { ejecutar } from "./helpers";
 import type { StoreBase, UIState } from "./types";
 import { crearSliceCatalogo } from "./slices/catalogo";
@@ -16,8 +16,9 @@ import { crearSliceDespachos } from "./slices/despachos";
 import { crearSliceFinanzas } from "./slices/finanzas";
 import { crearSliceConfig } from "./slices/config";
 import { crearSliceRemitos } from "./slices/remitos";
+import { crearSliceImportacion } from "./slices/importacion";
 
-export const STORAGE_KEY = "aceros-rnf-v1";
+export const STORAGE_KEY = "cd-demo-v2";
 
 /** Estado vacío para el primer render (antes de hidratar desde localStorage). */
 function estadoVacio(): EstadoInicial {
@@ -41,6 +42,7 @@ const UI_INICIAL: UIState = {
   tourAbierto: false,
   favoritosModulos: {},
   favoritosPaginas: {},
+  guiaOculta: {},
 };
 
 function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<StoreBase>)) => void, get: () => StoreBase) {
@@ -68,6 +70,8 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
         const nuevo = actual.includes(href) ? actual.filter((x) => x !== href) : [...actual, href];
         return { ui: { ...s.ui, favoritosPaginas: { ...s.ui.favoritosPaginas, [u]: nuevo } } };
       }),
+    /** Oculta o vuelve a mostrar la guía de carga inicial para el usuario actual. */
+    setGuiaOculta: (oculta: boolean) => set((s) => ({ ui: { ...s.ui, guiaOculta: { ...s.ui.guiaOculta, [s.ui.usuarioId ?? ""]: oculta } } })),
     toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarColapsado: !s.ui.sidebarColapsado } })),
     abrirTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: true } })),
     cerrarTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: false, tourVisto: { ...s.ui.tourVisto, [s.ui.usuarioId ?? ""]: true } } })),
@@ -85,6 +89,7 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     ...crearSliceFinanzas(set, get),
     ...crearSliceConfig(set, get),
     ...crearSliceRemitos(set, get),
+    ...crearSliceImportacion(set, get),
   };
 }
 
@@ -107,8 +112,8 @@ export const useStore = create<Store>()(
       partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false } }),
       merge: (persisted, current) => {
         const p = persisted as Partial<StoreBase> | undefined;
-        // Un db guardado incompleto (versión vieja o reseteo) se descarta y se regenera el seed.
-        const valido = !!p?.db?.productos?.length && !!p.db.unidadesNegocio?.length && !!p.db.usuarios?.length;
+        // Un db guardado sin estructura (versión vieja o reseteo) se descarta y se regenera la base.
+        const valido = !!p?.db?.unidadesNegocio?.length && !!p.db.usuarios?.length && !!p.db.sucursales?.length && !!p.db.config;
         return { ...current, db: valido ? p!.db! : current.db, ui: { ...current.ui, ...(p?.ui ?? {}) } };
       },
     },
@@ -117,17 +122,17 @@ export const useStore = create<Store>()(
 
 let hidratando = false;
 
-/** Hidrata el store desde localStorage (o crea el seed la primera vez). Llamar una vez en el cliente. */
+/** Hidrata el store desde localStorage (o crea la estructura base la primera vez). Llamar una vez en el cliente. */
 export async function hidratarStore() {
   if (useStore.getState().hidratado || hidratando) return;
   hidratando = true;
   await useStore.persist.rehydrate();
   const { db } = useStore.getState();
-  if (!db.productos.length || !db.unidadesNegocio?.length) useStore.setState({ db: crearSeed(new Date()) });
+  if (!db.unidadesNegocio?.length || !db.usuarios?.length) useStore.setState({ db: seedBase(new Date()) });
   useStore.setState({ hidratado: true });
   hidratando = false;
-  // Los remitos firmados de ejemplo se generan en runtime (jsPDF) y se guardan en IndexedDB.
-  void import("@/lib/adjuntos").then((m) => m.asegurarAdjuntosDemo()).catch(() => undefined);
+  // Los remitos firmados de los datos de ejemplo se generan en runtime (jsPDF) y se guardan en IndexedDB.
+  if (useStore.getState().db.adjuntos.length) void import("@/lib/adjuntos").then((m) => m.asegurarAdjuntosDemo()).catch(() => undefined);
 }
 
 /** true cuando el store ya se hidrató (evita mismatch SSR / flash de login). */

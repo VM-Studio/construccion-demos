@@ -1,0 +1,3 @@
+codigo,razon_social,nombre_fantasia,tipo,cuit,condicion_iva,email,telefono,direccion,localidad,lista_precios,condicion_pago,limite_credito,circuito_habitual,obras
+,Constructora del Sur S.R.L.,CDS Obras,Constructora,30-71234567-1,Responsable Inscripto,compras@constructoradelsur.com.ar,(011) 4244-1020,Av. Hipólito Yrigoyen 8450,Lomas de Zamora,Mayorista,30 días,15000000,1,Edificio Boedo 1240|Barrio Las Acacias
+,Martín Gómez,,Particular,,Consumidor final,martin.gomez@gmail.com,11 5523-8890,Calle 14 N° 1532,Berazategui,Público,Contado,0,2,Casa Hudson

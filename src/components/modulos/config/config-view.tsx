@@ -3,13 +3,15 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Download, ImagePlus, Plus, RotateCcw, Save, ShieldCheck, Upload, XCircle } from "lucide-react";
+import { CheckCircle2, DatabaseZap, Download, Eraser, ImagePlus, Plus, Save, ShieldCheck, Upload, XCircle } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { verificarIntegridad, type ResultadoIntegridad } from "@/domain/integridad";
-import { formatearDoc } from "@/domain/numeracion";
+import { estaVacio } from "@/domain/prerequisitos";
+import { filasNumeracion, formatearDoc } from "@/domain/numeracion";
+import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { CodigoDoc } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -28,6 +30,8 @@ import { cn, descargarArchivo } from "@/lib/utils";
 
 const ok = (r: { ok: boolean; error?: string }, msg: string) => (r.ok ? toast.success(msg) : toast.error(r.error));
 
+const RESUMEN_EJEMPLO = "150 artículos de Corralón y Ferretería con precios y stock, 28 clientes con 38 obras, 12 proveedores, 10 acopios (incluido el de referencia que cierra en $ 844,85), 4 acopios con proveedores, 103 notas de pedido, 106 remitos, compras, cobranzas, cheques y despachos de los últimos meses.";
+
 const TITULOS: Record<string, [string, string]> = {
   empresa: ["Empresa", "Datos de la empresa que se usan en todas las impresiones."],
   sucursales: ["Sucursales y depósitos", "Puntos de venta, depósitos y posiciones de carga."],
@@ -35,7 +39,7 @@ const TITULOS: Record<string, [string, string]> = {
   usuarios: ["Usuarios y roles", "Usuarios del sistema y matriz de permisos por rol."],
   parametros: ["Parámetros", "IVA, vencimiento de acopios, avisos y adjuntos."],
   numeracion: ["Numeración", "Último número usado por código de documento, circuito y punto de venta."],
-  demo: ["Datos del demo", "Restablecer, exportar e importar respaldos y verificar integridad."],
+  demo: ["Datos del demo", "Vaciar, cargar datos de ejemplo, respaldos y verificación de integridad."],
 };
 
 /** Configuración: cada página del módulo es una sección (`?tab=`), navegada desde la barra lateral. */
@@ -62,7 +66,7 @@ export function ConfigView() {
 export function ListasPreciosView() {
   return (
     <>
-      <PageHeader titulo="Listas de precios" descripcion="Mayorista, General y Público: markup por defecto sobre el costo de reposición." />
+      <PageHeader titulo="Listas de precios" descripcion="Mayorista, Corralón y Público: markup por defecto sobre el costo de reposición." />
       <Listas />
     </>
   );
@@ -435,49 +439,68 @@ function Numeracion() {
   const db = useDb();
   const usuario = useUsuario();
   const esDueno = puede(usuario, "config.usuarios");
-  const [edit, setEdit] = React.useState<{ k: string; n: number; label: string } | null>(null);
-  const numeradores = Object.entries(db.numeradores)
-    .map(([k, n]) => {
-      const [codigo, circ, pv] = k.split("|");
-      return { k, codigo: codigo as CodigoDoc, circ: Number(circ) as 0 | 1 | 2, pv, n };
-    })
-    .sort((a, b) => a.codigo.localeCompare(b.codigo) || a.circ - b.circ || a.pv.localeCompare(b.pv));
+  const [edit, setEdit] = React.useState<{ k: string; ultimo: number; proximo: number; codigo: CodigoDoc; circ: 1 | 2 | null; pv: string; label: string } | null>(null);
+  const [codigo, setCodigo] = React.useState("");
+  const [soloUsados, setSoloUsados] = React.useState(false);
+  const filas = filasNumeracion(db.numeradores, db.sucursales).filter((x) => (!codigo || x.codigo === codigo) && (!soloUsados || x.ultimo > 0));
+  const columnas: Column<(typeof filas)[number]>[] = [
+    { key: "c", header: "Documento", cell: (x) => <span><span className="font-mono text-[12px]">{x.codigo}{x.circuito ?? ""}</span> <span className="text-muted">· {x.nombre}</span></span> },
+    { key: "ci", header: "Circuito", cell: (x) => (x.circuito ? <CircuitoBadge circuito={x.circuito} /> : <span className="text-disabled">—</span>) },
+    { key: "pv", header: "Punto de venta", cell: (x) => <span className="font-mono text-[12px]">{x.puntoVenta}</span> },
+    { key: "u", header: "Último usado", align: "right", cell: (x) => <span className={cn("tnum", !x.ultimo && "text-disabled")}>{x.ultimo || "—"}</span> },
+    { key: "p", header: "Próximo número", cell: (x) => <span className="font-mono text-[12px]">{formatearDoc(x.codigo, x.circuito, x.puntoVenta, x.ultimo + 1)}</span> },
+    {
+      key: "a",
+      header: "",
+      align: "right",
+      cell: (x) =>
+        esDueno ? (
+          <Button size="sm" variant="ghost" onClick={() => setEdit({ k: x.clave, ultimo: x.ultimo, proximo: x.ultimo + 1, codigo: x.codigo, circ: x.circuito, pv: x.puntoVenta, label: `${x.codigo}${x.circuito ?? ""} · PV ${x.puntoVenta}` })}>
+            Establecer número inicial
+          </Button>
+        ) : null,
+    },
+  ];
+  const codigos = [...new Set(filasNumeracion(db.numeradores, db.sucursales).map((x) => x.codigo))];
+  const invalido = !!edit && (!Number.isInteger(edit.proximo) || edit.proximo - 1 < edit.ultimo);
   return (
-    <Card>
-      <div className="overflow-x-auto">
-        <table className="w-full text-table">
-          <thead className="bg-[#FAFAF8] text-[12px] text-muted">
-            <tr>
-              <th className="h-9 px-4 text-left font-medium">Código</th>
-              <th className="h-9 px-4 text-left font-medium">Circuito</th>
-              <th className="h-9 px-4 text-left font-medium">Punto de venta</th>
-              <th className="h-9 px-4 text-right font-medium">Último usado</th>
-              <th className="h-9 px-4 text-left font-medium">Próximo número</th>
-              <th className="h-9 w-48" />
-            </tr>
-          </thead>
-          <tbody>
-            {numeradores.map((x) => (
-              <tr key={x.k} className="h-10 border-t border-border">
-                <td className="px-4 font-mono text-[12px]">{x.codigo}</td>
-                <td className="px-4 text-muted">{x.circ ? `AC${x.circ}` : "—"}</td>
-                <td className="px-4 font-mono text-[12px]">{x.pv}</td>
-                <td className="px-4 text-right tnum">{x.n}</td>
-                <td className="px-4 font-mono text-[12px]">{formatearDoc(x.codigo, x.circ ? (x.circ as 1 | 2) : null, x.pv, x.n + 1)}</td>
-                <td className="px-2 text-right">{esDueno && <Button size="sm" variant="ghost" onClick={() => setEdit({ k: x.k, n: x.n, label: `${x.codigo}${x.circ || ""} · PV ${x.pv}` })}>Establecer número inicial</Button>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <>
+      <p className="mb-3 max-w-3xl text-[13px] text-muted">
+        Para continuar la numeración del sistema actual, establecé el próximo número de cada documento (por ejemplo, que la próxima NP2 de Casa Central sea 0001-00067300). No se puede volver atrás de un número ya usado.
+        {!esDueno && " Solo el Dueño puede cambiarla."}
+      </p>
+      <DataTable
+        rows={filas}
+        columns={columnas}
+        getRowId={(x) => x.clave}
+        pageSize={50}
+        filters={
+          <>
+            <div className="w-[220px]"><Select size="sm" aria-label="Documento" value={codigo} onValueChange={setCodigo} options={[{ value: "", label: "Todos los documentos" }, ...codigos.map((c) => ({ value: c, label: c }))]} /></div>
+            <label className="flex items-center gap-2 text-[13px] text-muted"><Switch checked={soloUsados} onCheckedChange={setSoloUsados} aria-label="Solo los ya usados" /> Solo los ya usados</label>
+          </>
+        }
+      />
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
         {edit && (
-          <DialogContent size="sm" title={`Número inicial · ${edit.label}`} description="Ingresá el último número usado en el sistema anterior: el próximo documento sale con el siguiente." footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().establecerNumeroInicial(edit.k, edit.n); ok(r, "Numeración actualizada"); if (r.ok) setEdit(null); }}>Guardar</Button></>}>
-            <FormField label="Último número usado" htmlFor="num-u"><NumberInput id="num-u" value={edit.n} min={0} onValueChange={(v) => setEdit({ ...edit, n: Math.round(v) })} /></FormField>
+          <DialogContent
+            size="sm"
+            title={`Número inicial · ${edit.label}`}
+            description="Ingresá el número con el que tiene que salir el próximo documento."
+            footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={invalido} onClick={() => { const r = useStore.getState().establecerNumeroInicial(edit.k, edit.proximo - 1); ok(r, "Numeración actualizada"); if (r.ok) setEdit(null); }}>Guardar</Button></>}
+          >
+            <div className="space-y-3">
+              <FormField label="Próximo número" htmlFor="num-u" error={invalido ? `Tiene que ser mayor a ${edit.ultimo} (último usado).` : undefined}>
+                <NumberInput id="num-u" value={edit.proximo} min={edit.ultimo + 1} onValueChange={(v) => setEdit({ ...edit, proximo: Math.round(v) })} />
+              </FormField>
+              <p className="rounded-control bg-subtle px-3 py-2 text-[13px]">
+                El próximo documento sale como <span className="font-mono font-medium">{formatearDoc(edit.codigo, edit.circ, edit.pv, Math.max(1, edit.proximo))}</span>
+              </p>
+            </div>
           </DialogContent>
         )}
       </Dialog>
-    </Card>
+    </>
   );
 }
 
@@ -488,31 +511,87 @@ function DatosDemo() {
   const [res, setRes] = React.useState<ResultadoIntegridad | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const esDueno = puede(usuario, "config.usuarios");
+  const vacio = estaVacio(db);
+  const guiaOculta = useStore((s) => !!s.ui.guiaOculta[s.ui.usuarioId ?? ""]);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Datos del demo</CardTitle>
+          <Badge variant={vacio ? "neutral" : "accent"}>{vacio ? "Solo estructura" : `${db.productos.length} artículos · ${db.clientes.length} clientes · ${db.proveedores.length} proveedores`}</Badge>
+        </CardHeader>
+        <CardContent className="space-y-4 text-[13px]">
+          <p className="text-muted">Los datos viven en este navegador. El sistema arranca vacío (solo la estructura de la empresa) para cargar todo en vivo; los datos de ejemplo se cargan a pedido.</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
+              <span className="font-medium text-ink">Vaciar todo</span>
+              <span className="flex-1 text-[12px] text-muted">Deja solo la estructura: empresa, sucursales y depósitos, unidades de negocio y rubros, listas de precios sin precios, usuarios y parámetros. Numeración en 0.</span>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={!esDueno}
+                onClick={() =>
+                  confirmar({
+                    titulo: "Vaciar todo (dejar solo estructura)",
+                    descripcion: "Se borran artículos, clientes, proveedores, stock, ventas, acopios, compras, remitos, comprobantes, adjuntos y auditoría. Quedan la empresa, las sucursales, los rubros, las listas de precios y los usuarios.",
+                    confirmLabel: "Vaciar todo",
+                    variant: "danger",
+                    onConfirm: () => {
+                      useStore.getState().resetearDemo();
+                      toast.success("Datos vaciados: quedó solo la estructura");
+                      setRes(null);
+                    },
+                  })
+                }
+              >
+                <Eraser /> Vaciar todo (dejar solo estructura)
+              </Button>
+            </div>
+            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
+              <span className="font-medium text-ink">Cargar datos de ejemplo</span>
+              <span className="flex-1 text-[12px] text-muted">{RESUMEN_EJEMPLO}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!esDueno}
+                onClick={() =>
+                  confirmar({
+                    titulo: vacio ? "Cargar datos de ejemplo" : "Reemplazar por los datos de ejemplo",
+                    descripcion: (
+                      <>
+                        <span className="block">Se cargan {RESUMEN_EJEMPLO.charAt(0).toLowerCase() + RESUMEN_EJEMPLO.slice(1)}</span>
+                        {!vacio && <span className="mt-2 block font-medium text-danger">Ya hay datos cargados: se van a reemplazar. Se conservan los datos de la empresa y los parámetros.</span>}
+                      </>
+                    ),
+                    confirmLabel: vacio ? "Cargar datos de ejemplo" : "Reemplazar",
+                    variant: vacio ? "default" : "danger",
+                    onConfirm: () => {
+                      const r = useStore.getState().cargarDatosEjemplo({ reemplazar: !vacio });
+                      ok(r, "Datos de ejemplo cargados");
+                      setRes(null);
+                    },
+                  })
+                }
+              >
+                <DatabaseZap /> Cargar datos de ejemplo
+              </Button>
+            </div>
+            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
+              <span className="font-medium text-ink">Verificar integridad</span>
+              <span className="flex-1 text-[12px] text-muted">Kardex contra stock físico, entregados y pendientes contra remitos, saldos de acopios y comprobantes, y numeración sin repetidos.</span>
+              <Button variant="secondary" size="sm" onClick={() => setRes(verificarIntegridad(useStore.getState().db))}><ShieldCheck /> Verificar integridad</Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
+          </div>
+        </CardContent>
+      </Card>
       <Card>
-        <CardHeader><CardTitle>Datos de demostración</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Respaldos</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-[13px]">
-          <p className="text-muted">Los datos viven en este navegador. Podés volver al set inicial en cualquier momento (por ejemplo, antes de una reunión) o guardar un respaldo y restaurarlo después.</p>
+          <p className="text-muted">Guardá un respaldo antes de una reunión y restauralo después.</p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="danger"
-              onClick={() =>
-                confirmar({
-                  titulo: "Restablecer datos de demostración",
-                  descripcion: "Se descartan todos los cambios y se vuelve al set inicial con fechas relativas a hoy.",
-                  confirmLabel: "Restablecer",
-                  variant: "danger",
-                  onConfirm: () => {
-                    useStore.getState().resetearDemo();
-                    toast.success("Datos del demo restablecidos");
-                    setRes(null);
-                  },
-                })
-              }
-            >
-              <RotateCcw /> Restablecer datos de demostración
-            </Button>
             <Button variant="secondary" onClick={() => { descargarArchivo(`respaldo-aceros-rnf-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(db), "application/json"); toast.success("Respaldo descargado", { description: `Incluye la metadata de ${db.adjuntos.length} adjuntos.` }); }}><Download /> Exportar respaldo (JSON)</Button>
             <Button
               variant="secondary"
@@ -565,7 +644,7 @@ function DatosDemo() {
       <Card>
         <CardHeader>
           <CardTitle>Verificación de integridad</CardTitle>
-          <Button size="sm" onClick={() => setRes(verificarIntegridad(useStore.getState().db))}><ShieldCheck /> Verificar ahora</Button>
+          <Button size="sm" variant="secondary" onClick={() => setRes(verificarIntegridad(useStore.getState().db))}><ShieldCheck /> Verificar ahora</Button>
         </CardHeader>
         <CardContent className="text-[13px]">
           {!res ? (

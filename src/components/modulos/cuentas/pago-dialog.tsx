@@ -137,7 +137,7 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
                 <Button size="sm" variant="secondary" disabled={!pendientes.length || total <= 0} onClick={() => setImput(Object.fromEntries(imputarAutomaticamente(total, pendientes).imputaciones.map((i) => [i.comprobanteId, i.importe])))}><Wand2 /> Imputar automáticamente</Button>
               </div>
               {pendientes.length === 0 ? (
-                <p className="rounded-control border border-dashed border-border py-6 text-center text-[13px] text-muted">No hay facturas pendientes con este proveedor.</p>
+                <p className="rounded-control border border-dashed border-border py-6 text-center text-[13px] text-muted">No hay facturas pendientes con este proveedor en este circuito. Si ya se le debía de antes, cargalo con «Cargar saldo inicial» en su cuenta corriente.</p>
               ) : (
                 <div className="overflow-x-auto rounded-card border border-border">
                   <table className="w-full min-w-[600px] text-table">

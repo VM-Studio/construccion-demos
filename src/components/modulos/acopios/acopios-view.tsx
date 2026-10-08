@@ -10,6 +10,7 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { Combobox } from "@/components/shared/combobox";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
@@ -112,7 +113,7 @@ export function AcopiosView() {
         searchPlaceholder="Buscar por número, cliente u obra…"
         initialSort={{ key: "v", dir: "asc" }}
         showFooter
-        empty={{ icono: Boxes, titulo: "No hay acopios para el filtro" }}
+        empty={db.acopios.length === 0 ? <VacioGuiado pagina="acopios" icono={Boxes} puedeAccion={puedeCrear} /> : { icono: Boxes, titulo: "No hay acopios para el filtro" }}
         filters={
           <>
             <div className="w-[140px]"><Select size="sm" aria-label="Estado" value={estado} onValueChange={setEstado} options={[{ value: "", label: "Todos los estados" }, { value: "VIGENTE", label: "Vigentes" }, { value: "VENCIDO", label: "Vencidos" }, { value: "AGOTADO", label: "Agotados" }, { value: "CANCELADO", label: "Cancelados" }]} /></div>

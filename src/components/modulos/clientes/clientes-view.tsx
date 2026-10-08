@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, Users } from "lucide-react";
+import { Download, Plus, Upload, Users } from "lucide-react";
 import { useDb, usePendientes, usePuede, useSaldosClientes, useAcopiosResumen, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
 import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opciones } from "@/domain/estados";
 import type { Cliente } from "@/domain/types";
@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
 import { aCSV, cn, descargarArchivo } from "@/lib/utils";
 import { NuevoClienteDialog } from "@/components/modulos/ventas/cliente-form";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { ImportarCsvDialog } from "@/components/shared/importar-csv-dialog";
 
 export interface ResumenCliente {
   c: Cliente;
@@ -60,6 +62,7 @@ export function ClientesView() {
   const puedeCrear = usePuede("clientes.editar");
   const resumen = useResumenClientes();
   const [nuevo, setNuevo] = React.useState(params.get("nuevo") === "1");
+  const [importar, setImportar] = React.useState(false);
   const [tipo, setTipo] = React.useState("");
   const [circuito, setCircuito] = React.useState("");
   const [vendedor, setVendedor] = React.useState("");
@@ -121,7 +124,8 @@ export function ClientesView() {
         descripcion="Centro de operación comercial: desde el cliente se acopia, se vende, se cobra y se entrega."
         acciones={
           <>
-            <Button variant="secondary" onClick={exportar}><Download /> Exportar</Button>
+            {puedeCrear && <Button variant="secondary" onClick={() => setImportar(true)}><Upload /> Importar CSV</Button>}
+            <Button variant="secondary" onClick={exportar} disabled={!db.clientes.length}><Download /> Exportar</Button>
             {puedeCrear && <Button onClick={() => setNuevo(true)}><Plus /> Nuevo cliente</Button>}
           </>
         }
@@ -141,7 +145,19 @@ export function ClientesView() {
         searchPlaceholder="Buscar por código, nombre, CUIT o localidad…"
         initialSort={{ key: "rs", dir: "asc" }}
         showFooter
-        empty={{ icono: Users, titulo: "No hay clientes para el filtro" }}
+        empty={
+          db.clientes.length === 0 ? (
+            <VacioGuiado
+              pagina="clientes"
+              icono={Users}
+              onAccion={() => setNuevo(true)}
+              puedeAccion={puedeCrear}
+              extra={puedeCrear && <Button size="sm" variant="secondary" onClick={() => setImportar(true)}><Upload /> Importar desde CSV</Button>}
+            />
+          ) : (
+            { icono: Users, titulo: "No hay clientes para el filtro" }
+          )
+        }
         filters={
           <>
             <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opciones(TIPO_CLIENTE_LABEL)]} /></div>
@@ -153,6 +169,7 @@ export function ClientesView() {
           </>
         }
       />
+      <ImportarCsvDialog tipo="clientes" open={importar} onOpenChange={setImportar} />
       <NuevoClienteDialog open={nuevo} onOpenChange={setNuevo} onCreado={(id) => router.push(`/clientes/${id}`)} />
     </>
   );

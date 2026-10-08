@@ -13,6 +13,7 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useConfirm } from "@/components/shared/confirm-dialog";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -170,7 +171,7 @@ export function DespachosView() {
         searchPlaceholder="Despacho o cliente…"
         initialSort={{ key: "he", dir: "asc" }}
         onRowClick={(d) => d.notaPedidoId && router.push(`/ventas/notas-pedido/${d.notaPedidoId}`)}
-        empty={{ icono: Truck, titulo: "No hay despachos para el día" }}
+        empty={db.despachos.length ? { icono: Truck, titulo: "No hay despachos para el día o el filtro" } : <VacioGuiado pagina="despachos" icono={Truck} />}
         filters={
           <>
             <Input type="date" aria-label="Fecha" value={fecha} onChange={(e) => setFecha(e.target.value)} className="h-8 w-[150px]" />

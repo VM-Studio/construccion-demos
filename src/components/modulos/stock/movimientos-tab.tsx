@@ -9,6 +9,7 @@ import { ESTADOS } from "@/domain/estados";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatMoney, formatNumber, unidadCorta } from "@/lib/format";
@@ -24,6 +25,7 @@ const TIPOS = Object.keys(ESTADOS)
 export function MovimientosTab({ conTotalesPorTipo }: { conTotalesPorTipo?: boolean }) {
   const db = useDb();
   const verCostos = usePuede("margenes.ver");
+  const puedeAjustar = usePuede("stock.ajustar");
   const [periodo, setPeriodo] = React.useState<Periodo>(() => periodoDesdePreset("30D"));
   const [dep, setDep] = React.useState("");
   const [tipo, setTipo] = React.useState("");
@@ -126,7 +128,7 @@ export function MovimientosTab({ conTotalesPorTipo }: { conTotalesPorTipo?: bool
         searchPlaceholder="Producto o referencia"
         initialSort={{ key: "fecha", dir: "desc" }}
         pageSize={50}
-        empty={{ icono: History, titulo: "Sin movimientos en el período" }}
+        empty={db.movimientos.length ? { icono: History, titulo: "Sin movimientos para el período o el filtro" } : <VacioGuiado pagina="movimientos" icono={History} puedeAccion={puedeAjustar} />}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={[{ value: "HOY", label: "Hoy" }, { value: "7D", label: "7 días" }, { value: "30D", label: "30 días" }, { value: "90D", label: "90 días" }]} />

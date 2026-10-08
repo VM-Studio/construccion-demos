@@ -53,7 +53,7 @@ export function PageHeader({
         {descripcion && <p className="mt-0.5 text-[13px] text-muted">{descripcion}</p>}
         {children}
       </div>
-      {acciones && <div className="flex max-w-full flex-wrap items-center gap-2">{acciones}</div>}
+      {acciones && <div className="flex max-w-full flex-wrap items-center gap-2" data-tour="acciones">{acciones}</div>}
     </div>
   );
 }

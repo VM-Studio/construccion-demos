@@ -5,7 +5,9 @@ import { Command } from "cmdk";
 import { Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { useDb, usePosiciones, posicionEn } from "@/store/selectors";
+import { useStore } from "@/store";
+import { useDb, usePosiciones, posicionEn, usePuede, useUnidadNegocio } from "@/store/selectors";
+import { AltaRapidaSheet } from "./alta-rapida";
 import { obtenerPrecio } from "@/domain/precios";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,7 @@ export function ProductoPicker({
   label = "Agregar producto",
   disabled,
   className,
+  permitirAlta,
 }: {
   onSelect: (p: Producto) => void;
   depositoId?: string | null;
@@ -41,8 +44,13 @@ export function ProductoPicker({
   label?: string;
   disabled?: boolean;
   className?: string;
+  /** Mostrar "+ Crear artículo nuevo…" (por defecto sí, salvo listas cerradas como un acopio congelado). */
+  permitirAlta?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [alta, setAlta] = React.useState(false);
+  const puedeCrear = usePuede("productos.editar") && (permitirAlta ?? !precioDe);
+  const unActiva = useUnidadNegocio();
   const [busqueda, setBusqueda] = React.useState("");
   const db = useDb();
   const posiciones = usePosiciones();
@@ -91,7 +99,7 @@ export function ProductoPicker({
             <Command.Input autoFocus value={busqueda} onValueChange={setBusqueda} placeholder="Buscar por código, nombre, marca o código de barras…" className="h-10 w-full bg-transparent text-[13px] outline-none placeholder:text-disabled" />
           </div>
           <Command.List className="max-h-[340px] overflow-y-auto p-1">
-            <Command.Empty className="py-6 text-center text-[13px] text-muted">No se encontraron productos.</Command.Empty>
+            <Command.Empty className="py-6 text-center text-[13px] text-muted">{activos.length ? "No se encontraron artículos." : "Todavía no hay artículos cargados."}</Command.Empty>
             {delProveedor.length > 0 && (
               <Command.Group heading="Del proveedor" className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted">
                 {delProveedor.map(item)}
@@ -100,9 +108,32 @@ export function ProductoPicker({
             <Command.Group heading={proveedorId ? "Otros productos" : undefined} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted">
               {otros.map(item)}
             </Command.Group>
+            {puedeCrear && (
+              <Command.Item
+                value={`__nuevo ${busqueda}`}
+                forceMount
+                onSelect={() => {
+                  setOpen(false);
+                  setAlta(true);
+                }}
+                className="mt-1 flex cursor-pointer items-center gap-2 rounded-[4px] border-t border-border px-2 py-2 text-[13px] font-medium outline-none data-[selected=true]:bg-subtle"
+              >
+                <Plus className="size-3.5" /> Crear artículo nuevo…
+              </Command.Item>
+            )}
           </Command.List>
         </Command>
       </PopoverContent>
+      <AltaRapidaSheet
+        tipo="producto"
+        open={alta}
+        onOpenChange={setAlta}
+        unidadNegocioId={unActiva}
+        onCreado={(id) => {
+          const p = useStore.getState().db.productos.find((x) => x.id === id);
+          if (p) onSelect(p);
+        }}
+      />
     </Popover>
   );
 }

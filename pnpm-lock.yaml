@@ -68,6 +68,9 @@ importers:
       next:
         specifier: 15.5.27
         version: 15.5.27(@types/node@20.19.43)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      papaparse:
+        specifier: ^5.7.0
+        version: 5.7.0
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -99,6 +102,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
+      '@types/papaparse':
+        specifier: ^5.5.2
+        version: 5.5.2
       '@types/react':
         specifier: ^19
         version: 19.3.0
@@ -1163,6 +1169,9 @@ packages:
 
   '@types/pako@2.0.4':
     resolution: {integrity: sha512-VWDCbrLeVXJM9fihYodcLiIv0ku+AlOa/TQ1SvYOaBuyrSKgEcro95LJyIsJ4vSo6BXIxOKxiJAat04CmST9Fw==}
+
+  '@types/papaparse@5.5.2':
+    resolution: {integrity: sha512-gFnFp/JMzLHCwRf7tQHrNnfhN4eYBVYYI897CGX4MY1tzY9l2aLkVyx2IlKZ/SAqDbB3I1AOZW5gTMGGsqWliA==}
 
   '@types/raf@3.4.3':
     resolution: {integrity: sha512-c4YAvMedbPZ5tEyxzQdMoOhhJ4RD3rngZIdwC2/qDN3d7JpEhB6fiBRKVY1lg5B7Wk+uPBjn5f39j1/2MY1oOw==}
@@ -2550,6 +2559,9 @@ packages:
 
   pako@2.2.0:
     resolution: {integrity: sha512-zJq6RP/5q+TO2OpFV3FHzlPnFjmkb7Nc99a5SNjJE+uu/PkpChs+NIZSSzbBoD+6kjiISXjfYdwj1ZRQ81dz/w==}
+
+  papaparse@5.7.0:
+    resolution: {integrity: sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -4013,6 +4025,10 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/pako@2.0.4': {}
+
+  '@types/papaparse@5.5.2':
+    dependencies:
+      '@types/node': 20.19.43
 
   '@types/raf@3.4.3':
     optional: true
@@ -5615,6 +5631,8 @@ snapshots:
   pako@1.0.11: {}
 
   pako@2.2.0: {}
+
+  papaparse@5.7.0: {}
 
   parent-module@1.0.1:
     dependencies:

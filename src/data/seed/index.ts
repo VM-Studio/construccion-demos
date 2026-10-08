@@ -4,7 +4,7 @@ import { calcularPrecioDesdeMarkup } from "@/domain/precios";
 import { formatearDoc, numeradoresDesde } from "@/domain/numeracion";
 import { BRAND } from "@/config/brand";
 import { crearCalendario, crearRandom } from "./util";
-import { seedOrganizacion } from "./organizacion";
+import { seedOrganizacionBase, seedOrganizacionEjemplo } from "./organizacion";
 import { PRODUCTOS, UN_DE_RUBRO, seedListas, seedProveedores, seedRubros, type ProductoSpec } from "./catalogo";
 import { seedClientes } from "./clientes";
 import { generarOperaciones } from "./operaciones";
@@ -14,18 +14,68 @@ import { generarMovimientosDesdeOperaciones } from "./movimientos";
 const BAJO_MINIMO = ["70102", "60401", "86005", "20207", "84002", "83005", "30107"];
 
 /**
- * Crea el estado inicial completo del demo de Aceros RNF, con fechas relativas a `hoy`
- * (últimos ~6 meses). Determinístico: siempre genera los mismos datos.
+ * Estado con SOLO la estructura de la empresa: Aceros RNF, 2 sucursales con sus depósitos y
+ * posiciones de carga, 2 unidades de negocio con sus rubros (sin artículos), 3 listas de precios
+ * (sin precios), motivos de ajuste, 4 usuarios, configuración y numeración en 0.
+ * Cero clientes, proveedores, artículos, movimientos, documentos, adjuntos y auditoría.
  */
-export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
+export function seedBase(hoyParam: Date = new Date(), ts = hoyParam.toISOString()): EstadoInicial {
+  const org = seedOrganizacionBase(ts);
+  return {
+    sucursales: org.sucursales,
+    depositos: org.depositos,
+    usuarios: org.usuarios,
+    unidadesNegocio: org.unidadesNegocio,
+    rubros: seedRubros(ts),
+    proveedores: [],
+    productos: [],
+    listasPrecios: seedListas(ts),
+    precios: [],
+    stock: [],
+    movimientos: [],
+    transferencias: [],
+    ajustes: [],
+    ordenesCompra: [],
+    recepciones: [],
+    acopiosProveedor: [],
+    clientes: [],
+    obras: [],
+    cotizaciones: [],
+    notasPedido: [],
+    devoluciones: [],
+    ajustesAcopio: [],
+    acopios: [],
+    remitos: [],
+    adjuntos: [],
+    comprobantes: [],
+    vehiculos: [],
+    choferes: [],
+    despachos: [],
+    hojasRuta: [],
+    cobranzas: [],
+    pagosProveedores: [],
+    cheques: [],
+    auditoria: [],
+    config: configInicial(),
+    numeradores: {},
+  };
+}
+
+/**
+ * Datos de ejemplo completos de Aceros RNF, construidos sobre `seedBase()`, con fechas relativas
+ * a `hoy` (últimos ~6 meses). Determinístico: siempre genera los mismos datos.
+ */
+export function seedEjemplo(hoyParam: Date = new Date()): EstadoInicial {
   const R = crearRandom(20261005);
   const cal = crearCalendario(hoyParam);
   const ts0 = cal.dia(-280, 9);
 
-  const org = seedOrganizacion(ts0);
-  const rubros = seedRubros(ts0);
+  const base = seedBase(hoyParam, ts0);
+  const extra = seedOrganizacionEjemplo(ts0);
+  const org = { sucursales: base.sucursales, depositos: base.depositos, unidadesNegocio: base.unidadesNegocio, usuarios: [...base.usuarios, ...extra.usuarios], vehiculos: extra.vehiculos, choferes: extra.choferes };
+  const rubros = base.rubros;
   const proveedores = seedProveedores(ts0);
-  const listasPrecios = seedListas(ts0);
+  const listasPrecios = base.listasPrecios;
   const { clientes, obras } = seedClientes(ts0);
 
   // ── Productos (id = prod_<código>) ──
@@ -81,10 +131,10 @@ export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
   });
   const depositos = org.depositos.map((d) => d.id);
   const costoInicial = new Map(productos.map((p) => [p.id, Math.round(specs.get(p.id)!.costo * 0.88 * 100) / 100]));
-  const base = { productos, depositos, recepciones: ops.recepciones, remitos: ops.remitos, transferencias: ops.transferencias, notasPedido: ops.notasPedido, costoInicial };
+  const flujos = { productos, depositos, recepciones: ops.recepciones, remitos: ops.remitos, transferencias: ops.transferencias, notasPedido: ops.notasPedido, costoInicial };
 
   // Pasada 1: flujos sin inventario inicial, para calibrar la apertura.
-  const pasada1 = generarMovimientosDesdeOperaciones({ ...base, ajustes: ops.ajustes });
+  const pasada1 = generarMovimientosDesdeOperaciones({ ...flujos, ajustes: ops.ajustes });
 
   const esBajoMinimo = (p: Producto) => BAJO_MINIMO.includes(p.codigo);
   const objetivo = (p: Producto, dep: string) => {
@@ -146,7 +196,7 @@ export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
   ajustes.forEach((a, i) => (a.numero = formatearDoc("AJU", null, "0001", 600 + i + 1)));
 
   // Pasada 2: movimientos definitivos, stock final, costos y snapshots.
-  const res = generarMovimientosDesdeOperaciones({ ...base, ajustes });
+  const res = generarMovimientosDesdeOperaciones({ ...flujos, ajustes });
   for (const p of productos) {
     const c = res.costos.get(p.id)!;
     p.costoUltimo = c.costoUltimo;
@@ -177,6 +227,7 @@ export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
   const numeradores = numeradoresDesde([...ops.numeros, ...ajustes.map((a) => a.numero)]);
 
   return {
+    ...base,
     sucursales: org.sucursales,
     depositos: org.depositos,
     usuarios: org.usuarios,
@@ -211,10 +262,12 @@ export function crearSeed(hoyParam: Date = new Date()): EstadoInicial {
     pagosProveedores: ops.pagosProveedores,
     cheques: ops.cheques,
     auditoria: ops.auditoria,
-    config: configInicial(),
     numeradores,
   };
 }
+
+/** @deprecated usar `seedEjemplo` (datos completos) o `seedBase` (solo estructura). */
+export const crearSeed = seedEjemplo;
 
 export function configInicial(): EstadoInicial["config"] {
   return {
@@ -232,6 +285,7 @@ export function configInicial(): EstadoInicial["config"] {
       { codigo: "OTRO", nombre: "Otro" },
     ],
     motivosAjuste: [
+      { codigo: "INVENTARIO_INICIAL", nombre: "Inventario inicial", activo: true },
       { codigo: "ROTURA", nombre: "Rotura", activo: true },
       { codigo: "FALTANTE", nombre: "Faltante en inventario", activo: true },
       { codigo: "SOBRANTE", nombre: "Sobrante en inventario", activo: true },

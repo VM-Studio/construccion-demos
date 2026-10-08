@@ -18,7 +18,7 @@ export function DemoBanner() {
   if (!visible) return null;
   return (
     <div className="no-print relative z-30 flex h-7 items-center justify-center bg-ink px-8 text-[12px] text-white">
-      <span className="truncate">Entorno de demostración · Los datos son ficticios y se pueden restablecer</span>
+      <span className="truncate">Entorno de demostración · Los datos viven en este navegador y se pueden vaciar en cualquier momento</span>
       <button
         aria-label="Cerrar aviso de demostración"
         className="absolute right-2 rounded p-0.5 text-white/70 hover:text-white"

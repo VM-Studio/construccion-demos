@@ -77,19 +77,19 @@ export function LoginView() {
             className="inline-flex items-center gap-1.5 text-[12px] text-muted underline-offset-4 hover:text-ink hover:underline"
             onClick={() =>
               confirmar({
-                titulo: "Restablecer datos del demo",
-                descripcion: "Se borran todos los cambios hechos y se vuelve a cargar el set de datos de demostración.",
-                confirmLabel: "Restablecer",
+                titulo: "Vaciar datos del demo",
+                descripcion: "Se borran todos los datos cargados y queda solo la estructura de la empresa (sucursales, rubros, listas de precios y usuarios), lista para cargar todo de cero.",
+                confirmLabel: "Vaciar datos",
                 variant: "danger",
                 onConfirm: () => {
                   resetear();
-                  toast.success("Datos del demo restablecidos");
+                  toast.success("Datos vaciados: quedó solo la estructura");
                 },
               })
             }
           >
             <RotateCcw className="size-3.5" />
-            Restablecer datos del demo
+            Vaciar datos del demo
           </button>
         </div>
       </div>

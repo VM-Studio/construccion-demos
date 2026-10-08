@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ export function NotasPedidoView() {
         searchPlaceholder="Buscar por número, cliente, obra o acopio…"
         initialSort={{ key: "f", dir: "desc" }}
         showFooter
-        empty={{ icono: ShoppingCart, titulo: "No hay notas de pedido para el filtro" }}
+        empty={db.notasPedido.length === 0 ? <VacioGuiado pagina="notasPedido" icono={ShoppingCart} puedeAccion={puedeCrear} /> : { icono: ShoppingCart, titulo: "No hay notas de pedido para el filtro" }}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={PRESETS_LISTADO} />

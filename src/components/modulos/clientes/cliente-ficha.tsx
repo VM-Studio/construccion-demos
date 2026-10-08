@@ -115,7 +115,7 @@ export function ClienteFicha({ id }: { id: string }) {
         <TabsContent value="resumen"><ResumenCliente id={id} /></TabsContent>
         <TabsContent value="acopios"><AcopiosCliente id={id} /></TabsContent>
         <TabsContent value="ventas"><VentasCliente id={id} /></TabsContent>
-        <TabsContent value="pendiente"><PendientesTabla lineas={pendientes} vacio="El cliente no tiene entregas pendientes" /></TabsContent>
+        <TabsContent value="pendiente"><PendientesTabla lineas={pendientes} vacio="El cliente no tiene entregas pendientes: lo que compre y no se lleve en el momento va a aparecer acá." /></TabsContent>
         <TabsContent value="ctacte"><EstadoCuenta tipo="cliente" id={id} embebido /></TabsContent>
         <TabsContent value="remitos"><RemitosCliente id={id} /></TabsContent>
         <TabsContent value="adjuntos"><Card className="p-4"><AdjuntosPanel entidadTipo="CLIENTE" entidadId={id} /></Card></TabsContent>
@@ -215,7 +215,12 @@ function ResumenCliente({ id }: { id: string }) {
                   );
                 })}
                 {!obras.length && !edit && (
-                  <tr><td colSpan={5} className="py-6 text-center text-[13px] text-muted">Sin obras cargadas.</td></tr>
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-[13px] text-muted">
+                      Todavía no tiene obras. Cada línea de venta y cada acopio se imputa a una obra.
+                      {puede && <Button size="sm" variant="link" className="ml-1 text-[13px]" onClick={() => setEdit({ nombre: "", activa: true })}>Cargar la primera obra</Button>}
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -251,6 +256,7 @@ function ResumenCliente({ id }: { id: string }) {
 function AcopiosCliente({ id }: { id: string }) {
   const db = useDb();
   const router = useRouter();
+  const puedeAcopiar = usePuede("acopios.editar");
   const filas = useAcopiosResumen().filter((a) => a.acopio.clienteId === id);
   type F = (typeof filas)[number];
   const t = filas.reduce((a, f) => ({ i: a.i + f.acopio.importe, r: a.r + f.retirado, s: a.s + f.saldo, p: a.p + f.pendienteEntrega }), { i: 0, r: 0, s: 0, p: 0 });
@@ -277,12 +283,28 @@ function AcopiosCliente({ id }: { id: string }) {
       ),
     },
   ];
-  return <DataTable rows={filas} columns={columnas} getRowId={(f) => f.acopio.id} onRowClick={(f) => router.push(`/acopios/${f.acopio.id}`)} showFooter initialSort={{ key: "f", dir: "desc" }} empty={{ icono: Boxes, titulo: "El cliente no tiene acopios" }} />;
+  return (
+    <DataTable
+      rows={filas}
+      columns={columnas}
+      getRowId={(f) => f.acopio.id}
+      onRowClick={(f) => router.push(`/acopios/${f.acopio.id}`)}
+      showFooter
+      initialSort={{ key: "f", dir: "desc" }}
+      empty={{
+        icono: Boxes,
+        titulo: "El cliente no tiene acopios",
+        descripcion: "Si deja plata para retirar materiales a precio congelado, creale un acopio.",
+        accion: puedeAcopiar ? <Button size="sm" onClick={() => router.push(`/acopios/nuevo?cliente=${id}`)}><Plus /> Nuevo acopio</Button> : undefined,
+      }}
+    />
+  );
 }
 
 function VentasCliente({ id }: { id: string }) {
   const db = useDb();
   const router = useRouter();
+  const puedeVender = usePuede("ventas.editar");
   const filas = db.notasPedido.filter((n) => n.clienteId === id && n.estado !== "BORRADOR");
   type F = (typeof filas)[number];
   const columnas: Column<F>[] = [
@@ -297,7 +319,7 @@ function VentasCliente({ id }: { id: string }) {
     { key: "c", header: "Comprobante", cell: (n) => <span className="whitespace-nowrap font-mono text-[11px] text-muted">{db.comprobantes.find((c) => n.comprobanteIds.includes(c.id) && c.tipo === "FACTURA")?.numero ?? (n.origen === "ACOPIO" ? "Acopio" : "—")}</span> },
     { key: "r", header: "Remitos", cell: (n) => <span className="text-[12px] text-muted tnum">{n.remitoIds.length}</span> },
   ];
-  return <DataTable rows={filas} columns={columnas} getRowId={(n) => n.id} onRowClick={(n) => router.push(`/ventas/notas-pedido/${n.id}`)} searchText={(n) => n.numero} initialSort={{ key: "f", dir: "desc" }} empty={{ icono: ShoppingCart, titulo: "Sin ventas" }} />;
+  return <DataTable rows={filas} columns={columnas} getRowId={(n) => n.id} onRowClick={(n) => router.push(`/ventas/notas-pedido/${n.id}`)} searchText={(n) => n.numero} initialSort={{ key: "f", dir: "desc" }} empty={{ icono: ShoppingCart, titulo: "Todavía no le vendiste nada", descripcion: "Las notas de pedido del cliente, nuevas o retiros de acopio, aparecen acá.", accion: puedeVender ? <Button size="sm" onClick={() => router.push(`/ventas/notas-pedido/nueva?cliente=${id}`)}><Plus /> Nueva venta</Button> : undefined }} />;
 }
 
 function RemitosCliente({ id }: { id: string }) {
@@ -315,5 +337,5 @@ function RemitosCliente({ id }: { id: string }) {
     { key: "fa", header: "Facturado", cell: (r) => (r.facturado ? <Badge variant="success">Sí</Badge> : <Badge>No</Badge>) },
     { key: "a", header: "Adjuntos", cell: (r) => <ClipContador cantidad={adj(r.id)} firmado={!!r.firmadoAdjuntoId} /> },
   ];
-  return <DataTable rows={filas} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/remitos/${r.id}`)} searchText={(r) => r.numero} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Sin remitos" }} />;
+  return <DataTable rows={filas} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/remitos/${r.id}`)} searchText={(r) => r.numero} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Todavía no hay remitos", descripcion: "Los remitos se generan desde las notas de pedido del cliente cuando se entrega la mercadería." }} />;
 }

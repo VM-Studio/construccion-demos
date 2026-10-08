@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Plus, Printer, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, History, Plus, Printer, Trash2, Wand2 } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb } from "@/store/selectors";
+import { useDb, usePuede, useVeCircuito2 } from "@/store/selectors";
+import { prerequisitos } from "@/domain/prerequisitos";
 import type { Circuito, MedioCobro, MedioPago } from "@/domain/types";
 import { CIRCUITO_LABEL } from "@/domain/estados";
 import { imputarAutomaticamente, diasAtraso } from "@/domain/cuentasCorrientes";
@@ -14,7 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input, NumberInput } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
-import { Combobox } from "@/components/shared/combobox";
+import { SelectorCliente } from "@/components/shared/alta-rapida";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
+import { SaldoInicialDialog } from "./saldo-inicial-dialog";
 import { PrintPreview } from "@/components/shared/print-layout";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
@@ -58,9 +61,13 @@ export function CobranzaDialog({
   const [imput, setImput] = React.useState<Record<string, number>>({});
   const [obs, setObs] = React.useState("");
   const [recibo, setRecibo] = React.useState<string | null>(null);
+  const [saldoInicial, setSaldoInicial] = React.useState(false);
+  const veC2 = useVeCircuito2();
+  const puedeCobrar = usePuede("ctacte.cobrar");
+  const faltan = prerequisitos("recibos", db);
 
   const pendientes = React.useMemo(
-    () => db.comprobantes.filter((c) => c.clienteId === clienteId && c.circuito === circuito && c.saldoPendiente > 0.009 && c.estado !== "ANULADO" && (c.tipo === "FACTURA" || c.tipo === "NOTA_DEBITO")).sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    () => db.comprobantes.filter((c) => c.clienteId === clienteId && c.circuito === circuito && c.saldoPendiente > 0.009 && c.estado !== "ANULADO" && (c.tipo === "FACTURA" || c.tipo === "NOTA_DEBITO" || c.tipo === "SALDO_INICIAL")).sort((a, b) => a.fecha.localeCompare(b.fecha)),
     [db.comprobantes, clienteId, circuito],
   );
 
@@ -129,18 +136,20 @@ export function CobranzaDialog({
           }
         >
           <div className="space-y-5">
+            {faltan.length > 0 && <AvisoFaltantes faltan={[]} titulo="Todavía no hay clientes" texto="Para registrar un cobro necesitás un cliente. Crealo desde el buscador de abajo sin salir de acá." />}
             <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
               <FormField label="Cliente" required>
-                <Combobox
-                  aria-label="Cliente"
+                <SelectorCliente
                   value={clienteId}
                   disabled={!!clienteInicial}
                   onChange={(v) => {
                     setClienteId(v);
                     setImput({});
+                    // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
+                    const c = useStore.getState().db.clientes.find((x) => x.id === v);
+                    if (c) setCircuito(c.circuitoHabitual === 2 && !veC2 ? 1 : c.circuitoHabitual);
                   }}
                   placeholder="Buscar cliente…"
-                  opciones={db.clientes.map((c) => ({ value: c.id, label: c.razonSocial, detalle: c.cuit }))}
                 />
               </FormField>
               <FormField label="Fecha" htmlFor="cob-fecha">
@@ -207,7 +216,14 @@ export function CobranzaDialog({
               {!clienteId ? (
                 <p className="rounded-control border border-dashed border-border py-6 text-center text-[13px] text-muted">Elegí un cliente para ver sus comprobantes pendientes.</p>
               ) : !pendientes.length ? (
-                <p className="rounded-control border border-dashed border-border py-6 text-center text-[13px] text-muted">El cliente no tiene comprobantes pendientes. Lo cobrado queda como saldo a favor.</p>
+                <div className="flex flex-col items-center gap-2 rounded-control border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted">
+                  <span>El cliente no tiene comprobantes pendientes en {CIRCUITO_LABEL[circuito]}. Lo cobrado queda como saldo a favor.</span>
+                  {puedeCobrar && (
+                    <Button size="sm" variant="ghost" onClick={() => setSaldoInicial(true)}>
+                      <History /> ¿Ya debía de antes? Cargar saldo inicial
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div className="overflow-x-auto rounded-card border border-border">
                   <table className="w-full min-w-[640px] text-table">
@@ -260,6 +276,7 @@ export function CobranzaDialog({
           </div>
         </DialogContent>
       </Dialog>
+      {clienteId && <SaldoInicialDialog tipo="cliente" open={saldoInicial} onOpenChange={setSaldoInicial} entidadId={clienteId} />}
       {cobranzaRecibo && (
         <PrintPreview open={!!recibo} onOpenChange={(v) => !v && setRecibo(null)} titulo={`Recibo ${cobranzaRecibo.numero}`}>
           <ReciboDocumento cobranza={cobranzaRecibo} />

@@ -3,10 +3,11 @@ import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ExternalLink, FileSearch } from "lucide-react";
-import { useAcopiosResumen, useDb, useVeCircuito2 } from "@/store/selectors";
+import { useAcopiosResumen, useDb, usePuede, useVeCircuito2 } from "@/store/selectors";
 import { PageHeader } from "@/components/shared/page-header";
 import { Combobox } from "@/components/shared/combobox";
 import { EmptyState } from "@/components/shared/empty-state";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
@@ -20,6 +21,7 @@ export function DesacopioView() {
   const db = useDb();
   const params = useSearchParams();
   const veC2 = useVeCircuito2();
+  const puedeCrear = usePuede("acopios.editar");
   const resumen = useAcopiosResumen().filter((r) => veC2 || r.acopio.circuito !== 2);
   const inicial = params.get("acopio") ? db.acopios.find((a) => a.id === params.get("acopio")) : undefined;
   const [clienteId, setClienteId] = React.useState(inicial?.clienteId ?? params.get("cliente") ?? "");
@@ -33,6 +35,12 @@ export function DesacopioView() {
   return (
     <div>
       <PageHeader titulo="Estado de desacopio" descripcion="Buscá el cliente, elegí el acopio y descargalo en PDF o Excel con el mismo formato que usan hoy." />
+      {resumen.length === 0 ? (
+        <Card>
+          <VacioGuiado pagina="desacopio" icono={FileSearch} puedeAccion={puedeCrear} />
+        </Card>
+      ) : (
+      <>
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap items-start gap-4">
           <div className="w-full max-w-[380px]">
@@ -83,6 +91,8 @@ export function DesacopioView() {
           <h2 className="mb-2 mt-6 text-[14px] font-semibold">Artículos de la lista congelada</h2>
           <ArticulosAcopio acopio={acopio} />
         </>
+      )}
+      </>
       )}
     </div>
   );

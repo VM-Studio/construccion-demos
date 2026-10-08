@@ -94,7 +94,7 @@ export function seedListas(ts: string): ListaPrecios[] {
   const base = { creadoEn: ts, actualizadoEn: ts, activa: true };
   return [
     { id: "lst_may", nombre: "Mayorista", descripcion: "Constructoras, corralones y grandes cuentas", markupPorDefecto: 22, ...base },
-    { id: "lst_gen", nombre: "General", descripcion: "Lista general de mostrador y cuenta corriente", markupPorDefecto: 30, ...base },
+    { id: "lst_gen", nombre: "Corralón", descripcion: "Lista general de mostrador y cuenta corriente", markupPorDefecto: 28, ...base },
     { id: "lst_pub", nombre: "Público", descripcion: "Consumidor final", markupPorDefecto: 45, ...base },
   ];
 }

@@ -18,7 +18,7 @@ import { CONDICION_PAGO_LABEL } from "@/domain/estados";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ItemsGrid, type LineaBase } from "@/components/shared/items-grid";
-import { Combobox } from "@/components/shared/combobox";
+import { SelectorProveedor } from "@/components/shared/alta-rapida";
 import { EmailDialog } from "@/components/shared/email-dialog";
 import { PrintPreview } from "@/components/shared/print-layout";
 import { useConfirm } from "@/components/shared/confirm-dialog";
@@ -35,6 +35,7 @@ import { formatDate, formatDateTime, formatMoney, formatQty } from "@/lib/format
 import { diaLocal } from "@/lib/periodos";
 import { newId } from "@/lib/utils";
 import { totalesOC } from "@/store/slices/compras";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { OCDocumento } from "./oc-documento";
 import { RecepcionDialog } from "./recepcion-dialog";
 
@@ -122,7 +123,8 @@ export function OCEditor({ id }: { id: string }) {
   const elegirProveedor = (v: string) => {
     setProveedorId(v);
     setAcpId("");
-    const p = db.proveedores.find((x) => x.id === v);
+    // Del store y no del render: si el proveedor se acaba de crear con el alta rápida todavía no está en `db`.
+    const p = useStore.getState().db.proveedores.find((x) => x.id === v);
     if (p) {
       setEntrega(aInput(addDays(new Date(deInput(fecha)), p.plazoEntregaDias).toISOString()));
       setCircuito(p.circuitoHabitual);
@@ -199,6 +201,8 @@ export function OCEditor({ id }: { id: string }) {
         }
       />
 
+      {editable && esNueva && <AvisoFaltantes claves={["proveedor", "articulo"]} texto="Para crear una orden de compra necesitás un proveedor y artículos." />}
+
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-4">
           <Card>
@@ -207,14 +211,7 @@ export function OCEditor({ id }: { id: string }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <FormField label="Proveedor" required className="sm:col-span-2 lg:col-span-1">
-                <Combobox
-                  aria-label="Proveedor"
-                  disabled={!editable}
-                  value={proveedorId}
-                  onChange={elegirProveedor}
-                  placeholder="Buscar proveedor…"
-                  opciones={db.proveedores.filter((p) => p.activo).map((p) => ({ value: p.id, label: p.razonSocial, detalle: p.cuit }))}
-                />
+                <SelectorProveedor aria-label="Proveedor" disabled={!editable} value={proveedorId} onChange={elegirProveedor} />
               </FormField>
               <FormField label="Sucursal">
                 <Select disabled={!editable} value={sucursalId} onValueChange={(v) => { setSucursalId(v); setDepositoId(db.sucursales.find((s) => s.id === v)?.depositoId ?? depositoId); }} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} />

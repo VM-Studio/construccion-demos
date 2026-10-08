@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Mail, Printer, Wallet } from "lucide-react";
+import { ArrowLeft, History, Mail, Printer, Wallet } from "lucide-react";
 import { useDb, usePuede, useSaldosClientes, useSaldosProveedores } from "@/store/selectors";
 import type { EstadoInicial } from "@/domain/types";
 import { antiguedadDeuda, diasAtraso } from "@/domain/cuentasCorrientes";
@@ -19,6 +19,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CobranzaDialog } from "./cobranza-dialog";
 import { PagoDialog } from "./pago-dialog";
+import { SaldoInicialDialog } from "./saldo-inicial-dialog";
 
 export interface MovimientoCuenta {
   id: string;
@@ -40,10 +41,11 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
   const hoy = new Date();
   for (const c of db.comprobantes) {
     if (tipo === "cliente" ? c.clienteId !== id : c.proveedorId !== id) continue;
-    if (c.tipo === "SALDO_A_FAVOR") continue;
+    // El saldo a favor de un recibo ya figura en el recibo; el saldo inicial a favor se muestra como haber.
+    if (c.tipo === "SALDO_A_FAVOR" && !c.numero.startsWith("SI")) continue;
     // NC de devoluciones de acopio: vuelven al saldo del acopio, no a la cuenta corriente.
     if (c.tipo === "NOTA_CREDITO" && c.acopioId && !c.aplicadoA?.length && Math.abs(c.saldoPendiente) < 0.01) continue;
-    const esDebe = c.tipo !== "NOTA_CREDITO";
+    const esDebe = c.tipo !== "NOTA_CREDITO" && c.tipo !== "SALDO_A_FAVOR";
     const ref = c.notaPedidoId ? db.notasPedido.find((p) => p.id === c.notaPedidoId)?.numero : c.acopioId ? db.acopios.find((a) => a.id === c.acopioId)?.numero : c.recepcionId ? db.ordenesCompra.find((o) => o.id === db.recepciones.find((r) => r.id === c.recepcionId)?.ordenCompraId)?.numero : undefined;
     out.push({
       id: c.id,
@@ -80,6 +82,7 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
   const [accion, setAccion] = React.useState(false);
   const [imprimir, setImprimir] = React.useState(false);
   const [email, setEmail] = React.useState(false);
+  const [saldoInicial, setSaldoInicial] = React.useState(false);
   const entidad = tipo === "cliente" ? db.clientes.find((c) => c.id === id) : db.proveedores.find((p) => p.id === id);
   const movs = React.useMemo(() => extracto(db, tipo, id), [db, tipo, id]);
   if (!entidad)
@@ -91,6 +94,8 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
   const s = (tipo === "cliente" ? saldosC : saldosP).get(id) ?? { saldo: 0, vencido: 0, aVencer: 0, comprobantesPendientes: 0 };
   const ant = antiguedadDeuda(db.comprobantes.filter((c) => (tipo === "cliente" ? c.clienteId === id : c.proveedorId === id)), new Date());
   const limite = tipo === "cliente" ? (entidad as EstadoInicial["clientes"][number]).limiteCredito : 0;
+  const puedeSaldo = tipo === "cliente" ? puedeCobrar : puedePagar;
+  const botonSaldo = puedeSaldo && <Button variant="secondary" onClick={() => setSaldoInicial(true)}><History /> Cargar saldo inicial</Button>;
   const doc = <ResumenCuentaDocumento tipo={tipo} nombre={entidad.razonSocial} cuit={entidad.cuit} movs={movs} saldo={s.saldo} />;
 
   return (
@@ -102,7 +107,8 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
       )}
       {embebido ? (
         <div className="mb-3 flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => setImprimir(true)}><Printer /> Imprimir resumen</Button>
+            {botonSaldo}
+            <Button variant="secondary" onClick={() => setImprimir(true)} disabled={!movs.length}><Printer /> Imprimir resumen</Button>
             {tipo === "cliente" && <Button variant="secondary" onClick={() => setEmail(true)}><Mail /> Enviar por email</Button>}
             {tipo === "cliente" && puedeCobrar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar cobro</Button>}
             {tipo === "proveedor" && puedePagar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar pago</Button>}
@@ -113,7 +119,8 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
           descripcion={`${entidad.razonSocial} · CUIT ${entidad.cuit} · ${CONDICION_PAGO_LABEL[entidad.condicionPago]}`}
           acciones={
             <>
-              <Button variant="secondary" onClick={() => setImprimir(true)}><Printer /> Imprimir resumen</Button>
+              {botonSaldo}
+            <Button variant="secondary" onClick={() => setImprimir(true)} disabled={!movs.length}><Printer /> Imprimir resumen</Button>
               {tipo === "cliente" && <Button variant="secondary" onClick={() => setEmail(true)}><Mail /> Enviar por email</Button>}
               {tipo === "cliente" && puedeCobrar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar cobro</Button>}
               {tipo === "proveedor" && puedePagar && <Button onClick={() => setAccion(true)}><Wallet /> Registrar pago</Button>}
@@ -184,10 +191,17 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
               </tr>
             </tfoot>
           </table>
-          {!movs.length && <EmptyState titulo="Sin movimientos en la cuenta" />}
+          {!movs.length && (
+            <EmptyState
+              titulo="Sin movimientos en la cuenta"
+              descripcion={tipo === "cliente" ? "Las facturas y los recibos del cliente aparecen acá solos. Si ya traía deuda o saldo a favor, cargalo como saldo inicial." : "Las facturas de compra y las órdenes de pago aparecen acá solas. Si ya se le debía algo, cargalo como saldo inicial."}
+              accion={puedeSaldo ? <Button size="sm" variant="secondary" onClick={() => setSaldoInicial(true)}><History /> Cargar saldo inicial</Button> : undefined}
+            />
+          )}
         </div>
       </Card>
       {tipo === "cliente" ? <CobranzaDialog open={accion} onOpenChange={setAccion} clienteId={id} /> : <PagoDialog open={accion} onOpenChange={setAccion} proveedorId={id} />}
+      <SaldoInicialDialog tipo={tipo} open={saldoInicial} onOpenChange={setSaldoInicial} entidadId={id} />
       <PrintPreview open={imprimir} onOpenChange={setImprimir} titulo="Resumen de cuenta">{doc}</PrintPreview>
       <EmailDialog open={email} onOpenChange={setEmail} para={entidad.email} asunto={`Resumen de cuenta · ${db.config.empresa.empresa}`} mensaje={`Hola,\n\nTe enviamos el resumen de tu cuenta corriente al ${formatDate(new Date())}. Saldo: ${formatMoney(s.saldo)}${s.vencido > 0 ? ` (vencido ${formatMoney(s.vencido)})` : ""}.\n\nSaludos,\nAdministración · ${db.config.empresa.empresa}`} adjunto="resumen-de-cuenta.pdf" documento={doc} />
     </div>

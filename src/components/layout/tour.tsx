@@ -14,15 +14,17 @@ interface Paso {
   lado: "top" | "right" | "bottom" | "left";
 }
 
+/** Cada paso apunta a elementos de la interfaz, nunca a registros: funciona igual con el sistema vacío. */
 const PASOS: Paso[] = [
   { ruta: "/inicio", selector: '[data-tour="modulos"]', titulo: "Inicio con módulos", texto: "Los módulos como en el sistema actual, pero más limpios: cada tarjeta lista sus páginas. Al entrar a una página, la barra lateral muestra el módulo y el botón «← Módulos» para volver y elegir otro.", lado: "top" },
-  { ruta: "/tablero", selector: '[data-tour="kpis"]', titulo: "Tablero", texto: "Ventas por unidad de negocio, margen, cuentas a cobrar, saldo de acopios de clientes y lo que falta retirar de los acopios con proveedores.", lado: "bottom" },
-  { ruta: "/clientes/cli_ramos", selector: '[data-tour="cliente-acciones"]', titulo: "Cliente: todo desde un lugar", texto: "Desde la ficha del cliente se acopia, se vende, se retira de un acopio, se cobra y se cotiza. Abajo: acopios, ventas, pendientes de entrega, cuenta corriente y remitos.", lado: "bottom" },
-  { ruta: "/ventas/notas-pedido/nueva?cliente=cli_ramos&origen=acopio", selector: '[data-tour="np-origen"]', titulo: "Venta con origen Acopio", texto: "Elegís el acopio del cliente: se cargan sus obras y los precios congelados, y el panel muestra el saldo antes y después del retiro.", lado: "bottom" },
-  { ruta: "/acopios/desacopio?acopio=aco_ramos_3633", selector: '[data-tour="descargar"]', titulo: "Estado de desacopio", texto: "El mismo detalle que usan hoy (NP, devoluciones y traspasos con saldo corrido) y la descarga en PDF o Excel con su formato.", lado: "left" },
-  { ruta: "/pendientes-entrega", selector: '[data-tour="pendientes-kpis"]', titulo: "Pendientes de entrega y disponible", texto: "Lo vendido que sigue en el galpón descuenta del disponible: no se puede sobrevender. Acá ves a quién se le debe cada bolsa y qué despacho tiene.", lado: "bottom" },
+  { ruta: "/inicio", selector: '[data-tour="guia-carga"]', titulo: "Guía de carga inicial", texto: "El sistema arranca vacío. La guía ordena la carga: artículos, precios, proveedores, clientes, inventario, la primera compra, el primer acopio, la primera venta y el primer cobro. Cada paso se tilda solo.", lado: "bottom" },
+  { ruta: "/tablero", selector: '[data-tour="kpis"]', titulo: "Tablero", texto: "Ventas por unidad de negocio, margen, cuentas a cobrar, saldo de acopios de clientes y lo que falta retirar de los acopios con proveedores. Arranca en «—» y se llena a medida que cargás.", lado: "bottom" },
+  { ruta: "/clientes", selector: '[data-tour="acciones"]', titulo: "Clientes: todo desde un lugar", texto: "Cuando cargues tu primer cliente, desde su ficha vas a acopiar, vender, retirar de un acopio, cobrar y cotizar, y vas a ver sus acopios, ventas, pendientes de entrega, cuenta corriente y remitos.", lado: "bottom" },
+  { ruta: "/ventas/notas-pedido/nueva", selector: '[data-tour="np-origen"]', titulo: "Venta con origen Acopio", texto: "Cuando crees tu primer acopio, acá vas a elegir el origen Acopio: se cargan sus obras y los precios congelados, y el panel muestra el saldo antes y después del retiro.", lado: "bottom" },
+  { ruta: "/acopios/desacopio", selector: 'main h1', titulo: "Estado de desacopio", texto: "Cuando exista un acopio con retiros, acá vas a ver el mismo detalle que usan hoy (NP, devoluciones y traspasos con saldo corrido) y la descarga en PDF o Excel con su formato.", lado: "bottom" },
+  { ruta: "/pendientes-entrega", selector: '[data-tour="pendientes-kpis"]', titulo: "Pendientes de entrega y disponible", texto: "Lo vendido que sigue en el galpón descuenta del disponible: no se puede sobrevender. Acá vas a ver a quién se le debe cada bolsa y qué despacho tiene.", lado: "bottom" },
   { ruta: "/remitos", selector: '[data-tour="remitos-kpis"]', titulo: "Remitos y remito firmado", texto: "Picking → hecho → subís la foto del remito firmado y queda guardada. El KPI muestra lo que falta cerrar en papel.", lado: "bottom" },
-  { ruta: "/proveedores/prov_01", selector: '[data-tour="proveedor-kpis"]', titulo: "Proveedores", texto: "Cuánto le debemos a cada proveedor y cuánta mercadería nos falta retirar de los acopios con ellos. Desde acá se retira con una OC contra el acopio.", lado: "bottom" },
+  { ruta: "/proveedores", selector: '[data-tour="acciones"]', titulo: "Proveedores", texto: "Cuando cargues un proveedor, su ficha muestra cuánto le debemos y cuánta mercadería nos falta retirar de los acopios con él. Desde ahí se retira con una OC contra el acopio.", lado: "bottom" },
 ];
 
 /** Recorrido guiado de 8 pasos (Popover de Radix anclado a elementos). */

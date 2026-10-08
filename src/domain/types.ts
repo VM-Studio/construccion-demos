@@ -34,7 +34,8 @@ export type CodigoDoc =
   | "RCP" // recepción de mercadería
   | "TRF" // transferencia
   | "AJU" // ajuste de stock
-  | "DES"; // despacho
+  | "DES" // despacho
+  | "SI"; // saldo inicial de cuenta corriente
 
 export type EstadoOC = "BORRADOR" | "ENVIADA" | "CONFIRMADA" | "RECIBIDA_PARCIAL" | "RECIBIDA" | "CANCELADA";
 export type EstadoCotizacion = "BORRADOR" | "ENVIADA" | "ACEPTADA" | "RECHAZADA" | "VENCIDA";
@@ -55,8 +56,8 @@ export type TipoMovimientoStock =
   | "DEVOLUCION_CLIENTE"
   | "DEVOLUCION_PROVEEDOR";
 
-/** FACTURA (F1 con letra A/B, o F2 interno), nota de crédito/débito, y saldo a favor de un recibo. */
-export type TipoComprobante = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "SALDO_A_FAVOR";
+/** FACTURA (F1 con letra A/B, o F2 interno), nota de crédito/débito, saldo a favor de un recibo y saldo inicial (migración, sin ítems). */
+export type TipoComprobante = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "SALDO_A_FAVOR" | "SALDO_INICIAL";
 export type LetraComprobante = "A" | "B";
 
 export type TipoCliente = "CONSTRUCTORA" | "CORRALON" | "FERRETERIA" | "PARTICULAR" | "ARQUITECTO";
@@ -239,6 +240,8 @@ export interface ItemAjuste {
   cantidad: number;
   signo: 1 | -1;
   motivo: MotivoAjuste;
+  /** Solo inventario inicial: costo al que entra lo que ya estaba en el galpón. */
+  costoUnitario?: number;
 }
 
 export interface AjusteStock extends Entidad {

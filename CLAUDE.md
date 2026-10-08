@@ -33,10 +33,17 @@ Los **blobs viven en IndexedDB** (`idb-keyval`, helper `src/lib/adjuntos.ts`: `g
 Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas de módulos y sus páginas; dentro de una página, barra lateral con las páginas del módulo y "← Módulos". Definición única en `src/config/modulos.ts`.
 
 ## Stack y reglas
-- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Zustand con persist (clave `aceros-rnf-v1`), Recharts, Lucide, pnpm. jsPDF + autotable y exceljs para descargas (dynamic import).
+- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Zustand con persist (clave `cd-demo-v2`), Recharts, Lucide, pnpm. jsPDF + autotable y exceljs para descargas (dynamic import).
 - SIN base de datos. `src/store/*` con transacciones (`Tx`, `ejecutar`); `src/data/repositories/*` lista para Prisma. Las pantallas nunca tocan localStorage directo.
 - Toda regla de negocio vive en `src/domain/` como funciones puras. Los componentes solo renderizan y llaman acciones del store.
-- `pnpm seed:check` (consistencia del seed: kardex, saldos, acopios, Ramos = $ 844,85) y `pnpm flujos:check` (flujos completos sobre el store).
+- `pnpm seed:check` (base vacía + datos de ejemplo: kardex, saldos, acopios, Ramos = $ 844,85) y `pnpm flujos:check` (flujos completos sobre el store, incluido el recorrido desde el sistema vacío).
+
+## Sistema vacío y carga inicial
+- El store arranca con `seedBase()` (solo estructura: empresa, 2 sucursales/depósitos con posiciones, unidades de negocio y rubros, 3 listas sin precios — Mayorista 22 %, Corralón 28 %, Público 45 % —, motivos de ajuste, 4 usuarios, numeración en 0). `seedEjemplo()` (todo el ejemplo, Ramos incluido) se construye encima y se carga a pedido con `cargarDatosEjemplo()` desde Configuración → Datos del demo. `resetearDemo()` vuelve a la base.
+- Prerrequisitos por pantalla en `src/domain/prerequisitos.ts` (`prerequisitos(pagina, db)`); textos de estados vacíos en `src/config/vacios.ts` (`<VacioGuiado pagina>`); guía de carga en `src/domain/cargaInicial.ts`.
+- Importación CSV (papaparse) en `src/domain/importacion.ts` + `ImportarCsvDialog`; plantillas y ejemplos en `public/plantillas/`.
+- Alta rápida: `SelectorCliente/Proveedor/Vehiculo/Chofer` (`src/components/shared/alta-rapida.tsx`) y "Crear artículo nuevo…" en `ProductoPicker`.
+- Inventario inicial = ajuste con motivo `INVENTARIO_INICIAL` y costo unitario editable; saldos iniciales de cuenta corriente = comprobante `SALDO_INICIAL` (código `SI`).
 - Dinero en ARS con `formatMoney`. Fechas con date-fns y `formatDate`. Nunca `toLocaleString` suelto.
 - UI: primitivas de `src/components/ui`. Solo tokens de color, un acento ámbar. Densidad alta. Nada de colores llamativos.
 - Español rioplatense en toda la UI. Sin anglicismos innecesarios. Textos de empresa desde `BRAND` / configuración.

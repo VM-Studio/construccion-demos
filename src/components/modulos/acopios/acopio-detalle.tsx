@@ -129,9 +129,14 @@ export function AcopioDetalle({ id }: { id: string }) {
           <TabsTrigger value="adjuntos">Adjuntos</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
         </TabsList>
-        <TabsContent value="movimientos"><MovimientosAcopio acopio={acopio} /></TabsContent>
+        <TabsContent value="movimientos">
+          <MovimientosAcopio
+            acopio={acopio}
+            accionVacio={activo && puedeEditar && res.saldo > 0 ? <Button size="sm" onClick={() => router.push(`/ventas/notas-pedido/nueva?cliente=${acopio.clienteId}&origen=acopio&acopio=${acopio.id}`)}><PackageOpen /> Registrar retiro</Button> : undefined}
+          />
+        </TabsContent>
         <TabsContent value="articulos"><ArticulosAcopio acopio={acopio} /></TabsContent>
-        <TabsContent value="pendiente"><PendientesTabla lineas={lineas} vacio="Todo lo retirado ya se entregó" /></TabsContent>
+        <TabsContent value="pendiente"><PendientesTabla lineas={lineas} vacio={nps.size ? "Todo lo retirado ya se entregó" : "Todavía no hay retiros: lo que se retire y no se entregue en el momento aparece acá."} /></TabsContent>
         <TabsContent value="pagos"><PagosAcopio acopio={acopio} onCobrar={puedeCobrar ? () => setDialogo("cobro") : undefined} /></TabsContent>
         <TabsContent value="adjuntos"><Card className="p-4"><AdjuntosPanel entidadTipo="ACOPIO" entidadId={acopio.id} /></Card></TabsContent>
         <TabsContent value="historial"><Card className="p-4"><HistorialEntidad ids={[acopio.id, ...nps]} /></Card></TabsContent>
@@ -179,7 +184,10 @@ function PagosAcopio({ acopio, onCobrar }: { acopio: Acopio; onCobrar?: () => vo
           {onCobrar && impago > 0.009 && <Button size="sm" onClick={onCobrar}><Wallet /> Registrar cobro</Button>}
         </div>
         {recibos.length === 0 ? (
-          <p className="py-8 text-center text-[13px] text-muted">Sin cobros registrados.</p>
+          <div className="flex flex-col items-center gap-3 px-4 py-8 text-center text-[13px] text-muted">
+            <span>{acopio.formaPago === "ANTICIPO" ? "Todavía no se registró el cobro del anticipo." : "Todavía no hay cobros: el acopio está en cuenta corriente."}</span>
+            {onCobrar && impago > 0.009 && <Button size="sm" variant="secondary" onClick={onCobrar}><Wallet /> Registrar cobro</Button>}
+          </div>
         ) : (
           <ul className="divide-y divide-border">
             {recibos.map((r) => (

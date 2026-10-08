@@ -26,7 +26,7 @@ export function NuevaObraDialog({ clienteId, open, onOpenChange, onCreada }: { c
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm" title="Nueva obra" footer={<><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button><Button onClick={guardar} disabled={!f.nombre.trim()}>Crear obra</Button></>}>
         <div className="space-y-3">
-          <FormField label="Nombre" required htmlFor="ob-n"><Input id="ob-n" autoFocus value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Canton Golf Lote 377" /></FormField>
+          <FormField label="Nombre" required htmlFor="ob-n"><Input id="ob-n" autoFocus value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Barrio Los Álamos, lote 12" /></FormField>
           <FormField label="Dirección" htmlFor="ob-d"><Input id="ob-d" value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} /></FormField>
           <FormField label="Localidad" htmlFor="ob-l"><Input id="ob-l" value={f.localidad} onChange={(e) => setF({ ...f, localidad: e.target.value })} /></FormField>
         </div>

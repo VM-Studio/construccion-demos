@@ -42,7 +42,8 @@ export interface DataTableProps<T> {
   onSelectionChange?: (ids: Set<string>) => void;
   initialSort?: { key: string; dir: "asc" | "desc" };
   pageSize?: 25 | 50 | 100;
-  empty?: { icono?: LucideIcon; titulo: string; descripcion?: string; accion?: React.ReactNode };
+  /** Estado vacío: configuración simple o un nodo completo (p. ej. `<VacioGuiado />`). */
+  empty?: { icono?: LucideIcon; titulo: string; descripcion?: React.ReactNode; accion?: React.ReactNode } | React.ReactElement;
   /** Mostrar fila de totales (usa `footer` de cada columna). */
   showFooter?: boolean;
   rowClassName?: (row: T) => string | undefined;
@@ -258,7 +259,11 @@ export function DataTable<T>({
           )}
         </table>
         {rows.length === 0 ? (
-          <EmptyState icono={empty?.icono} titulo={empty?.titulo ?? "Todavía no hay registros"} descripcion={empty?.descripcion} accion={empty?.accion} />
+          React.isValidElement(empty) ? (
+            empty
+          ) : (
+            <EmptyState icono={empty?.icono} titulo={empty?.titulo ?? "Todavía no hay registros"} descripcion={empty?.descripcion} accion={empty?.accion} />
+          )
         ) : sorted.length === 0 ? (
           <EmptyState
             icono={SearchX}

@@ -82,7 +82,7 @@ export function ReporteValorizacion() {
         foot: ["Total", "", "", "", "", ...deps.map((d) => Math.round(filas.reduce((a, f) => a + f.porDep[d.id], 0))), Math.round(t.prom), Math.round(t.ult), Math.round(t.ult - t.prom), Math.round(t.venta)],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.p.id} searchText={(f) => `${f.p.codigo} ${f.p.nombre}`} initialSort={{ key: "prom", dir: "desc" }} showFooter pageSize={100} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.p.id} searchText={(f) => `${f.p.codigo} ${f.p.nombre}`} initialSort={{ key: "prom", dir: "desc" }} showFooter pageSize={100} empty={{ titulo: "Sin stock para valorizar", descripcion: "Sale del stock físico de cada artículo a costo promedio, costo último y precio de venta. El stock nace de los ingresos de mercadería y del inventario inicial." }} />
     </ReporteLayout>
   );
 }
@@ -149,7 +149,7 @@ export function ReporteDeudaMercaderia() {
         foot: ["Total", "", "", "", Math.round(t.i), "", Math.round(t.s), Math.round(t.p), Math.round(t.e), ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} searchText={(f) => `${f.cliente?.razonSocial} ${f.r.acopio.numero} ${f.obras}`} onRowClick={(f) => router.push(`/acopios/${f.id}`)} initialSort={{ key: "sa", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "No hay acopios con saldo" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} searchText={(f) => `${f.cliente?.razonSocial} ${f.r.acopio.numero} ${f.obras}`} onRowClick={(f) => router.push(`/acopios/${f.id}`)} initialSort={{ key: "sa", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "No hay acopios con saldo", descripcion: "Sale de los acopios de clientes: lo que pagaron y todavía no retiraron es mercadería que les debemos." }} />
     </ReporteLayout>
   );
 }
@@ -214,7 +214,7 @@ export function ReporteStockCritico() {
         rows: filas.map((f) => [f.p.codigo, f.p.nombre, f.pos.estado, f.pos.disponible, f.p.stockMinimo, f.pos.enTransito, Math.round(f.diaria * 10) / 10, Number.isFinite(f.cobertura) ? Math.round(f.cobertura) : "", f.sugerida, f.p.unidad, f.proveedor?.razonSocial ?? ""]),
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.p.id} onRowClick={(f) => router.push(`/productos?id=${f.p.id}`)} initialSort={{ key: "c", dir: "asc" }} empty={{ titulo: "No hay productos bajo mínimo" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.p.id} onRowClick={(f) => router.push(`/productos?id=${f.p.id}`)} initialSort={{ key: "c", dir: "asc" }} empty={{ titulo: "No hay artículos bajo mínimo", descripcion: "Sale del disponible de cada artículo contra su stock mínimo (se define en la ficha del artículo)." }} />
       {porProveedor.size > 0 && (
         <Card>
           <CardHeader><CardTitle>Generar órdenes de compra borrador</CardTitle></CardHeader>

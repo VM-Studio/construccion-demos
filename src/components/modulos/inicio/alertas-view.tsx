@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronRight, PackageCheck } from "lucide-react";
 import { useAlertas } from "@/store/alertas";
 import { PageHeader } from "@/components/shared/page-header";
-import { EmptyState } from "@/components/shared/empty-state";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ export function AlertasView() {
       <PageHeader titulo="Alertas" descripcion="Lo que requiere atención hoy: stock, acopios, entregas, cobranzas, remitos y compras." />
       <div className="rounded-card border border-border bg-surface">
         {alertas.length === 0 ? (
-          <EmptyState icono={PackageCheck} titulo="Sin alertas" descripcion="No hay stock crítico, vencimientos ni atrasos." />
+          <VacioGuiado pagina="alertas" icono={PackageCheck} />
         ) : (
           <ul className="divide-y divide-border">
             {alertas.map((a) => (

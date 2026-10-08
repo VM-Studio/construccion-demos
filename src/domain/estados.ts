@@ -96,6 +96,7 @@ export const TIPO_COMPROBANTE_LABEL: Record<string, string> = {
   NOTA_CREDITO: "Nota de crédito",
   NOTA_DEBITO: "Nota de débito",
   SALDO_A_FAVOR: "Saldo a favor",
+  SALDO_INICIAL: "Saldo inicial",
 };
 
 /** Circuito del documento. */

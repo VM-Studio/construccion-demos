@@ -47,6 +47,8 @@ export function crearSliceAcopios(set: SetFn, get: GetFn) {
           precio: data.ajustesPrecio?.[p.id] ?? precios.get(p.id) ?? 0,
           costoSnapshot: p.costoPromedio,
         }));
+        if (!data.obraIds.length) throw new ErrorNegocio("Asociá el acopio a al menos una obra del cliente.");
+        if (!preciosCongelados.some((p) => p.precio > 0)) throw new ErrorNegocio("La lista elegida no tiene precios para esta unidad de negocio: no hay nada que congelar.", "SIN_PRECIOS");
         const ajustados = Object.keys(data.ajustesPrecio ?? {}).filter((k) => data.ajustesPrecio![k] !== precios.get(k));
         const importeConIIBB = round2(data.importe * (1 + (data.alicuotaIIBBPct || 0) / 100));
         const a: Acopio = {

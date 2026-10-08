@@ -159,6 +159,41 @@ export function crearSliceFinanzas(set: SetFn, get: GetFn) {
         return { pagoId: op.id, numero: op.numero };
       }),
 
+    /**
+     * Saldo inicial de cuenta corriente (migración desde el sistema anterior): comprobante SALDO_INICIAL
+     * sin ítems. Si el saldo es a favor del cliente / proveedor, queda como saldo a favor (negativo).
+     */
+    cargarSaldoInicial: (data: { tipo: "cliente" | "proveedor"; entidadId: string; importe: number; fecha: string; circuito: Circuito; aFavor?: boolean; vencimiento?: string; observaciones?: string }) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, data.tipo === "cliente" ? "ctacte.cobrar" : "ctacte.pagar");
+        const importe = r2(data.importe);
+        if (!(importe > 0)) throw new ErrorNegocio("Ingresá un importe mayor a cero.");
+        const esCliente = data.tipo === "cliente";
+        const ent = esCliente ? tx.must("clientes", data.entidadId) : tx.must("proveedores", data.entidadId);
+        const sucursalId = esCliente ? (ent as { sucursalPreferidaId: string }).sucursalPreferidaId : tx.get("sucursales")[0]?.id;
+        const numero = tx.numero("SI", data.circuito, sucursalId ? puntoVentaDe(tx, sucursalId) : "0001");
+        const c: Comprobante = {
+          id: newId("cmp"),
+          tipo: data.aFavor ? "SALDO_A_FAVOR" : "SALDO_INICIAL",
+          circuito: data.circuito,
+          numero: data.aFavor ? `${numero} (a favor)` : numero,
+          ...(esCliente ? { clienteId: ent.id } : { proveedorId: ent.id }),
+          sucursalId,
+          fecha: data.fecha,
+          vencimiento: data.aFavor ? undefined : (data.vencimiento ?? data.fecha),
+          subtotal: importe,
+          iva: 0,
+          total: importe,
+          saldoPendiente: data.aFavor ? -importe : importe,
+          estado: "PENDIENTE",
+          observaciones: data.observaciones || "Saldo inicial (sistema anterior)",
+          ...tx.meta(),
+        };
+        tx.insert("comprobantes", c);
+        tx.auditar("Cargó saldo inicial", esCliente ? "Cliente" : "Proveedor", ent.id, `${c.numero} · ${ent.razonSocial} · ${data.aFavor ? "a favor " : ""}${formatMoney(importe)}`);
+        return { comprobanteId: c.id, numero: c.numero };
+      }),
+
     cambiarEstadoCheque: (id: string, estado: EstadoCheque) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "ctacte.cobrar");

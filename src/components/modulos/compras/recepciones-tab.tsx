@@ -8,6 +8,7 @@ import { useDb, usePuede } from "@/store/selectors";
 import type { RecepcionMercaderia } from "@/domain/types";
 import { DIFERENCIA_LABEL } from "@/domain/estados";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { AdjuntosPanel, ClipContador } from "@/components/shared/adjuntos-panel";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
@@ -20,6 +21,7 @@ export function RecepcionesTab({ abrirId }: { abrirId?: string | null }) {
   const db = useDb();
   const router = useRouter();
   const verCostos = usePuede("margenes.ver");
+  const puedeCrear = usePuede("compras.editar");
   const oc = (id: string) => db.ordenesCompra.find((o) => o.id === id);
   const prov = (r: RecepcionMercaderia) => db.proveedores.find((p) => p.id === oc(r.ordenCompraId)?.proveedorId)?.razonSocial ?? "";
   const total = (r: RecepcionMercaderia) => r.items.reduce((a, i) => a + i.cantidadRecibida * i.costoUnitario, 0);
@@ -48,7 +50,7 @@ export function RecepcionesTab({ abrirId }: { abrirId?: string | null }) {
         searchPlaceholder="Número, OC, proveedor o remito"
         onRowClick={(r) => router.replace(`/compras/recepciones?id=${r.id}`, { scroll: false })}
         initialSort={{ key: "fecha", dir: "desc" }}
-        empty={{ icono: PackageCheck, titulo: "Todavía no hay recepciones" }}
+        empty={db.recepciones.length ? { icono: PackageCheck, titulo: "No hay recepciones para la búsqueda" } : <VacioGuiado pagina="recepciones" icono={PackageCheck} puedeAccion={puedeCrear} />}
       />
       <DetalleRecepcion id={abrirId} onClose={() => router.replace("/compras/recepciones", { scroll: false })} />
     </>

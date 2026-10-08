@@ -2,11 +2,12 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, PackageCheck } from "lucide-react";
-import { useDb, usePendientes, useSucursalActiva, useUnidadNegocio, useVeCircuito2 } from "@/store/selectors";
+import { useDb, usePendientes, usePuede, useSucursalActiva, useUnidadNegocio, useVeCircuito2 } from "@/store/selectors";
 import { PageHeader } from "@/components/shared/page-header";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { Combobox } from "@/components/shared/combobox";
 import { EmptyState } from "@/components/shared/empty-state";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -27,6 +28,7 @@ export function PendientesEntregaView() {
   const un = useUnidadNegocio();
   const veC2 = useVeCircuito2();
   const todas = usePendientes();
+  const puedeVender = usePuede("ventas.editar");
   const [grupo, setGrupo] = React.useState<Grupo>(params.get("tipo") === "clientes" ? "cliente" : "cliente");
   const [deposito, setDeposito] = React.useState("");
   const [cliente, setCliente] = React.useState("");
@@ -86,7 +88,7 @@ export function PendientesEntregaView() {
         {check("Atrasados", atrasados, setAtrasados)}
       </Card>
       {orden.length === 0 ? (
-        <Card><EmptyState icono={PackageCheck} titulo="No hay entregas pendientes para el filtro" /></Card>
+        <Card>{base.length === 0 ? <VacioGuiado pagina="pendientesEntrega" icono={PackageCheck} puedeAccion={puedeVender} /> : <EmptyState icono={PackageCheck} titulo="No hay entregas pendientes para el filtro" />}</Card>
       ) : (
         <div className="space-y-4">
           {orden.map(([k, fs]) => {

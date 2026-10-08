@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Landmark, Wallet } from "lucide-react";
+import { History, Info, Landmark, Wallet } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useSaldosClientes, useSaldosProveedores, useSucursalActiva } from "@/store/selectors";
 import type { Cheque, Cliente, Proveedor } from "@/domain/types";
@@ -21,7 +21,19 @@ import { BarrasHorizontalesChart } from "@/components/charts";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { CobranzaDialog } from "./cobranza-dialog";
+import { SaldoInicialDialog } from "./saldo-inicial-dialog";
+
+/** Aviso cuando hay cuentas pero ninguna tiene movimientos todavía. */
+function SinMovimientos({ texto, accion }: { texto: string; accion?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-card border border-border bg-subtle p-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex gap-2 text-muted"><Info className="mt-0.5 size-4 shrink-0" /> {texto}</p>
+      {accion && <div className="shrink-0">{accion}</div>}
+    </div>
+  );
+}
 
 const TITULOS_CC = {
   clientes: ["Cuentas corrientes de clientes", "Saldos, antigüedad de deuda y cobros con imputación a facturas y acopios."],
@@ -50,7 +62,10 @@ function ClientesCC({ filtroInicial }: { filtroInicial?: string | null }) {
   const puedeCobrar = usePuede("ctacte.cobrar");
   const [filtro, setFiltro] = React.useState(filtroInicial ?? "");
   const [cobrar, setCobrar] = React.useState(false);
+  const [saldoInicial, setSaldoInicial] = React.useState(false);
   React.useEffect(() => setFiltro(filtroInicial ?? ""), [filtroInicial]);
+  const sinMovimientos = !db.comprobantes.some((c) => c.clienteId) && !db.cobranzas.length;
+  const botonSaldo = puedeCobrar && <Button size="sm" variant="secondary" onClick={() => setSaldoInicial(true)}><History /> Cargar saldo inicial</Button>;
 
   const clientes = db.clientes.filter((c) => !sucursalId || c.sucursalPreferidaId === sucursalId);
   const ids = new Set(clientes.map((c) => c.id));
@@ -124,6 +139,9 @@ function ClientesCC({ filtroInicial }: { filtroInicial?: string | null }) {
         <KpiCard label="Cobrado este mes" valor={formatMoney(cobradoMes, { compact: true })} />
         <KpiCard label="Excedidos de límite" valor={String(clientes.filter(excedido).length)} subtexto={<button className="font-medium hover:underline" onClick={() => setFiltro("excedidos")}>Ver excedidos</button>} />
       </div>
+      {db.clientes.length > 0 && sinMovimientos && (
+        <SinMovimientos texto="Todavía no hay facturas ni cobros: la cuenta corriente se arma sola. Si los clientes ya traen deuda o saldo a favor, cargalo como saldo inicial." accion={botonSaldo} />
+      )}
       <Card>
         <CardHeader><CardTitle>Antigüedad de deuda</CardTitle><span className="text-[12px] text-muted">días desde la emisión</span></CardHeader>
         <CardContent className="pb-2">
@@ -140,11 +158,19 @@ function ClientesCC({ filtroInicial }: { filtroInicial?: string | null }) {
         initialSort={{ key: "saldo", dir: "desc" }}
         showFooter
         rowClassName={(c) => (excedido(c) ? "bg-danger-soft/40" : undefined)}
-        empty={{ icono: Landmark, titulo: "Sin cuentas corrientes" }}
+        empty={db.clientes.length === 0 ? <VacioGuiado pagina="cuentasClientes" icono={Landmark} extra={botonSaldo} /> : { icono: Landmark, titulo: "No hay cuentas para el filtro" }}
         filters={<Select size="sm" className="w-[190px]" aria-label="Filtro" value={filtro} onValueChange={setFiltro} options={[{ value: "", label: "Todos los clientes" }, { value: "con-saldo", label: "Con saldo" }, { value: "vencidos", label: "Con deuda vencida" }, { value: "excedidos", label: "Excedidos de límite" }]} />}
-        actions={puedeCobrar && <Button size="sm" onClick={() => setCobrar(true)}><Wallet /> Registrar cobro</Button>}
+        actions={
+          puedeCobrar && (
+            <>
+              {botonSaldo}
+              <Button size="sm" onClick={() => setCobrar(true)}><Wallet /> Registrar cobro</Button>
+            </>
+          )
+        }
       />
       <CobranzaDialog open={cobrar} onOpenChange={setCobrar} />
+      <SaldoInicialDialog tipo="cliente" open={saldoInicial} onOpenChange={setSaldoInicial} />
     </div>
   );
 }
@@ -153,6 +179,10 @@ function ProveedoresCC() {
   const db = useDb();
   const router = useRouter();
   const saldos = useSaldosProveedores();
+  const puedePagar = usePuede("ctacte.pagar");
+  const [saldoInicial, setSaldoInicial] = React.useState(false);
+  const sinMovimientos = !db.comprobantes.some((c) => c.proveedorId) && !db.pagosProveedores.length;
+  const botonSaldo = puedePagar && <Button size="sm" variant="secondary" onClick={() => setSaldoInicial(true)}><History /> Cargar saldo inicial</Button>;
   const total = db.proveedores.reduce((a, p) => a + (saldos.get(p.id)?.saldo ?? 0), 0);
   const vencido = db.proveedores.reduce((a, p) => a + (saldos.get(p.id)?.vencido ?? 0), 0);
   const mes = diaLocal(new Date()).slice(0, 7);
@@ -176,7 +206,21 @@ function ProveedoresCC() {
         <KpiCard label="Vencido" valor={<span className={vencido > 0 ? "text-danger" : ""}>{formatMoney(vencido, { compact: true })}</span>} />
         <KpiCard label="Pagado este mes" valor={formatMoney(pagadoMes, { compact: true })} />
       </div>
-      <DataTable rows={db.proveedores} columns={columnas} getRowId={(p) => p.id} searchText={(p) => `${p.razonSocial} ${p.cuit}`} onRowClick={(p) => router.push(`/cuentas-corrientes/proveedores/${p.id}`)} initialSort={{ key: "saldo", dir: "desc" }} showFooter empty={{ icono: Landmark, titulo: "Sin proveedores" }} />
+      {db.proveedores.length > 0 && sinMovimientos && (
+        <SinMovimientos texto="Todavía no hay facturas de compra ni pagos: la cuenta corriente se arma sola. Si ya se les debe algo, cargalo como saldo inicial." accion={botonSaldo} />
+      )}
+      <DataTable
+        rows={db.proveedores}
+        columns={columnas}
+        getRowId={(p) => p.id}
+        searchText={(p) => `${p.razonSocial} ${p.cuit}`}
+        onRowClick={(p) => router.push(`/cuentas-corrientes/proveedores/${p.id}`)}
+        initialSort={{ key: "saldo", dir: "desc" }}
+        showFooter
+        empty={db.proveedores.length === 0 ? <VacioGuiado pagina="cuentasProveedores" icono={Landmark} extra={botonSaldo} /> : { icono: Landmark, titulo: "No hay proveedores para la búsqueda" }}
+        actions={botonSaldo}
+      />
+      <SaldoInicialDialog tipo="proveedor" open={saldoInicial} onOpenChange={setSaldoInicial} />
     </div>
   );
 }
@@ -225,7 +269,7 @@ function Cheques() {
         searchText={(c) => `${c.banco} ${c.numero} ${db.clientes.find((x) => x.id === c.clienteId)?.razonSocial}`}
         initialSort={{ key: "cobro", dir: "asc" }}
         showFooter
-        empty={{ icono: Wallet, titulo: "Sin cheques" }}
+        empty={db.cheques.length === 0 ? <VacioGuiado pagina="cheques" icono={Wallet} puedeAccion={puede} /> : { icono: Wallet, titulo: "No hay cheques en este estado" }}
         filters={<Select size="sm" className="w-[190px]" aria-label="Estado" value={estado} onValueChange={setEstado} options={[{ value: "", label: "Todos" }, { value: "EN_CARTERA", label: "En cartera" }, { value: "DEPOSITADO", label: "Depositados" }, { value: "ENTREGADO", label: "Entregados a proveedor" }, { value: "RECHAZADO", label: "Rechazados" }]} />}
       />
     </div>

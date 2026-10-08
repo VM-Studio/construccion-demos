@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { Combobox } from "@/components/shared/combobox";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -118,7 +119,7 @@ export function OrdenesTab({ filtroInicial }: { filtroInicial?: string | null })
         onRowClick={(o) => router.push(`/compras/oc/${o.id}`)}
         initialSort={{ key: "emision", dir: "desc" }}
         rowClassName={(o) => (esAtrasada(o) ? "bg-danger-soft/40" : undefined)}
-        empty={{ icono: ShoppingCart, titulo: "No hay órdenes de compra", accion: puedeCrear ? <Button size="sm" onClick={() => router.push("/compras/oc/nueva")}><Plus />Nueva OC</Button> : undefined }}
+        empty={base.length ? { icono: ShoppingCart, titulo: "No hay órdenes de compra para el filtro" } : <VacioGuiado pagina="ordenesCompra" icono={ShoppingCart} puedeAccion={puedeCrear} />}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={[{ value: "MES", label: "Este mes" }, { value: "30D", label: "30 días" }, { value: "90D", label: "90 días" }]} />
@@ -158,7 +159,17 @@ export function OrdenesTab({ filtroInicial }: { filtroInicial?: string | null })
             vacio="No hay órdenes pendientes de recibir"
             opciones={pendientes.map((o) => ({ value: o.id, label: `${o.numero} · ${prov(o.proveedorId)}`, detalle: `llega ${formatDate(o.fechaEntregaEstimada)}` }))}
           />
-          <ul className="mt-3 divide-y divide-border rounded-card border border-border">
+          {!pendientes.length && (
+            <div className="mt-3 rounded-card border border-border bg-subtle p-3 text-[13px] text-muted">
+              Para recibir mercadería tiene que haber una orden de compra confirmada: creala, enviala al proveedor y confirmala; ahí aparece acá.
+              {puedeCrear && (
+                <div className="mt-2">
+                  <Button size="sm" variant="secondary" onClick={() => router.push("/compras/oc/nueva")}><Plus /> Nueva orden de compra</Button>
+                </div>
+              )}
+            </div>
+          )}
+          <ul className={cn("mt-3 divide-y divide-border rounded-card border border-border", !pendientes.length && "hidden")}>
             {pendientes.map((o) => (
               <li key={o.id}>
                 <button

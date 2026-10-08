@@ -152,7 +152,7 @@ export function ReporteVentas() {
         foot: ["Total", tot.unidades, Math.round(tot.facturado), Math.round(tot.costo), Math.round(tot.facturado - tot.costo), tot.facturado ? Math.round(((tot.facturado - tot.costo) / tot.facturado) * 1000) / 10 : 0, ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.clave} showFooter pageSize={100} empty={{ titulo: "Sin ventas en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.clave} showFooter pageSize={100} empty={{ titulo: "Sin ventas en el período", descripcion: "Sale de las notas de pedido confirmadas, con el costo congelado de cada línea. Probá con otro período o cargá la primera venta." }} />
     </ReporteLayout>
   );
 }
@@ -219,7 +219,7 @@ export function ReporteRentabilidadPedidos() {
         foot: ["Total", "", "", Math.round(t.i), Math.round(t.c), Math.round(t.i - t.c), t.i ? Math.round(((t.i - t.c) / t.i) * 1000) / 10 : 0, Math.round(t.ch), t.i ? Math.round(((t.i - t.ch) / t.i) * 1000) / 10 : 0],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.pedido.id} searchText={(f) => `${f.pedido.numero} ${f.cliente?.razonSocial}`} onRowClick={(f) => router.push(`/ventas/notas-pedido/${f.pedido.id}`)} initialSort={{ key: "mp", dir: "asc" }} showFooter pageSize={50} empty={{ titulo: "Sin pedidos para el filtro" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.pedido.id} searchText={(f) => `${f.pedido.numero} ${f.cliente?.razonSocial}`} onRowClick={(f) => router.push(`/ventas/notas-pedido/${f.pedido.id}`)} initialSort={{ key: "mp", dir: "asc" }} showFooter pageSize={50} empty={{ titulo: "Sin pedidos para el filtro", descripcion: "Sale de las notas de pedido confirmadas: precio de venta contra el costo congelado de cada línea." }} />
     </ReporteLayout>
   );
 }
@@ -283,7 +283,7 @@ export function ReporteRentabilidadProductos() {
         foot: ["Total", "", "", Math.round(t.f), Math.round(t.c), Math.round(t.f - t.c), t.f ? Math.round(((t.f - t.c) / t.f) * 1000) / 10 : 0, "", ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.productoId} searchText={(f) => `${f.p.codigo} ${f.p.nombre}`} onRowClick={(f) => router.push(`/productos?id=${f.productoId}`)} initialSort={{ key: "m", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "Sin ventas en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.productoId} searchText={(f) => `${f.p.codigo} ${f.p.nombre}`} onRowClick={(f) => router.push(`/productos?id=${f.productoId}`)} initialSort={{ key: "m", dir: "desc" }} showFooter pageSize={50} empty={{ titulo: "Sin ventas en el período", descripcion: "Sale de las notas de pedido confirmadas, con el costo congelado de cada línea. Probá con otro período o cargá la primera venta." }} />
     </ReporteLayout>
   );
 }
@@ -352,7 +352,7 @@ export function ReporteRentabilidadClientes() {
         foot: ["Total", Math.round(total), "", "", 100, "", "", filas.reduce((a, f) => a + f.n, 0), ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} onRowClick={(f) => router.push(`/ventas?tab=clientes&cliente=${f.id}`)} showFooter pageSize={50} empty={{ titulo: "Sin ventas en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} onRowClick={(f) => router.push(`/ventas?tab=clientes&cliente=${f.id}`)} showFooter pageSize={50} empty={{ titulo: "Sin ventas en el período", descripcion: "Sale de las notas de pedido confirmadas, con el costo congelado de cada línea. Probá con otro período o cargá la primera venta." }} />
     </ReporteLayout>
   );
 }

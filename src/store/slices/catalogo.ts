@@ -61,6 +61,11 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           const viejo = tx.find("precios", p.id);
           if (viejo && viejo.precio !== p.precio) tx.patch("precios", p.id, { precio: p.precio });
         }
+        // Artículos que todavía no tenían fila de precio en esa lista: se crea.
+        const existentes = new Set(tx.get("precios").map((p) => `${p.productoId}|${p.listaPreciosId}`));
+        for (const c of cambios)
+          if (!existentes.has(`${c.productoId}|${c.listaPreciosId}`))
+            tx.insert("precios", { id: newId("pre"), productoId: c.productoId, listaPreciosId: c.listaPreciosId, precio: c.nuevo, ...tx.meta() } as PrecioProducto);
         const productos = new Set(cambios.map((c) => c.productoId)).size;
         tx.auditar("Actualización masiva de precios", "ListaPrecios", "masiva", `${descripcion} · ${productos} productos`);
         return productos;

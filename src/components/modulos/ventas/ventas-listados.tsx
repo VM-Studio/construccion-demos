@@ -15,6 +15,10 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { Combobox } from "@/components/shared/combobox";
+import { SelectorCliente } from "@/components/shared/alta-rapida";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { prerequisitos } from "@/domain/prerequisitos";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { ObraSelect, NuevaObraDialog } from "@/components/shared/obra-select";
 import { ItemsGrid, type LineaBase } from "@/components/shared/items-grid";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
@@ -78,7 +82,7 @@ export function CotizacionesView() {
         onRowClick={setAbrir}
         searchText={(c) => `${c.numero} ${cliente(c.clienteId)?.razonSocial}`}
         initialSort={{ key: "f", dir: "desc" }}
-        empty={{ icono: FileText, titulo: "No hay cotizaciones" }}
+        empty={db.cotizaciones.length === 0 ? <VacioGuiado pagina="cotizaciones" icono={FileText} onAccion={() => setAbrir("nueva")} puedeAccion={puede} /> : { icono: FileText, titulo: "No hay cotizaciones para el filtro" }}
         filters={<div className="w-[160px]"><Select size="sm" aria-label="Estado" value={estado} onValueChange={setEstado} options={[{ value: "", label: "Todos los estados" }, { value: "BORRADOR", label: "Borrador" }, { value: "ENVIADA", label: "Enviada" }, { value: "ACEPTADA", label: "Aceptada" }, { value: "RECHAZADA", label: "Rechazada" }]} /></div>}
       />
       {abrir && <CotizacionDialog cot={abrir === "nueva" ? undefined : abrir} clienteInicial={params.get("cliente") ?? undefined} onClose={() => setAbrir(null)} />}
@@ -114,6 +118,17 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
     else toast.error(r.error);
   };
   const actual = cot ? db.cotizaciones.find((c) => c.id === cot.id) : undefined;
+  const faltan = cot ? [] : prerequisitos("cotizaciones", db);
+  const elegirCliente = (v: string) => {
+    setClienteId(v);
+    // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
+    const c = useStore.getState().db.clientes.find((x) => x.id === v);
+    setCircuito(c?.circuitoHabitual ?? 1);
+    setObraId("");
+    // Los precios cargados eran de la lista del cliente anterior.
+    const listaNueva = c?.listaPreciosId ?? "lst_gen";
+    setItems((its) => its.map((i) => ({ ...i, precio: obtenerPrecio(i.productoId, listaNueva, useStore.getState().db.precios) })));
+  };
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent
@@ -135,9 +150,10 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
         }
       >
         <div className="space-y-4">
+          {faltan.length > 0 && <AvisoFaltantes faltan={faltan} titulo="Para cotizar falta cargar datos" texto={`Necesitás ${faltan.map((f) => f.nombre).join(" y ")}. Podés crearlos desde los buscadores sin perder lo cargado.`} />}
           <div className="grid gap-3 sm:grid-cols-4">
             <FormField label="Cliente" className="sm:col-span-2">
-              <Combobox aria-label="Cliente" value={clienteId} disabled={!editable} onChange={(v) => { setClienteId(v); setCircuito(db.clientes.find((c) => c.id === v)?.circuitoHabitual ?? 1); setObraId(""); }} opciones={db.clientes.map((c) => ({ value: c.id, label: c.nombreFantasia ?? c.razonSocial, detalle: c.codigo }))} />
+              <SelectorCliente value={clienteId} disabled={!editable} onChange={elegirCliente} />
             </FormField>
             <FormField label="Obra"><ObraSelect clienteId={clienteId} value={obraId} onChange={setObraId} /></FormField>
             <FormField label="Validez (días)" htmlFor="cot-v"><Input id="cot-v" type="number" min={1} value={validez} disabled={!editable} onChange={(e) => setValidez(Math.max(1, Number(e.target.value) || 1))} /></FormField>
@@ -218,7 +234,7 @@ export function ComprobantesView() {
         searchText={(c) => `${c.numero} ${cliente(c.clienteId)?.razonSocial}`}
         initialSort={{ key: "f", dir: "desc" }}
         showFooter
-        empty={{ icono: Receipt, titulo: "Sin comprobantes en el período" }}
+        empty={!db.comprobantes.some((c) => c.clienteId && c.tipo !== "SALDO_A_FAVOR") ? <VacioGuiado pagina="comprobantes" icono={Receipt} /> : { icono: Receipt, titulo: "Sin comprobantes en el período" }}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={PRESETS_LISTADO} />
@@ -285,7 +301,7 @@ export function RecibosView() {
         searchText={(c) => `${c.numero} ${cliente(c.clienteId)?.razonSocial} ${imputadoA(c)}`}
         initialSort={{ key: "f", dir: "desc" }}
         showFooter
-        empty={{ icono: Wallet, titulo: "Sin recibos en el período" }}
+        empty={db.cobranzas.length === 0 ? <VacioGuiado pagina="recibos" icono={Wallet} onAccion={() => setNuevo(true)} puedeAccion={puede} /> : { icono: Wallet, titulo: "Sin recibos en el período" }}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={PRESETS_LISTADO} />
@@ -329,9 +345,10 @@ export function DevolucionesView() {
   return (
     <>
       <PageHeader titulo="Devoluciones" descripcion="Devoluciones de notas de pedido (DP): remito de devolución, nota de crédito y saldo de acopio." acciones={puede && <Button onClick={() => setElegir(true)}><Undo2 /> Nueva devolución</Button>} />
-      <DataTable rows={filas} columns={columnas} getRowId={(d) => d.id} onRowClick={(d) => router.push(`/ventas/notas-pedido/${d.notaPedidoId}`)} searchText={(d) => `${d.numero} ${cliente(d.clienteId)?.razonSocial} ${d.motivo}`} initialSort={{ key: "f", dir: "desc" }} empty={{ icono: Undo2, titulo: "Sin devoluciones" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(d) => d.id} onRowClick={(d) => router.push(`/ventas/notas-pedido/${d.notaPedidoId}`)} searchText={(d) => `${d.numero} ${cliente(d.clienteId)?.razonSocial} ${d.motivo}`} initialSort={{ key: "f", dir: "desc" }} empty={db.devoluciones.length === 0 ? <VacioGuiado pagina="devoluciones" icono={Undo2} /> : { icono: Undo2, titulo: "No hay devoluciones para el filtro" }} />
       <Dialog open={elegir} onOpenChange={setElegir}>
         <DialogContent size="md" title="Nueva devolución" description="Elegí la nota de pedido a devolver." footer={<><Button variant="secondary" onClick={() => setElegir(false)}>Cancelar</Button><Button disabled={!npId} onClick={() => { setNp(db.notasPedido.find((n) => n.id === npId) ?? null); setElegir(false); }}>Continuar</Button></>}>
+          {candidatas.length === 0 && <p className="mb-3 text-[13px] text-muted">No hay notas de pedido confirmadas con mercadería para devolver.</p>}
           <Combobox aria-label="Nota de pedido" value={npId} onChange={setNpId} placeholder="Buscar NP por número o cliente…" opciones={candidatas.map((n) => ({ value: n.id, label: `${n.numero} · ${cliente(n.clienteId)?.nombreFantasia ?? cliente(n.clienteId)?.razonSocial}`, detalle: formatDate(n.fecha) }))} />
         </DialogContent>
       </Dialog>
@@ -345,11 +362,12 @@ export function DevolucionesView() {
 export function ObrasView() {
   const db = useDb();
   const router = useRouter();
+  const params = useSearchParams();
   const cliente = useCliente();
   const puede = usePuede("ventas.editar");
   const [nueva, setNueva] = React.useState<string | null>(null);
-  const [elegir, setElegir] = React.useState(false);
-  const [cliId, setCliId] = React.useState("");
+  const [elegir, setElegir] = React.useState(params.get("nuevo") === "1");
+  const [cliId, setCliId] = React.useState(params.get("cliente") ?? "");
   const filas = db.obras;
   const columnas: Column<Obra>[] = [
     { key: "n", header: "Obra", sortable: true, sortValue: (o) => o.nombre, cell: (o) => <span className="block min-w-[180px] font-medium">{o.nombre}</span> },
@@ -362,10 +380,10 @@ export function ObrasView() {
   return (
     <>
       <PageHeader titulo="Obras" descripcion="Obras de cada cliente: a qué obra va cada línea de venta y cada acopio." acciones={puede && <Button onClick={() => setElegir(true)}><Plus /> Nueva obra</Button>} />
-      <DataTable rows={filas} columns={columnas} getRowId={(o) => o.id} onRowClick={(o) => router.push(`/clientes/${o.clienteId}`)} searchText={(o) => `${o.nombre} ${cliente(o.clienteId)?.razonSocial} ${o.localidad ?? ""}`} initialSort={{ key: "c", dir: "asc" }} empty={{ icono: HardHat, titulo: "Sin obras" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(o) => o.id} onRowClick={(o) => router.push(`/clientes/${o.clienteId}`)} searchText={(o) => `${o.nombre} ${cliente(o.clienteId)?.razonSocial} ${o.localidad ?? ""}`} initialSort={{ key: "c", dir: "asc" }} empty={db.obras.length === 0 ? <VacioGuiado pagina="obras" icono={HardHat} extra={puede && <Button size="sm" onClick={() => setElegir(true)}><Plus /> Nueva obra</Button>} /> : { icono: HardHat, titulo: "No hay obras para el filtro" }} />
       <Dialog open={elegir} onOpenChange={setElegir}>
-        <DialogContent size="sm" title="Nueva obra" description="Elegí el cliente." footer={<><Button variant="secondary" onClick={() => setElegir(false)}>Cancelar</Button><Button disabled={!cliId} onClick={() => { setNueva(cliId); setElegir(false); }}>Continuar</Button></>}>
-          <Combobox aria-label="Cliente" value={cliId} onChange={setCliId} opciones={db.clientes.map((c) => ({ value: c.id, label: c.nombreFantasia ?? c.razonSocial, detalle: c.codigo }))} />
+        <DialogContent size="sm" title="Nueva obra" description="Elegí el cliente (o crealo acá mismo)." footer={<><Button variant="secondary" onClick={() => setElegir(false)}>Cancelar</Button><Button disabled={!cliId} onClick={() => { setNueva(cliId); setElegir(false); }}>Continuar</Button></>}>
+          <SelectorCliente value={cliId} onChange={setCliId} />
         </DialogContent>
       </Dialog>
       {nueva && <NuevaObraDialog clienteId={nueva} open onOpenChange={(v) => !v && setNueva(null)} />}

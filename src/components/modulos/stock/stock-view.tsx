@@ -23,7 +23,7 @@ export function StockView({ tab }: { tab: keyof typeof TITULOS }) {
       {tab === "posicion" && <PosicionTab filtroInicial={params.get("filtro")} />}
       {tab === "movimientos" && <MovimientosTab />}
       {tab === "transferencias" && <TransferenciasTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />}
-      {tab === "ajustes" && <AjustesTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} />}
+      {tab === "ajustes" && <AjustesTab abrirId={params.get("id")} nuevo={params.get("nuevo") === "1"} productoInicial={params.get("producto")} motivoInicial={params.get("motivo")} />}
     </>
   );
 }

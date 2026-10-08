@@ -19,6 +19,7 @@ import { DateRangePicker } from "@/components/shared/filter-bar";
 import { ClipContador } from "@/components/shared/adjuntos-panel";
 import { PrintPreview } from "@/components/shared/print-layout";
 import { useConfirm } from "@/components/shared/confirm-dialog";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
@@ -57,6 +58,9 @@ export function RemitosView() {
   const [subir, setSubir] = React.useState<string | null>(null);
   const [nuevo, setNuevo] = React.useState(params.get("nuevo") === "1");
   React.useEffect(() => setTipo(TIPOS[params.get("tipo") ?? ""] ?? ""), [params]);
+  React.useEffect(() => {
+    if (params.get("nuevo") === "1") setNuevo(true);
+  }, [params]);
   React.useEffect(() => setFirmados(params.get("firmados") === "1" ? "SI" : params.get("firmados") === "0" ? "NO" : ""), [params]);
 
   const cli = React.useMemo(() => new Map(db.clientes.map((c) => [c.id, c])), [db.clientes]);
@@ -140,7 +144,7 @@ export function RemitosView() {
         searchText={(r) => `${r.numero} ${np.get(r.notaPedidoId ?? "")?.numero ?? ""} ${cli.get(r.clienteId ?? "")?.razonSocial ?? ""} ${cli.get(r.clienteId ?? "")?.codigo ?? ""} ${db.obras.find((o) => o.id === r.obraId)?.nombre ?? ""} ${productos(r)}`}
         searchPlaceholder="Remito, nota de pedido, cliente, obra o producto…"
         initialSort={{ key: "f", dir: "desc" }}
-        empty={{ icono: FileText, titulo: "No hay remitos para el filtro" }}
+        empty={base.length ? { icono: FileText, titulo: "No hay remitos para el filtro" } : <VacioGuiado pagina="remitos" icono={FileText} puedeAccion={puedeVender} onAccion={() => setNuevo(true)} />}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={PRESETS_LISTADO} />
@@ -184,6 +188,14 @@ function NuevoRemitoDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="md" title="Nuevo remito" description="Elegí la nota de pedido con mercadería pendiente de entrega." footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={!npId} onClick={generar}>Generar remito</Button></>}>
         <div className="space-y-3">
+          {!nps.length && (
+            <div className="rounded-card border border-border bg-subtle p-3 text-[13px] text-muted">
+              No hay notas de pedido con mercadería pendiente de entrega. Los remitos nacen de las notas de pedido: confirmá una venta y generá su remito.
+              <div className="mt-2">
+                <Button size="sm" variant="secondary" onClick={() => router.push("/ventas/notas-pedido/nueva")}><Plus /> Nueva nota de pedido</Button>
+              </div>
+            </div>
+          )}
           <Combobox aria-label="Nota de pedido" value={npId} onChange={setNpId} placeholder="Buscar NP por número o cliente…" opciones={nps.map((n) => ({ value: n.id, label: `${n.numero} · ${db.clientes.find((c) => c.id === n.clienteId)?.nombreFantasia ?? db.clientes.find((c) => c.id === n.clienteId)?.razonSocial}`, detalle: n.origen === "ACOPIO" ? "Acopio" : "Venta" }))} />
           <Segmented value={estado} onChange={setEstado} options={[{ value: "PICKING", label: "Pasa a picking" }, { value: "HECHO", label: "Retira ahora (hecho)" }]} />
           <p className="text-[12px] text-muted">El remito toma todo lo pendiente de la NP. Para entregas parciales usá Pendientes de entrega.</p>

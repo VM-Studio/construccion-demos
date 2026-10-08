@@ -3,7 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Info, Save, ShieldAlert, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Plus, Save, ShieldAlert, Users } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosResumen, useDb, usePendientes, usePuede, useUnidadNegocio, useUsuario } from "@/store/selectors";
 import type { Circuito, FormaPagoVenta, ModalidadEntrega, NotaPedido, OrigenVenta, Producto } from "@/domain/types";
@@ -14,8 +14,9 @@ import { puede } from "@/domain/permisos";
 import type { OpcionesConfirmacion } from "@/store/slices/ventas";
 import { PageHeader } from "@/components/shared/page-header";
 import { ItemsGrid, type LineaBase } from "@/components/shared/items-grid";
-import { Combobox } from "@/components/shared/combobox";
-import { ObraSelect } from "@/components/shared/obra-select";
+import { SelectorCliente } from "@/components/shared/alta-rapida";
+import { NuevaObraDialog, ObraSelect } from "@/components/shared/obra-select";
+import { prerequisitos } from "@/domain/prerequisitos";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
-import { NuevoClienteDialog } from "./cliente-form";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { PendientesTabla } from "./pendientes-tabla";
 
 interface Linea extends LineaBase {
@@ -76,7 +77,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
       cotizacion?.items.map((i) => ({ id: newId("l"), productoId: i.productoId, obraId: i.obraId ?? cotizacion.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct })) ??
       [],
   );
-  const [nuevoCliente, setNuevoCliente] = React.useState(false);
+  const [nuevaObra, setNuevaObra] = React.useState(false);
   const [bloqueo, setBloqueo] = React.useState<{ codigo: string; error: string; opts: OpcionesConfirmacion } | null>(null);
   const [verPendientes, setVerPendientes] = React.useState<string | null>(null);
 
@@ -87,7 +88,8 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   // Al elegir cliente: precarga lista, condición, circuito, vendedor, sucursal y acopio único.
   const elegirCliente = (id: string) => {
     setClienteId(id);
-    const c = db.clientes.find((x) => x.id === id);
+    // Se lee del store en el momento: si el cliente se acaba de crear con el alta rápida, todavía no está en `db`.
+    const c = useStore.getState().db.clientes.find((x) => x.id === id);
     if (!c) return;
     setCircuito(c.circuitoHabitual);
     setFormaPago(c.condicionPago === "CONTADO" ? "CONTADO" : "CUENTA_CORRIENTE");
@@ -191,6 +193,9 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const lineasProductoBloqueo = usePendientes().filter((l) => l.productoId === (verPendientes ?? "") && l.depositoId === depositoId);
 
   const sel = "grid gap-3 sm:grid-cols-2 lg:grid-cols-5";
+  const faltan = borrador ? [] : prerequisitos("notasPedido", db);
+  const obrasCliente = db.obras.filter((o) => o.clienteId === clienteId && o.activa);
+  const obraCreada = (id: string) => setItems((its) => its.map((i) => (i.obraId ? i : { ...i, obraId: id })));
   return (
     <div>
       <PageHeader
@@ -198,20 +203,30 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
         descripcion={acopio ? "Retiro de acopio a precios congelados: descuenta del saldo disponible." : "Venta nueva: precios de lista del cliente, con control de disponible."}
         favorito={false}
       />
+      {faltan.length > 0 && (
+        <AvisoFaltantes
+          className="mb-4"
+          faltan={faltan}
+          titulo="Para vender falta cargar datos"
+          texto={`Necesitás ${faltan.map((f) => f.nombre).join(" y ")}. Podés crearlos desde los buscadores de abajo sin perder lo cargado, o ir a su pantalla.`}
+        />
+      )}
+      {clienteId && !acopio && obrasCliente.length === 0 && (
+        <AvisoFaltantes
+          className="mb-4"
+          faltan={[]}
+          titulo="El cliente no tiene obras"
+          texto="Cada línea de la nota de pedido indica a qué obra va. Creá la primera obra del cliente para poder imputar los artículos."
+          acciones={<Button size="sm" variant="secondary" onClick={() => setNuevaObra(true)}><Plus /> Nueva obra</Button>}
+        />
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-4">
           <Card>
             <CardContent className="space-y-4 pt-4">
               <div className={sel}>
                 <FormField label="Cliente" required className="sm:col-span-2">
-                  <Combobox
-                    aria-label="Cliente"
-                    value={clienteId}
-                    onChange={elegirCliente}
-                    placeholder="Buscar cliente por nombre, código o CUIT…"
-                    opciones={db.clientes.filter((c) => c.activo).map((c) => ({ value: c.id, label: c.nombreFantasia ?? c.razonSocial, detalle: c.codigo, buscar: `${c.razonSocial} ${c.cuit}` }))}
-                    accionNuevo={{ label: "Nuevo cliente", onSelect: () => setNuevoCliente(true) }}
-                  />
+                  <SelectorCliente value={clienteId} onChange={elegirCliente} placeholder="Buscar cliente por nombre, código o CUIT…" />
                 </FormField>
                 <FormField label="Sucursal">
                   <Select aria-label="Sucursal" value={sucursalId} disabled={!!acopio} onValueChange={(v) => { setSucursalId(v); setDepositoId(db.sucursales.find((s) => s.id === v)?.depositoId ?? depositoId); }} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} />
@@ -415,7 +430,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
         </aside>
       </div>
 
-      <NuevoClienteDialog open={nuevoCliente} onOpenChange={setNuevoCliente} onCreado={elegirCliente} />
+      {clienteId && <NuevaObraDialog clienteId={clienteId} open={nuevaObra} onOpenChange={setNuevaObra} onCreada={obraCreada} />}
 
       <Dialog open={!!bloqueo} onOpenChange={(v) => !v && setBloqueo(null)}>
         {bloqueo && (

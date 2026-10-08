@@ -9,6 +9,7 @@ import { useAlertas } from "@/store/alertas";
 import { ventasFacturadas } from "@/domain/metricas";
 import { useModulosVisibles } from "@/components/layout/use-modulo";
 import { Button } from "@/components/ui/button";
+import { GuiaCargaInicial } from "./guia-carga";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,8 @@ export function InicioView() {
         <h1 className="text-[24px] font-semibold tracking-tight text-ink">Hola, {usuario?.nombre.split(" ")[0]}</h1>
         <p className="text-[13px] text-muted">{formatDate(new Date(), "EEEE d 'de' MMMM 'de' yyyy")}</p>
       </div>
+
+      <GuiaCargaInicial />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-tour="inicio-kpis">
         {verVentas && <KpiChico icono={DollarSign} label="Ventas de hoy" valor={formatMoney(kpis.ventasHoy, { compact: Math.abs(kpis.ventasHoy) >= 1_000_000 })} href="/tablero" />}

@@ -70,7 +70,7 @@ export function ReportePendientes() {
       }
       exportar={() => ({ head: ["Grupo", "Líneas", "$ comprometido", "Costo hoy", "Más antiguo (días)"], rows: filas.map((f) => [f.nombre, f.lineas, Math.round(f.pesos), Math.round(f.costo), f.viejo]), foot: ["Total", t.l, Math.round(t.p), Math.round(t.c), ""] })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.clave} onRowClick={() => router.push("/pendientes-entrega")} initialSort={{ key: "p", dir: "desc" }} showFooter empty={{ titulo: "Sin entregas pendientes" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.clave} onRowClick={() => router.push("/pendientes-entrega")} initialSort={{ key: "p", dir: "desc" }} showFooter empty={{ titulo: "Sin entregas pendientes", descripcion: "Sale de lo vendido o retirado de acopio que todavía no tiene remito hecho." }} />
     </ReporteLayout>
   );
 }
@@ -112,7 +112,7 @@ export function ReporteAcopiosProveedores() {
       }
       exportar={() => ({ head: ["Acopio", "Circuito", "Proveedor", "Importe", "Saldo disponible", "Pendiente de retirar", "Deuda", "Ahorro", "Vencimiento"], rows: filas.map((a) => [a.acopio.numero, `AC${a.acopio.circuito}`, a.prov, Math.round(a.acopio.importe), Math.round(a.saldo), Math.round(a.pendientePesos), Math.round(a.deuda), Math.round(a.ahorro), formatDate(a.acopio.fechaVencimiento)]), foot: ["Total", "", "", "", Math.round(t.s), Math.round(t.p), Math.round(t.d), Math.round(t.h), ""] })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(a) => a.acopio.id} onRowClick={(a) => router.push(`/proveedores/acopios/${a.acopio.id}`)} showFooter initialSort={{ key: "pr", dir: "desc" }} empty={{ titulo: "Sin acopios con proveedores" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(a) => a.acopio.id} onRowClick={(a) => router.push(`/proveedores/acopios/${a.acopio.id}`)} showFooter initialSort={{ key: "pr", dir: "desc" }} empty={{ titulo: "Sin acopios con proveedores", descripcion: "Sale de los acopios con proveedores vigentes: lo pagado o pactado y lo que falta retirar a costo congelado." }} />
     </ReporteLayout>
   );
 }
@@ -158,7 +158,7 @@ export function ReporteTiemposDespacho() {
       grafico={<BarrasAgrupadasChart data={filas.sort((a, b) => a.k.localeCompare(b.k)).map((f) => ({ clave: dim === "dia" ? f.k.slice(5) : f.k, espera: f.esp ?? 0, preparacion: f.prep ?? 0 }))} series={[{ key: "espera", nombre: "Espera", color: COLORES.barraAlt }, { key: "preparacion", nombre: "Preparación", color: COLORES.acento }]} />}
       exportar={() => ({ head: ["Grupo", "Despachos", "Espera prom.", "Preparación prom.", "Total prom.", "Más de 90 min"], rows: filas.map((f) => [f.k, f.n, f.esp, f.prep, f.tot, f.lentos]) })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.k} initialSort={{ key: "k", dir: "asc" }} empty={{ titulo: "Sin despachos finalizados en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.k} initialSort={{ key: "k", dir: "asc" }} empty={{ titulo: "Sin despachos finalizados en el período", descripcion: "Sale de los tiempos de espera y preparación de cada despacho del depósito. Probá con otro período." }} />
     </ReporteLayout>
   );
 }
@@ -200,7 +200,7 @@ export function ReporteRemitosPendientes() {
       }
       exportar={() => ({ head: ["Remito", "Circuito", "Entrega", "Cliente", "Tipo", "Valor declarado"], rows: filas.map((r) => [r.numero, `AC${r.circuito}`, formatDate(r.fechaEntrega ?? r.fecha), cli(r.clienteId)?.razonSocial, r.tipo, Math.round(r.valorDeclarado)]) })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/remitos/${r.id}`)} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Nada pendiente" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/remitos/${r.id}`)} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Nada pendiente", descripcion: "Sale de los remitos hechos que todavía no tienen el remito firmado adjunto o no se facturaron." }} />
     </ReporteLayout>
   );
 }

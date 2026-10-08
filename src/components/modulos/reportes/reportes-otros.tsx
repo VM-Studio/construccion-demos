@@ -86,7 +86,7 @@ export function ReporteCompras() {
         foot: ["Total", t.n, Math.round(t.e), Math.round(t.r), Math.round(t.e - t.r), "", ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.prov.id} onRowClick={(f) => router.push(`/proveedores/${f.prov.id}`)} initialSort={{ key: "e", dir: "desc" }} showFooter empty={{ titulo: "Sin compras en el período" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.prov.id} onRowClick={(f) => router.push(`/proveedores/${f.prov.id}`)} initialSort={{ key: "e", dir: "desc" }} showFooter empty={{ titulo: "Sin compras en el período", descripcion: "Sale de las órdenes de compra confirmadas y de los ingresos de mercadería. Probá con otro período o cargá la primera compra." }} />
     </ReporteLayout>
   );
 }
@@ -153,7 +153,7 @@ export function ReporteCobranzas() {
         foot: ["Total", Math.round(filas.reduce((a, f) => a + f.saldo, 0)), Math.round(totAnt.a), Math.round(totAnt.b), Math.round(totAnt.c), Math.round(totAnt.d), "", ""],
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.c.id} onRowClick={(f) => router.push(`/cuentas-corrientes/clientes/${f.c.id}`)} initialSort={{ key: "s", dir: "desc" }} showFooter empty={{ titulo: "Sin deuda ni cobranzas" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.c.id} onRowClick={(f) => router.push(`/cuentas-corrientes/clientes/${f.c.id}`)} initialSort={{ key: "s", dir: "desc" }} showFooter empty={{ titulo: "Sin deuda ni cobranzas", descripcion: "Sale de las facturas a clientes en cuenta corriente y de los recibos de cobro." }} />
     </ReporteLayout>
   );
 }
@@ -209,7 +209,7 @@ export function ReporteDespachos() {
         rows: entregas.map((d) => [d.numero, db.clientes.find((c) => c.id === d.clienteId)?.razonSocial, formatDate(d.fechaProgramada), formatDateTime(d.fechaEntrega), db.vehiculos.find((v) => v.id === d.vehiculoId)?.patente ?? "Mostrador", Math.round(pesoDespacho(d, db.productos)), aTiempo(d) ? "Sí" : "No", d.reprogramaciones ?? 0]),
       })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} showFooter />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.id} showFooter empty={{ titulo: "Sin entregas en el período", descripcion: "Sale de los despachos entregados (envíos a obra y retiros por mostrador). Probá con otro período." }} />
     </ReporteLayout>
   );
 }
@@ -256,7 +256,7 @@ export function ReporteAuditoria() {
       }
       exportar={() => ({ head: ["Fecha", "Usuario", "Acción", "Entidad", "Detalle"], rows: filas.map((a) => [formatDateTime(a.fecha), nombreUsuario(db, a.usuarioId), a.accion, a.entidad, a.detalle]) })}
     >
-      <DataTable rows={filas} columns={columnas} getRowId={(a) => a.id} searchText={(a) => `${a.accion} ${a.detalle} ${a.entidad}`} initialSort={{ key: "f", dir: "desc" }} pageSize={50} empty={{ titulo: "Sin eventos para el filtro" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(a) => a.id} searchText={(a) => `${a.accion} ${a.detalle} ${a.entidad}`} initialSort={{ key: "f", dir: "desc" }} pageSize={50} empty={{ titulo: "Sin eventos para el filtro", descripcion: "Cada alta, cambio, anulación y descarga queda registrada acá con usuario y fecha." }} />
     </ReporteLayout>
   );
 }

@@ -1,6 +1,7 @@
 import type { Chofer, Deposito, Sucursal, UnidadNegocio, Usuario, Vehiculo } from "@/domain/types";
 
-export function seedOrganizacion(ts: string) {
+/** Estructura de la empresa: unidades de negocio, sucursales, depósitos y los 4 usuarios base. */
+export function seedOrganizacionBase(ts: string) {
   const base = { creadoEn: ts, actualizadoEn: ts };
 
   const unidadesNegocio: UnidadNegocio[] = [
@@ -14,17 +15,27 @@ export function seedOrganizacion(ts: string) {
   ];
 
   const depositos: Deposito[] = [
-    { id: "dep_central", nombre: "Depósito Casa Central", sucursalId: "suc_central", direccion: "Av. Gral. San Martín 4560, Florida Oeste", posiciones: ["Playa 1", "Playa 2", "Galpón 1", "Mostrador"], ...base },
-    { id: "dep_2", nombre: "Depósito Sucursal 2", sucursalId: "suc_2", direccion: "Av. Ricardo Balbín 2890, San Martín", posiciones: ["Playa", "Galpón 2", "Mostrador"], ...base },
+    { id: "dep_central", nombre: "Depósito Casa Central", sucursalId: "suc_central", direccion: "Av. Gral. San Martín 4560, Florida Oeste", posiciones: ["Playa 1", "Playa 2", "Galpón", "Mostrador"], ...base },
+    { id: "dep_2", nombre: "Depósito Sucursal 2", sucursalId: "suc_2", direccion: "Av. Ricardo Balbín 2890, San Martín", posiciones: ["Playa 1", "Playa 2", "Galpón", "Mostrador"], ...base },
   ];
 
   const usuarios: Usuario[] = [
     { id: "usr_felipe", nombre: "Felipe", apellido: "", email: "felipe@acerosrnf.com.ar", rol: "DUENO", activo: true, avatarIniciales: "F", ...base },
     { id: "usr_natalia", nombre: "Natalia Quiroga", email: "natalia@acerosrnf.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "NQ", ...base },
-    { id: "usr_sergio", nombre: "Sergio Medina", email: "sergio@acerosrnf.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "SM", ...base },
     { id: "usr_lucas", nombre: "Lucas Fernández", email: "lucas@acerosrnf.com.ar", rol: "VENTAS", sucursalId: "suc_central", activo: true, avatarIniciales: "LF", ...base },
-    { id: "usr_rocio", nombre: "Rocío Benítez", email: "rocio@acerosrnf.com.ar", rol: "VENTAS", sucursalId: "suc_2", activo: true, avatarIniciales: "RB", ...base },
     { id: "usr_hugo", nombre: "Hugo Ramírez", email: "hugo@acerosrnf.com.ar", rol: "DEPOSITO", sucursalId: "suc_central", activo: true, avatarIniciales: "HR", ...base },
+  ];
+
+  return { unidadesNegocio, sucursales, depositos, usuarios };
+}
+
+/** Lo que agregan los datos de ejemplo a la organización: más usuarios, choferes y vehículos. */
+export function seedOrganizacionEjemplo(ts: string) {
+  const base = { creadoEn: ts, actualizadoEn: ts };
+
+  const usuarios: Usuario[] = [
+    { id: "usr_sergio", nombre: "Sergio Medina", email: "sergio@acerosrnf.com.ar", rol: "ADMINISTRACION", activo: true, avatarIniciales: "SM", ...base },
+    { id: "usr_rocio", nombre: "Rocío Benítez", email: "rocio@acerosrnf.com.ar", rol: "VENTAS", sucursalId: "suc_2", activo: true, avatarIniciales: "RB", ...base },
   ];
 
   const choferes: Chofer[] = [
@@ -39,5 +50,5 @@ export function seedOrganizacion(ts: string) {
     { id: "veh_3", patente: "AF 233 LT", descripcion: "Iveco Daily 70C17 caja abierta", capacidadKg: 3500, choferId: "cho_3", activo: true, ...base },
   ];
 
-  return { unidadesNegocio, sucursales, depositos, usuarios, choferes, vehiculos };
+  return { usuarios, choferes, vehiculos };
 }

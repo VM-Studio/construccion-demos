@@ -50,3 +50,46 @@ export function numeradoresDesde(numeros: string[]): Numeradores {
   }
   return out;
 }
+
+/** Documentos con numeración propia y de qué punto de venta toman el número. */
+export const DOCUMENTOS_NUMERADOS: { codigo: CodigoDoc; nombre: string; conCircuito: boolean; puntoVenta: "sucursal" | "remito" | "central" }[] = [
+  { codigo: "NP", nombre: "Nota de pedido", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "AC", nombre: "Acopio", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "ACD", nombre: "Ajuste / traspaso de acopio", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "COT", nombre: "Cotización", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "F", nombre: "Factura", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "NC", nombre: "Nota de crédito", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "RC", nombre: "Recibo", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "SI", nombre: "Saldo inicial", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "RM", nombre: "Remito", conCircuito: true, puntoVenta: "remito" },
+  { codigo: "RD", nombre: "Remito de devolución", conCircuito: true, puntoVenta: "sucursal" },
+  { codigo: "OC", nombre: "Orden de compra", conCircuito: true, puntoVenta: "central" },
+  { codigo: "OP", nombre: "Orden de pago", conCircuito: true, puntoVenta: "central" },
+  { codigo: "ACP", nombre: "Acopio con proveedor", conCircuito: true, puntoVenta: "central" },
+  { codigo: "DES", nombre: "Despacho", conCircuito: false, puntoVenta: "sucursal" },
+  { codigo: "RCP", nombre: "Recepción de mercadería", conCircuito: false, puntoVenta: "central" },
+  { codigo: "TRF", nombre: "Transferencia", conCircuito: false, puntoVenta: "central" },
+  { codigo: "AJU", nombre: "Ajuste de stock", conCircuito: false, puntoVenta: "central" },
+];
+
+/**
+ * Todas las combinaciones código × circuito × punto de venta que el sistema puede numerar,
+ * con el último número usado (0 si todavía no se usó). Incluye claves existentes no previstas.
+ */
+export function filasNumeracion(numeradores: Numeradores, sucursales: { puntoVenta: string; puntoVentaRemito: string }[]) {
+  const filas = new Map<string, { clave: string; codigo: CodigoDoc; nombre: string; circuito: Circuito | null; puntoVenta: string; ultimo: number }>();
+  for (const d of DOCUMENTOS_NUMERADOS) {
+    const pvs = d.puntoVenta === "central" ? ["0001"] : [...new Set(sucursales.map((s) => (d.puntoVenta === "remito" ? s.puntoVentaRemito : s.puntoVenta)))];
+    for (const circuito of d.conCircuito ? ([1, 2] as Circuito[]) : [null])
+      for (const pv of pvs) {
+        const clave = claveNumerador(d.codigo, circuito, pv);
+        filas.set(clave, { clave, codigo: d.codigo, nombre: d.nombre, circuito, puntoVenta: pv, ultimo: numeradores[clave] ?? 0 });
+      }
+  }
+  for (const [clave, ultimo] of Object.entries(numeradores))
+    if (!filas.has(clave)) {
+      const [codigo, circ, pv] = clave.split("|");
+      filas.set(clave, { clave, codigo: codigo as CodigoDoc, nombre: DOCUMENTOS_NUMERADOS.find((d) => d.codigo === codigo)?.nombre ?? codigo, circuito: Number(circ) ? (Number(circ) as Circuito) : null, puntoVenta: pv, ultimo });
+    }
+  return [...filas.values()];
+}

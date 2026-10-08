@@ -2,7 +2,8 @@
  * Valida la consistencia del seed de Aceros RNF: `pnpm seed:check`.
  * Sale con código 1 si algún chequeo falla.
  */
-import { crearSeed } from "../src/data/seed";
+import { seedBase, seedEjemplo } from "../src/data/seed";
+import { estaVacio } from "../src/domain/prerequisitos";
 import { verificarIntegridad } from "../src/domain/integridad";
 import { estaBajoMinimo, lineasPendientes } from "../src/domain/stock";
 import { estaVencido } from "../src/domain/cuentasCorrientes";
@@ -10,12 +11,34 @@ import { estadoDerivado, diasParaVencer, movimientosAcopio, pendienteLinea, sald
 import { pendienteRetirar } from "../src/domain/acopiosProveedor";
 
 const hoy = new Date();
-const db = crearSeed(hoy);
-const res = verificarIntegridad(db);
-let ok = res.ok;
-
 const marca = (b: boolean) => (b ? "✔" : "✘");
-console.log("\nAceros RNF · chequeo del seed\n");
+let ok = true;
+
+// ── 1. Base vacía: solo estructura ──
+console.log("\nAceros RNF · base vacía (solo estructura)\n");
+{
+  const b = seedBase(hoy);
+  const r = verificarIntegridad(b);
+  for (const c of r.chequeos) console.log(`${marca(c.ok)} ${c.nombre} — ${c.detalle}`);
+  if (!r.ok) ok = false;
+  const cond = (nombre: string, v: boolean, detalle = "") => {
+    console.log(`${marca(v)} ${nombre}${detalle ? ` — ${detalle}` : ""}`);
+    if (!v) ok = false;
+  };
+  cond("Sin datos maestros ni operativos", estaVacio(b) && !b.adjuntos.length && !b.auditoria.length && !b.vehiculos.length && !b.choferes.length && !b.stock.length && !b.precios.length);
+  cond("2 sucursales con depósito y posiciones", b.sucursales.length === 2 && b.depositos.length === 2 && b.depositos.every((d) => d.posiciones.length >= 4), b.sucursales.map((s) => `${s.nombre} PV ${s.puntoVenta}`).join(" · "));
+  cond("2 unidades de negocio con rubros", b.unidadesNegocio.length === 2 && b.unidadesNegocio.every((u) => b.rubros.some((r) => r.unidadNegocioId === u.id)), `${b.rubros.length} rubros`);
+  cond("3 listas de precios sin precios", b.listasPrecios.length === 3, b.listasPrecios.map((l) => `${l.nombre} ${l.markupPorDefecto} %`).join(" · "));
+  cond("4 usuarios (dueño, administración, ventas, depósito)", b.usuarios.length === 4 && ["DUENO", "ADMINISTRACION", "VENTAS", "DEPOSITO"].every((r) => b.usuarios.some((u) => u.rol === r)));
+  cond("Numeración en 0", Object.keys(b.numeradores).length === 0);
+  cond("Motivo de ajuste «Inventario inicial»", b.config.motivosAjuste.some((m) => m.codigo === "INVENTARIO_INICIAL"));
+}
+
+// ── 2. Datos de ejemplo ──
+const db = seedEjemplo(hoy);
+const res = verificarIntegridad(db);
+if (!res.ok) ok = false;
+console.log("\nAceros RNF · datos de ejemplo\n");
 for (const c of res.chequeos) {
   console.log(`${marca(c.ok)} ${c.nombre} — ${c.detalle}`);
   for (const e of c.errores.slice(0, 10)) console.log(`    · ${e}`);

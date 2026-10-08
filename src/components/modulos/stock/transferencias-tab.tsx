@@ -13,6 +13,8 @@ import { EntitySheet } from "@/components/shared/entity-sheet";
 import { ItemsGrid, type LineaBase } from "@/components/shared/items-grid";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
 import { useConfirm } from "@/components/shared/confirm-dialog";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
@@ -48,7 +50,7 @@ export function TransferenciasTab({ abrirId, nuevo, productoInicial }: { abrirId
         searchText={(t) => `${t.numero} ${t.items.map((i) => db.productos.find((p) => p.id === i.productoId)?.nombre).join(" ")}`}
         onRowClick={(t) => router.replace(`/stock/transferencias?id=${t.id}`, { scroll: false })}
         initialSort={{ key: "fecha", dir: "desc" }}
-        empty={{ icono: ArrowLeftRight, titulo: "Sin transferencias", descripcion: "Mové mercadería entre depósitos con trazabilidad completa.", accion: puede ? <Button size="sm" onClick={() => setCreando(true)}><Plus />Nueva transferencia</Button> : undefined }}
+        empty={filas.length ? { icono: ArrowLeftRight, titulo: "No hay transferencias para la búsqueda" } : <VacioGuiado pagina="transferencias" icono={ArrowLeftRight} puedeAccion={puede} onAccion={() => setCreando(true)} />}
         actions={
           puede && (
             <Button size="sm" onClick={() => setCreando(true)}>
@@ -76,8 +78,8 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
   const db = useDb();
   const posiciones = usePosiciones();
   const crear = useStore((s) => s.crearTransferencia);
-  const [origen, setOrigen] = React.useState("dep_central");
-  const [destino, setDestino] = React.useState("dep_2");
+  const [origen, setOrigen] = React.useState(db.depositos[0]?.id ?? "");
+  const [destino, setDestino] = React.useState(db.depositos[1]?.id ?? "");
   const [items, setItems] = React.useState<Linea[]>([]);
   const [obs, setObs] = React.useState("");
   React.useEffect(() => {
@@ -110,6 +112,7 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
       }
     >
       <div className="space-y-4">
+        <AvisoFaltantes claves={["articuloConStock"]} className="mb-0" texto="Para transferir tiene que haber mercadería en algún depósito." />
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Depósito origen">
             <Select value={origen} onValueChange={(v) => { setOrigen(v); if (v === destino) setDestino(db.depositos.find((d) => d.id !== v)?.id ?? ""); }} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />

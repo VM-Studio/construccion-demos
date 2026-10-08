@@ -1,9 +1,9 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Boxes, Download, Factory, Mail, PackageCheck, Pencil, Plus, ShoppingCart, Wallet } from "lucide-react";
+import { ArrowLeft, Boxes, Download, Factory, FileUp, Mail, PackageCheck, Pencil, Plus, ShoppingCart, Wallet } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosProveedorResumen, useDb, usePuede, useSaldosProveedores } from "@/store/selectors";
 import type { OrdenCompra, Proveedor, RecepcionMercaderia } from "@/domain/types";
@@ -15,6 +15,8 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { ImportarCsvDialog } from "@/components/shared/importar-csv-dialog";
 import { AdjuntosPanel, ClipContador, useAdjuntos } from "@/components/shared/adjuntos-panel";
 import { HistorialEntidad } from "@/components/shared/historial-entidad";
 import { Card } from "@/components/ui/card";
@@ -80,8 +82,18 @@ export function ProveedoresView() {
   const db = useDb();
   const router = useRouter();
   const res = useResumenProveedores();
+  const params = useSearchParams();
   const puedeCrear = usePuede("proveedores.editar");
-  const [nuevo, setNuevo] = React.useState(false);
+  const nuevoParam = params.get("nuevo") === "1";
+  const [nuevo, setNuevo] = React.useState(nuevoParam);
+  const [importar, setImportar] = React.useState(false);
+  React.useEffect(() => {
+    if (nuevoParam) setNuevo(true);
+  }, [nuevoParam]);
+  const cerrarNuevo = (v: boolean) => {
+    setNuevo(v);
+    if (!v && nuevoParam) router.replace("/proveedores", { scroll: false });
+  };
   const [tipo, setTipo] = React.useState("");
   const [un, setUn] = React.useState("");
   const [conAcopio, setConAcopio] = React.useState(false);
@@ -117,6 +129,7 @@ export function ProveedoresView() {
         acciones={
           <>
             <Button variant="secondary" onClick={() => descargarArchivo("proveedores.csv", aCSV(["Código", "Razón social", "Tipo", "CUIT", "Circuito", "Le debemos", "Vencido", "Acopios vigentes", "Por retirar $", "Pendiente de entrega $", "Compras 12 meses"], filas.map((r) => [r.p.codigo, r.p.razonSocial, TIPO_PROVEEDOR_LABEL[r.p.tipo], r.p.cuit, `AC${r.p.circuitoHabitual}`, Math.round(r.saldo), Math.round(r.vencido), r.acopios, Math.round(r.faltaRetirar), Math.round(r.pendienteEntrega), Math.round(r.compras12)])))}><Download /> Exportar</Button>
+            {puedeCrear && <Button variant="secondary" onClick={() => setImportar(true)}><FileUp /> Importar desde CSV</Button>}
             {puedeCrear && <Button onClick={() => setNuevo(true)}><Plus /> Nuevo proveedor</Button>}
           </>
         }
@@ -135,7 +148,13 @@ export function ProveedoresView() {
         searchText={(r) => `${r.p.codigo} ${r.p.razonSocial} ${r.p.cuit} ${r.p.contacto}`}
         initialSort={{ key: "rs", dir: "asc" }}
         showFooter
-        empty={{ icono: Factory, titulo: "No hay proveedores para el filtro" }}
+        empty={
+          db.proveedores.length ? (
+            { icono: Factory, titulo: "No hay proveedores para el filtro" }
+          ) : (
+            <VacioGuiado pagina="proveedores" icono={Factory} puedeAccion={puedeCrear} onAccion={() => setNuevo(true)} extra={puedeCrear ? <Button size="sm" variant="secondary" onClick={() => setImportar(true)}><FileUp /> Importar desde CSV</Button> : undefined} />
+          )
+        }
         filters={
           <>
             <div className="w-[170px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opciones(TIPO_PROVEEDOR_LABEL)]} /></div>
@@ -146,7 +165,8 @@ export function ProveedoresView() {
           </>
         }
       />
-      <ProveedorDialog open={nuevo} onOpenChange={setNuevo} />
+      <ProveedorDialog open={nuevo} onOpenChange={cerrarNuevo} />
+      <ImportarCsvDialog tipo="proveedores" open={importar} onOpenChange={setImportar} />
     </>
   );
 }
@@ -211,7 +231,19 @@ export function ProveedorFicha({ id }: { id: string }) {
         </TabsList>
         <TabsContent value="resumen"><ResumenProveedorTab p={p} /></TabsContent>
         <TabsContent value="compras"><ComprasProveedor id={id} /></TabsContent>
-        <TabsContent value="acopios"><AcopiosProveedorTabla filtro={(a) => a.acopio.proveedorId === id} /></TabsContent>
+        <TabsContent value="acopios">
+          <AcopiosProveedorTabla
+            filtro={(a) => a.acopio.proveedorId === id}
+            vacio={
+              <EmptyState
+                icono={Boxes}
+                titulo="Sin acopios con este proveedor"
+                descripcion="Plata adelantada (o en cuenta corriente) a cambio de costo congelado: después retirás con órdenes de compra sin pagar de nuevo."
+                accion={puedeAcopio ? <Button size="sm" onClick={() => router.push(`/proveedores/acopios/nuevo?proveedor=${id}`)}><Plus /> Nuevo acopio con proveedor</Button> : undefined}
+              />
+            }
+          />
+        </TabsContent>
         <TabsContent value="pendiente"><PendienteProveedor id={id} /></TabsContent>
         <TabsContent value="ctacte"><EstadoCuenta tipo="proveedor" id={id} embebido /></TabsContent>
         <TabsContent value="remitos"><RemitosProveedor id={id} /></TabsContent>
@@ -256,6 +288,9 @@ function ResumenProveedorTab({ p }: { p: Proveedor }) {
               <tr><th className="h-9 px-3 text-left font-medium">Artículo</th>{verCostos && <th className="h-9 px-3 text-right font-medium">Último costo</th>}<th className="h-9 px-3 text-right font-medium">Fecha</th><th className="h-9 px-3 text-right font-medium">Variación</th></tr>
             </thead>
             <tbody>
+              {!prods.length && (
+                <tr><td colSpan={verCostos ? 4 : 3} className="px-3 py-6 text-center text-[13px] text-muted">Ningún artículo tiene a este proveedor como habitual. Se asigna en la ficha del artículo y sirve para sugerir reposición en las órdenes de compra.</td></tr>
+              )}
               {prods.map((x) => {
                 const v = variacion(x.id);
                 return (
@@ -283,6 +318,7 @@ const pctRecibido = (o: OrdenCompra) => {
 function ComprasProveedor({ id }: { id: string }) {
   const db = useDb();
   const router = useRouter();
+  const puedeOC = usePuede("compras.editar");
   const ocs = db.ordenesCompra.filter((o) => o.proveedorId === id);
   const recs = db.recepciones.filter((r) => ocs.some((o) => o.id === r.ordenCompraId));
   const columnas: Column<OrdenCompra>[] = [
@@ -297,9 +333,22 @@ function ComprasProveedor({ id }: { id: string }) {
   ];
   return (
     <div className="space-y-4">
-      <DataTable rows={ocs} columns={columnas} getRowId={(o) => o.id} onRowClick={(o) => router.push(`/compras/oc/${o.id}`)} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Sin órdenes de compra" }} />
+      <DataTable
+        rows={ocs}
+        columns={columnas}
+        getRowId={(o) => o.id}
+        onRowClick={(o) => router.push(`/compras/oc/${o.id}`)}
+        initialSort={{ key: "f", dir: "desc" }}
+        empty={{
+          icono: ShoppingCart,
+          titulo: "Todavía no le hiciste órdenes de compra",
+          descripcion: "Con una orden de compra le pedís mercadería; al registrar su ingreso sube el stock y nace la deuda con el proveedor.",
+          accion: puedeOC ? <Button size="sm" onClick={() => router.push(`/compras/oc/nueva?proveedor=${id}`)}><Plus /> Nueva orden de compra</Button> : undefined,
+        }}
+      />
       <Card>
         <div className="border-b border-border px-4 py-3 text-[14px] font-semibold">Recepciones ({recs.length})</div>
+        {!recs.length && <p className="px-4 py-6 text-center text-[13px] text-muted">Sin ingresos de mercadería todavía. Aparecen cuando registrás la recepción de una orden de compra confirmada.</p>}
         <ul className="divide-y divide-border">
           {recs.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((r) => (
             <li key={r.id}>
@@ -326,6 +375,7 @@ interface LineaPendOC {
 
 function PendienteProveedor({ id }: { id: string }) {
   const db = useDb();
+  const router = useRouter();
   const puedeRecibir = usePuede("compras.recibir");
   const puedeEditar = usePuede("compras.editar");
   const [recibir, setRecibir] = React.useState<string | null>(null);
@@ -355,7 +405,12 @@ function PendienteProveedor({ id }: { id: string }) {
   ];
   return (
     <>
-      <DataTable rows={lineas} columns={columnas} getRowId={(l) => l.key} empty={{ icono: PackageCheck, titulo: "El proveedor no tiene entregas pendientes" }} />
+      <DataTable rows={lineas} columns={columnas} getRowId={(l) => l.key} empty={{
+          icono: PackageCheck,
+          titulo: "El proveedor no tiene entregas pendientes",
+          descripcion: "Acá aparece lo que falta recibir de las órdenes de compra confirmadas, con su fecha estimada, para registrar el ingreso o reclamar.",
+          accion: puedeEditar ? <Button size="sm" variant="secondary" onClick={() => router.push(`/compras/oc/nueva?proveedor=${id}`)}><Plus /> Nueva orden de compra</Button> : undefined,
+        }} />
       <RecepcionDialog ordenCompraId={recibir} open={!!recibir} onOpenChange={(v) => !v && setRecibir(null)} />
       {reclamo && <ReclamoDialog oc={reclamo} onClose={() => setReclamo(null)} />}
     </>
@@ -386,6 +441,6 @@ function RemitosProveedor({ id }: { id: string }) {
     { key: "fc", header: "Factura", cell: (r) => <span className="font-mono text-[11px] text-muted">{db.comprobantes.find((c) => c.id === r.comprobanteId)?.numero ?? "Acopio"}</span> },
     { key: "a", header: "Adjuntos", cell: (r) => <ClipContador cantidad={db.adjuntos.filter((a) => a.entidadTipo === "RECEPCION" && a.entidadId === r.id).length} /> },
   ];
-  return <DataTable rows={recs} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/compras/recepciones?id=${r.id}`)} initialSort={{ key: "f", dir: "desc" }} empty={{ titulo: "Sin recepciones" }} />;
+  return <DataTable rows={recs} columns={columnas} getRowId={(r) => r.id} onRowClick={(r) => router.push(`/compras/recepciones?id=${r.id}`)} initialSort={{ key: "f", dir: "desc" }} empty={{ icono: PackageCheck, titulo: "Sin remitos del proveedor", descripcion: "Cada ingreso de mercadería guarda el número de remito del proveedor y su foto o PDF adjunto." }} />;
 }
 

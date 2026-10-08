@@ -3,11 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, PackageSearch, Truck } from "lucide-react";
+import { Download, PackageSearch, ShoppingCart, Truck } from "lucide-react";
 import { useDb, useDepositoActivo, usePendientes, usePosiciones, usePuede, useUnidadNegocio, posicionEn, type PosicionProducto } from "@/store/selectors";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -103,8 +104,10 @@ export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }
   const depActivo = useDepositoActivo();
   const un = useUnidadNegocio();
   const verCostos = usePuede("margenes.ver");
+  const puedeAjustar = usePuede("stock.ajustar");
+  const puedeComprar = usePuede("compras.editar");
   const [rubro, setRubro] = React.useState("");
-  const [deposito, setDeposito] = React.useState(depActivo ?? "dep_central");
+  const [deposito, setDeposito] = React.useState(depActivo ?? db.depositos[0]?.id ?? "");
   const [soloBajo, setSoloBajo] = React.useState(filtroInicial === "bajo-minimo");
   const [soloPend, setSoloPend] = React.useState(false);
   const [verPend, setVerPend] = React.useState<string | null>(null);
@@ -179,8 +182,22 @@ export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }
     descargarArchivo(`stock-${new Date().toISOString().slice(0, 10)}.csv`, aCSV(head, rows));
   };
 
+  const hayArticulos = db.productos.some((p) => p.activo);
+  // Sin un solo movimiento el stock está vacío aunque la tabla muestre los artículos en 0.
+  const vacio = (
+    <VacioGuiado
+      pagina="stock"
+      icono={PackageSearch}
+      puedeAccion={puedeAjustar}
+      extra={puedeComprar ? <Button size="sm" variant="secondary" onClick={() => router.push("/compras/oc/nueva")}><ShoppingCart /> Nueva orden de compra</Button> : undefined}
+      className={hayArticulos ? "py-6" : undefined}
+    />
+  );
+  if (!hayArticulos) return <div className="rounded-card border border-border bg-surface">{vacio}</div>;
+
   return (
     <div className="space-y-4">
+      {!db.movimientos.length && <div className="rounded-card border border-border bg-surface">{vacio}</div>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {verCostos ? <KpiCard label="Valor de inventario" valor={formatMoney(valorTotal, { compact: true })} acento subtexto="a costo promedio" /> : <KpiCard label="Artículos activos" valor={String(todas.length)} acento />}
         <KpiCard label="Pendiente de entrega" valor={verCostos ? formatMoney(pendValor, { compact: true }) : String(todas.filter((p) => pos(p).pendiente > 0).length)} subtexto={verCostos ? "vendido sin entregar, a costo" : "artículos con pendiente"} onClick={() => setSoloPend(true)} />

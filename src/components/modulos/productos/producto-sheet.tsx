@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeftRight, Calculator, Save, SlidersHorizontal } from "lucide-react";
+import { ArrowLeftRight, Calculator, Save, SlidersHorizontal, X } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePosiciones, usePuede } from "@/store/selectors";
 import type { Producto, Unidad } from "@/domain/types";
@@ -13,6 +13,7 @@ import { calcularPrecioDesdeMarkup, markupEfectivo } from "@/domain/precios";
 import { opciones, UNIDAD_LABEL } from "@/domain/estados";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { SelectorProveedor } from "@/components/shared/alta-rapida";
 import { FormField } from "@/components/ui/form-field";
 import { Input, NumberInput, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -82,12 +83,17 @@ export function ProductoSheet({ productoId, nuevo, onClose }: { productoId?: str
   );
 }
 
-function TabGeneral({ producto, onSaved }: { producto?: Producto; onSaved: () => void }) {
+/** Formulario de datos generales del artículo (también alta rápida desde los buscadores). */
+export function FormProducto({ producto, onSaved, unidadNegocioId }: { producto?: Producto; onSaved: (id: string) => void; unidadNegocioId?: string | null }) {
+  return <TabGeneral producto={producto} onSaved={onSaved} unidadNegocioId={unidadNegocioId} />;
+}
+
+function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Producto; onSaved: (id: string) => void; unidadNegocioId?: string | null }) {
   const db = useDb();
   const guardar = useStore((s) => s.guardarProducto);
   const puedeEditar = usePuede("productos.editar");
   const verCostos = usePuede("margenes.ver");
-  const rubroInicial = db.rubros[0]?.id ?? "";
+  const rubroInicial = (unidadNegocioId ? db.rubros.find((r) => r.unidadNegocioId === unidadNegocioId) : undefined)?.id ?? db.rubros[0]?.id ?? "";
   const [f, setF] = React.useState<Form>(() => (producto ? { ...producto } : vacio(rubroInicial, siguienteCodigoProducto(rubroInicial, db.productos, db.rubros))));
   const [errores, setErrores] = React.useState<Record<string, string>>({});
   React.useEffect(() => {
@@ -108,7 +114,7 @@ function TabGeneral({ producto, onSaved }: { producto?: Producto; onSaved: () =>
     const r = guardar(data, producto?.id);
     if (r.ok) {
       toast.success(producto ? "Producto actualizado" : `Producto ${f.codigo} creado`);
-      onSaved();
+      onSaved(r.data);
     } else toast.error(r.error);
   };
 
@@ -150,12 +156,14 @@ function TabGeneral({ producto, onSaved }: { producto?: Producto; onSaved: () =>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Proveedor habitual">
-          <Select
-            disabled={ro}
-            value={f.proveedorHabitualId ?? ""}
-            onValueChange={(v) => set("proveedorHabitualId", v || undefined)}
-            options={[{ value: "", label: "Sin proveedor habitual" }, ...db.proveedores.map((p) => ({ value: p.id, label: p.razonSocial }))]}
-          />
+          <div className="flex items-center gap-1">
+            <SelectorProveedor className="min-w-0 flex-1" disabled={ro} value={f.proveedorHabitualId ?? ""} placeholder="Sin proveedor habitual" onChange={(v) => set("proveedorHabitualId", v || undefined)} />
+            {f.proveedorHabitualId && !ro && (
+              <Button variant="ghost" size="icon-sm" aria-label="Quitar proveedor habitual" onClick={() => set("proveedorHabitualId", undefined)}>
+                <X />
+              </Button>
+            )}
+          </div>
         </FormField>
         <FormField label="Código de barras" htmlFor="p-ean">
           <Input id="p-ean" disabled={ro} value={f.codigoBarras ?? ""} onChange={(e) => set("codigoBarras", e.target.value.replace(/\D/g, ""))} inputMode="numeric" />
@@ -395,7 +403,7 @@ function TabMovimientos({ producto }: { producto: Producto }) {
             })}
           </tbody>
         </table>
-        {!movs.length && <p className="py-10 text-center text-[13px] text-muted">Sin movimientos.</p>}
+        {!movs.length && <p className="py-10 text-center text-[13px] text-muted">Sin movimientos todavía. El stock de este artículo se mueve con ingresos de mercadería, remitos, transferencias y ajustes (por ejemplo, el inventario inicial).</p>}
       </div>
     </div>
   );

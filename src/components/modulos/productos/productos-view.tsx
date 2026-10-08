@@ -10,15 +10,16 @@ import { UNIDAD_LABEL } from "@/domain/estados";
 import type { Producto } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { ImportarCsvDialog } from "@/components/shared/importar-csv-dialog";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatMoney, formatQty, unidadCorta } from "@/lib/format";
 import { aCSV, descargarArchivo, cn } from "@/lib/utils";
 import { posicionEn } from "@/store/selectors";
 import { ProductoSheet } from "./producto-sheet";
-import { ActualizacionMasivaDialog } from "./actualizacion-masiva";
+import { ActualizacionMasivaDialog, type Alcance } from "./actualizacion-masiva";
 
 export function ProductosView() {
   const db = useDb();
@@ -29,14 +30,28 @@ export function ProductosView() {
   const verCostos = usePuede("margenes.ver");
   const puedeEditar = usePuede("productos.editar");
   const puedePrecios = usePuede("precios.editar");
-  const [lista, setLista] = React.useState("lst_gen");
+  const [lista, setLista] = React.useState(() => db.listasPrecios.find((l) => l.id === "lst_gen")?.id ?? db.listasPrecios[0]?.id ?? "");
   const [rubro, setRubro] = React.useState("");
   const [proveedor, setProveedor] = React.useState("");
   const [estado, setEstado] = React.useState(params.get("filtro") === "bajo-minimo" ? "BAJO" : "ACTIVOS");
   const [seleccion, setSeleccion] = React.useState<Set<string>>(new Set());
-  const [masiva, setMasiva] = React.useState(false);
+  const nuevoParam = params.get("nuevo") === "1";
+  const masivaParam = params.get("masiva") === "markup";
+  const [masiva, setMasiva] = React.useState(masivaParam);
   const [importar, setImportar] = React.useState(false);
-  const [nuevo, setNuevo] = React.useState(false);
+  const [nuevo, setNuevo] = React.useState(nuevoParam);
+  React.useEffect(() => {
+    if (nuevoParam) setNuevo(true);
+  }, [nuevoParam]);
+  React.useEffect(() => {
+    if (masivaParam) setMasiva(true);
+  }, [masivaParam]);
+  /** `?masiva=markup`: actualización de precios por markup sobre todo el catálogo (p. ej. después de importar). */
+  const inicialMasiva = React.useMemo(() => (masivaParam ? { alcance: "TODO" as Alcance, modo: "MARKUP" as const } : undefined), [masivaParam]);
+  const cerrarMasiva = (v: boolean) => {
+    setMasiva(v);
+    if (!v && masivaParam) router.replace("/productos", { scroll: false });
+  };
   const productoId = params.get("id");
   const un = useUnidadNegocio();
 
@@ -141,7 +156,7 @@ export function ProductosView() {
     <>
       <PageHeader
         titulo="Productos"
-        descripcion={`${db.productos.filter((p) => p.activo).length} productos activos en ${db.rubros.length} rubros · ${db.listasPrecios.length} listas de precios`}
+        descripcion={`${db.productos.filter((p) => p.activo).length} artículos activos en ${db.rubros.length} rubros · ${db.listasPrecios.length} listas de precios`}
         acciones={
           <>
             {puedePrecios && (
@@ -153,7 +168,7 @@ export function ProductosView() {
             {puedeEditar && (
               <Button onClick={() => setNuevo(true)}>
                 <Plus />
-                Nuevo producto
+                Nuevo artículo
               </Button>
             )}
           </>
@@ -170,7 +185,19 @@ export function ProductosView() {
         selected={seleccion}
         onSelectionChange={setSeleccion}
         initialSort={{ key: "codigo", dir: "asc" }}
-        empty={{ icono: Package, titulo: "No hay productos", descripcion: "Cargá el primer producto del catálogo.", accion: puedeEditar ? <Button size="sm" onClick={() => setNuevo(true)}><Plus />Nuevo producto</Button> : undefined }}
+        empty={
+          db.productos.length ? (
+            { icono: Package, titulo: "No hay artículos para el filtro" }
+          ) : (
+            <VacioGuiado
+              pagina="productos"
+              icono={Package}
+              puedeAccion={puedeEditar}
+              onAccion={() => setNuevo(true)}
+              extra={puedeEditar ? <Button size="sm" variant="secondary" onClick={() => setImportar(true)}><FileUp /> Importar desde CSV</Button> : undefined}
+            />
+          )
+        }
         filters={
           <>
             <Select size="sm" className="w-[170px]" aria-label="Rubro" value={rubro} onValueChange={setRubro} options={[{ value: "", label: "Todos los rubros" }, ...db.rubros.map((r) => ({ value: r.id, label: r.nombre }))]} />
@@ -205,34 +232,15 @@ export function ProductosView() {
             {puedeEditar && (
               <Button size="sm" variant="ghost" onClick={() => setImportar(true)}>
                 <FileUp />
-                Importar CSV
+                Importar desde CSV
               </Button>
             )}
           </>
         }
       />
       <ProductoSheet productoId={productoId} nuevo={nuevo} onClose={cerrar} />
-      <ActualizacionMasivaDialog open={masiva} onOpenChange={setMasiva} seleccionados={seleccion} />
-      <Dialog open={importar} onOpenChange={setImportar}>
-        <DialogContent
-          title="Importar productos desde CSV"
-          description="Disponible en la versión productiva."
-          footer={<Button onClick={() => setImportar(false)}>Entendido</Button>}
-        >
-          <div className="space-y-3 text-[13px] text-muted">
-            <p>En la versión final vas a poder subir un archivo CSV o Excel con el catálogo del proveedor o tu lista actual. El sistema:</p>
-            <ul className="list-disc space-y-1 pl-5">
-              <li>Detecta las columnas (código, nombre, marca, unidad, costo, precio) y te muestra una vista previa.</li>
-              <li>Crea los productos nuevos y actualiza costos de los existentes por código.</li>
-              <li>Opcionalmente recalcula precios de todas las listas con el markup configurado.</li>
-              <li>Deja registro en auditoría de cada cambio.</li>
-            </ul>
-            <p className="rounded-control border border-border bg-subtle p-3 text-ink">
-              Columnas esperadas: <span className="font-mono text-[12px]">codigo; nombre; marca; rubro; unidad; costo; proveedor_cuit</span>
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ActualizacionMasivaDialog open={masiva} onOpenChange={cerrarMasiva} seleccionados={seleccion} inicial={inicialMasiva} />
+      <ImportarCsvDialog tipo="articulos" open={importar} onOpenChange={setImportar} />
     </>
   );
 }

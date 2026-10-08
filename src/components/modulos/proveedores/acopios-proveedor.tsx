@@ -15,7 +15,10 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
-import { Combobox } from "@/components/shared/combobox";
+import { SelectorProveedor } from "@/components/shared/alta-rapida";
+import { ProductoPicker } from "@/components/shared/producto-picker";
+import { VacioGuiado } from "@/components/shared/vacio-guiado";
+import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { EmptyState } from "@/components/shared/empty-state";
 import { AdjuntosPanel, ClipContador, useAdjuntos } from "@/components/shared/adjuntos-panel";
 import { HistorialEntidad } from "@/components/shared/historial-entidad";
@@ -40,7 +43,7 @@ const aIso = (v: string, h = 11) => {
 };
 
 /** Tabla de acopios con proveedores (listado y tab de la ficha del proveedor). */
-export function AcopiosProveedorTabla({ filtro }: { filtro?: (a: AcopioProveedorResumen) => boolean }) {
+export function AcopiosProveedorTabla({ filtro, vacio }: { filtro?: (a: AcopioProveedorResumen) => boolean; /** Estado vacío cuando no hay ningún acopio (sin filtro de búsqueda). */ vacio?: React.ReactElement }) {
   const db = useDb();
   const router = useRouter();
   const filas = useAcopiosProveedorResumen().filter((a) => !filtro || filtro(a));
@@ -60,13 +63,14 @@ export function AcopiosProveedorTabla({ filtro }: { filtro?: (a: AcopioProveedor
     { key: "fp", header: "Forma de pago", cell: (a) => (a.acopio.formaPago === "ANTICIPO" ? <Badge>Anticipo</Badge> : <Badge variant={a.deuda > 0 ? "warning" : "success"} className="whitespace-nowrap">Cta. cte. · pagado {formatPercent(a.pagadoPct, { decimals: 0 })}</Badge>) },
     { key: "e", header: "Estado", cell: (a) => <StatusBadge tipo="ACOPIO" estado={a.estado} /> },
   ];
-  return <DataTable rows={filas} columns={columnas} getRowId={(a) => a.acopio.id} onRowClick={(a) => router.push(`/proveedores/acopios/${a.acopio.id}`)} searchText={(a) => `${a.acopio.numero} ${prov(a.acopio.proveedorId)}`} initialSort={{ key: "v", dir: "asc" }} showFooter empty={{ icono: Boxes, titulo: "Sin acopios con proveedores" }} />;
+  return <DataTable rows={filas} columns={columnas} getRowId={(a) => a.acopio.id} onRowClick={(a) => router.push(`/proveedores/acopios/${a.acopio.id}`)} searchText={(a) => `${a.acopio.numero} ${prov(a.acopio.proveedorId)}`} initialSort={{ key: "v", dir: "asc" }} showFooter empty={filas.length ? { icono: Boxes, titulo: "No hay acopios para la búsqueda" } : (vacio ?? <VacioGuiado pagina="acopiosProveedor" icono={Boxes} />)} />;
 }
 
 export function AcopiosProveedorView() {
   const router = useRouter();
   const res = useAcopiosProveedorResumen();
   const puede = usePuede("acopiosProveedor.editar");
+  const vacio = <VacioGuiado pagina="acopiosProveedor" icono={Boxes} puedeAccion={puede} />;
   const vig = res.filter((a) => a.estado === "VIGENTE");
   return (
     <>
@@ -77,7 +81,7 @@ export function AcopiosProveedorView() {
         <KpiCard label="Deuda por acopios en cta. cte." valor={formatMoney(vig.reduce((a, x) => a + x.deuda, 0), { compact: true })} subtexto={`${vig.filter((x) => x.deuda > 0).length} acopios con saldo a pagar`} />
         <KpiCard label="Por vencer en 30 días" valor={String(vig.filter((x) => x.diasParaVencer <= 30).length)} />
       </div>
-      <AcopiosProveedorTabla />
+      <AcopiosProveedorTabla vacio={vacio} />
     </>
   );
 }
@@ -89,8 +93,8 @@ export function AcopioProveedorNuevo() {
   const [proveedorId, setProveedorId] = React.useState(params.get("proveedor") ?? "");
   const prov = db.proveedores.find((p) => p.id === proveedorId);
   const [circuito, setCircuito] = React.useState<Circuito>(prov?.circuitoHabitual ?? 1);
-  const [sucursalId, setSucursalId] = React.useState("suc_central");
-  const [deposito, setDeposito] = React.useState("dep_central");
+  const [sucursalId, setSucursalId] = React.useState(db.sucursales[0]?.id ?? "");
+  const [deposito, setDeposito] = React.useState(db.sucursales[0]?.depositoId ?? db.depositos[0]?.id ?? "");
   const [fecha, setFecha] = React.useState(diaLocal(new Date()));
   const [vence, setVence] = React.useState(diaLocal(new Date(Date.now() + 180 * 86_400_000)));
   const [modalidad, setModalidad] = React.useState<"MONTO" | "CANTIDAD">("MONTO");
@@ -101,10 +105,17 @@ export function AcopioProveedorNuevo() {
   const [obs, setObs] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [pago, setPago] = React.useState<string | null>(null);
-  const productos = db.productos.filter((p) => p.activo && p.proveedorHabitualId === proveedorId);
+  /** Artículos agregados a mano (no tienen a este proveedor como habitual). */
+  const [agregados, setAgregados] = React.useState<string[]>([]);
+  const productos = db.productos.filter((p) => p.activo && (p.proveedorHabitualId === proveedorId || agregados.includes(p.id)));
+  const agregar = (id: string, costo: number) => {
+    setAgregados((a) => (a.includes(id) ? a : [...a, id]));
+    setCostos((c) => ({ ...c, [id]: c[id] ?? costo }));
+  };
   React.useEffect(() => {
     setCostos(Object.fromEntries(productos.map((p) => [p.id, p.costoUltimo])));
     setCantidades({});
+    setAgregados([]);
     if (prov) setCircuito(prov.circuitoHabitual);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proveedorId]);
@@ -137,12 +148,13 @@ export function AcopioProveedorNuevo() {
   return (
     <div>
       <PageHeader titulo="Nuevo acopio con proveedor" descripcion="Pagamos adelantado o en cuenta corriente y congelamos costos; después retiramos con órdenes de compra." favorito={false} />
+      <AvisoFaltantes claves={["proveedor", "articulo"]} texto="Para acopiar con un proveedor necesitás el proveedor y los artículos cuyo costo se congela." />
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <Card>
             <CardContent className="grid gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-3">
               <FormField label="Proveedor" required className="sm:col-span-2">
-                <Combobox aria-label="Proveedor" value={proveedorId} onChange={setProveedorId} opciones={db.proveedores.filter((p) => p.activo).map((p) => ({ value: p.id, label: p.razonSocial, detalle: p.codigo }))} />
+                <SelectorProveedor aria-label="Proveedor" value={proveedorId} onChange={setProveedorId} />
               </FormField>
               <FormField label="Circuito"><Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /></FormField>
               <FormField label="Sucursal"><Select aria-label="Sucursal" value={sucursalId} onValueChange={(v) => { setSucursalId(v); setDeposito(db.sucursales.find((s) => s.id === v)?.depositoId ?? deposito); }} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} /></FormField>
@@ -161,9 +173,19 @@ export function AcopioProveedorNuevo() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Costos a congelar</CardTitle><span className="text-[12px] text-muted">Snapshot del costo actual, editable antes de congelar</span></CardHeader>
+            <CardHeader>
+              <CardTitle>Costos a congelar</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="hidden text-[12px] text-muted sm:inline">Snapshot del costo actual, editable antes de congelar</span>
+                {proveedorId && <ProductoPicker label="Agregar artículo" mostrarCosto proveedorId={proveedorId} excluir={new Set(productos.map((p) => p.id))} onSelect={(p) => agregar(p.id, p.costoUltimo)} />}
+              </div>
+            </CardHeader>
             {!productos.length ? (
-              <EmptyState titulo="Elegí un proveedor" />
+              <EmptyState
+                icono={Boxes}
+                titulo={proveedorId ? "Este proveedor todavía no tiene artículos" : "Elegí un proveedor"}
+                descripcion={proveedorId ? "Se listan los artículos que tienen a este proveedor como habitual. Agregá los que vas a acopiar con «Agregar artículo» (o creá uno nuevo desde el buscador) y cargá su costo." : "Al elegirlo se listan sus artículos con el costo actual para congelarlo."}
+              />
             ) : (
               <div className="max-h-[420px] overflow-auto">
                 <table className="w-full text-[12.5px]">
@@ -403,6 +425,7 @@ interface FilaRetirar {
 /** Todo lo que la empresa tiene derecho a retirar: acopios por cantidad, saldo de acopios por monto y OC sin recibir. */
 export function PendientesRetirarView() {
   const db = useDb();
+  const puedeAcopio = usePuede("acopiosProveedor.editar");
   const router = useRouter();
   const acps = useAcopiosProveedorResumen().filter((a) => a.estado === "VIGENTE");
   const posiciones = usePosiciones();
@@ -452,7 +475,7 @@ export function PendientesRetirarView() {
         descripcion="Todo lo que la empresa tiene derecho a retirar de sus proveedores: acopios por cantidad, saldos de acopios por monto y órdenes confirmadas sin recibir."
         acciones={<Button variant="secondary" onClick={() => descargarArchivo("pendientes-de-retirar.csv", aCSV(["Proveedor", "Artículo / concepto", "Origen", "Unidades", "$"], filas.map((f) => [prov(f.proveedorId), f.descripcion, f.origen, f.unidades ?? "", Math.round(f.pesos)])))}><Download /> Exportar CSV</Button>}
       />
-      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.key} searchText={(f) => `${prov(f.proveedorId)} ${f.descripcion} ${f.origen}`} initialSort={{ key: "$", dir: "desc" }} showFooter empty={{ icono: Boxes, titulo: "No hay nada pendiente de retirar" }} />
+      <DataTable rows={filas} columns={columnas} getRowId={(f) => f.key} searchText={(f) => `${prov(f.proveedorId)} ${f.descripcion} ${f.origen}`} initialSort={{ key: "$", dir: "desc" }} showFooter empty={filas.length ? { icono: Boxes, titulo: "No hay pendientes para la búsqueda" } : <VacioGuiado pagina="pendientesRetirar" icono={Boxes} puedeAccion={puedeAcopio} />} />
     </>
   );
 }

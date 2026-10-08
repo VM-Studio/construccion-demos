@@ -30,6 +30,7 @@ import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { PendientesTabla } from "./pendientes-tabla";
 
 interface Linea extends LineaBase {
@@ -161,18 +162,20 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     cotizacionId: cotizacion?.id,
   });
 
-  const guardarBorrador = () => {
-    const r = useStore.getState().guardarNotaPedido(datos(), borrador?.id);
+  const contextoMedir = () => ({ clienteId, productoIds: items.map((i) => i.productoId), depositoIds: [depositoId], acopioId: acopio?.id, notaPedidoId: borrador?.id });
+
+  const guardarBorrador = async () => {
+    const r = await medir("guardarBorradorNotaPedido", contextoMedir(), () => useStore.getState().guardarNotaPedido(datos(), borrador?.id));
     if (!r.ok) return toast.error(r.error);
     toast.success("Borrador guardado");
     if (!borrador) router.replace(`/ventas/notas-pedido/${r.data}`);
   };
 
-  const confirmar = (opts: OpcionesConfirmacion = {}) => {
+  const confirmar = async (opts: OpcionesConfirmacion = {}) => {
     if (!clienteId) return toast.error("Elegí un cliente.");
     if (!items.length) return toast.error("Agregá al menos un artículo.");
     if (origen === "ACOPIO" && !acopio) return toast.error("Elegí el acopio del que se retira.");
-    const r = useStore.getState().crearNotaPedido(datos(), opts, borrador?.id);
+    const r = await medir(origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva", contextoMedir(), () => useStore.getState().crearNotaPedido(datos(), opts, borrador?.id));
     if (!r.ok) {
       if (r.codigo && ["SIN_DISPONIBLE", "SALDO_ACOPIO", "IMPAGO", "CREDITO"].includes(r.codigo)) setBloqueo({ codigo: r.codigo, error: r.error, opts });
       else toast.error(r.error);
@@ -233,6 +236,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                 </FormField>
                 <FormField label="Depósito">
                   <Select aria-label="Depósito" value={depositoId} disabled={!!acopio} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
+                  <ImpactoCampo campo="deposito" />
                 </FormField>
                 <FormField label="Fecha" htmlFor="np-f">
                   <Input id="np-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -247,6 +251,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <span className="text-[13px] font-medium">Origen</span>
                   <Segmented value={origen} onChange={(v) => { setOrigen(v); if (v === "NUEVA") setAcopioId(""); }} options={[{ value: "NUEVA", label: "Nueva" }, { value: "ACOPIO", label: "Acopio" }]} />
                 </div>
+                <ImpactoCampo campo={`origen.${origen}`} />
                 {origen === "ACOPIO" && (
                   <div className="mt-3">
                     {!clienteId ? (
@@ -285,6 +290,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   ) : (
                     <Segmented value={formaPago} onChange={setFormaPago} options={[{ value: "CONTADO", label: "Contado" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
                   )}
+                  <ImpactoCampo campo={`formaPago.${acopio ? "ACOPIO" : formaPago}`} />
                 </FormField>
                 <FormField label="Circuito">
                   {acopio ? (
@@ -292,9 +298,11 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   ) : (
                     <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
                   )}
+                  <ImpactoCampo campo={`circuito.${acopio ? acopio.circuito : circuito}`} />
                 </FormField>
                 <FormField label="Entrega">
                   <Segmented value={pendiente ? "P" : "I"} onChange={(v) => setPendiente(v === "P")} options={[{ value: "I", label: "Entrega inmediata" }, { value: "P", label: "Pendiente de entrega" }]} />
+                  <ImpactoCampo campo={pendiente ? "entrega.PENDIENTE" : "entrega.INMEDIATA"} />
                 </FormField>
               </div>
               {pendiente && (
@@ -425,6 +433,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <Save /> Guardar borrador
                 </Button>
               </div>
+              <Impacto accion={origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva"} />
             </CardContent>
           </Card>
         </aside>

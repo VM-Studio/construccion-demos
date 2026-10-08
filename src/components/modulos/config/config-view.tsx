@@ -10,6 +10,7 @@ import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { verificarIntegridad, type ResultadoIntegridad } from "@/domain/integridad";
 import { estaVacio } from "@/domain/prerequisitos";
+import { Impacto, InterruptorCapacitacionConfig, medir } from "@/capacitacion";
 import { filasNumeracion, formatearDoc } from "@/domain/numeracion";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { CodigoDoc } from "@/domain/types";
@@ -487,12 +488,13 @@ function Numeracion() {
             size="sm"
             title={`Número inicial · ${edit.label}`}
             description="Ingresá el número con el que tiene que salir el próximo documento."
-            footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={invalido} onClick={() => { const r = useStore.getState().establecerNumeroInicial(edit.k, edit.proximo - 1); ok(r, "Numeración actualizada"); if (r.ok) setEdit(null); }}>Guardar</Button></>}
+            footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={invalido} onClick={async () => { const r = await medir("establecerNumeroInicial", {}, () => useStore.getState().establecerNumeroInicial(edit.k, edit.proximo - 1)); ok(r, "Numeración actualizada"); if (r.ok) setEdit(null); }}>Guardar</Button></>}
           >
             <div className="space-y-3">
               <FormField label="Próximo número" htmlFor="num-u" error={invalido ? `Tiene que ser mayor a ${edit.ultimo} (último usado).` : undefined}>
                 <NumberInput id="num-u" value={edit.proximo} min={edit.ultimo + 1} onValueChange={(v) => setEdit({ ...edit, proximo: Math.round(v) })} />
               </FormField>
+              <Impacto accion="establecerNumeroInicial" />
               <p className="rounded-control bg-subtle px-3 py-2 text-[13px]">
                 El próximo documento sale como <span className="font-mono font-medium">{formatearDoc(edit.codigo, edit.circ, edit.pv, Math.max(1, edit.proximo))}</span>
               </p>
@@ -536,8 +538,8 @@ function DatosDemo() {
                     descripcion: "Se borran artículos, clientes, proveedores, stock, ventas, acopios, compras, remitos, comprobantes, adjuntos y auditoría. Quedan la empresa, las sucursales, los rubros, las listas de precios y los usuarios.",
                     confirmLabel: "Vaciar todo",
                     variant: "danger",
-                    onConfirm: () => {
-                      useStore.getState().resetearDemo();
+                    onConfirm: async () => {
+                      await medir("vaciarDatos", {}, () => useStore.getState().resetearDemo());
                       toast.success("Datos vaciados: quedó solo la estructura");
                       setRes(null);
                     },
@@ -546,6 +548,7 @@ function DatosDemo() {
               >
                 <Eraser /> Vaciar todo (dejar solo estructura)
               </Button>
+              <Impacto accion="vaciarDatos" />
             </div>
             <div className="flex flex-col gap-2 rounded-card border border-border p-3">
               <span className="font-medium text-ink">Cargar datos de ejemplo</span>
@@ -565,8 +568,8 @@ function DatosDemo() {
                     ),
                     confirmLabel: vacio ? "Cargar datos de ejemplo" : "Reemplazar",
                     variant: vacio ? "default" : "danger",
-                    onConfirm: () => {
-                      const r = useStore.getState().cargarDatosEjemplo({ reemplazar: !vacio });
+                    onConfirm: async () => {
+                      const r = await medir("cargarDatosEjemplo", {}, () => useStore.getState().cargarDatosEjemplo({ reemplazar: !vacio }));
                       ok(r, "Datos de ejemplo cargados");
                       setRes(null);
                     },
@@ -575,6 +578,7 @@ function DatosDemo() {
               >
                 <DatabaseZap /> Cargar datos de ejemplo
               </Button>
+              <Impacto accion="cargarDatosEjemplo" />
             </div>
             <div className="flex flex-col gap-2 rounded-card border border-border p-3">
               <span className="font-medium text-ink">Verificar integridad</span>
@@ -584,6 +588,7 @@ function DatosDemo() {
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
+            <InterruptorCapacitacionConfig />
           </div>
         </CardContent>
       </Card>

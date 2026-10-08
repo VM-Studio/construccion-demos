@@ -15,6 +15,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Segmented } from "@/components/ui/tabs";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Impacto, medir } from "@/capacitacion";
 
 export type Alcance = "TODO" | "RUBRO" | "PROVEEDOR" | "MARCA" | "SELECCIONADOS";
 
@@ -85,10 +86,10 @@ export function ActualizacionMasivaDialog({
   const prod = (id: string) => db.productos.find((p) => p.id === id);
   const lista = (id: string) => db.listasPrecios.find((l) => l.id === id);
 
-  const confirmar = () => {
+  const confirmar = async () => {
     const desc =
       modo === "MARKUP" ? "Recalculado desde costo + markup" : `${modo === "AUMENTAR" ? "Aumento" : "Baja"} de ${pct} %`;
-    const r = aplicar(reales, `${desc} · ${[...listas].map((l) => lista(l)?.nombre).join(", ")}`);
+    const r = await medir("actualizarPreciosMasivo", { productoIds: [...new Set(reales.map((c) => c.productoId))], n: reales.length }, () => aplicar(reales, `${desc} · ${[...listas].map((l) => lista(l)?.nombre).join(", ")}`));
     if (r.ok) {
       toast.success(`Precios actualizados en ${r.data} productos`, { description: desc });
       onOpenChange(false);
@@ -239,6 +240,7 @@ export function ActualizacionMasivaDialog({
             {reales.length > 300 && <p className="mt-1 text-[12px] text-muted">Se muestran los primeros 300 cambios.</p>}
           </div>
         </div>
+        <Impacto accion="actualizarPreciosMasivo" n={reales.length} className="mt-4" />
       </DialogContent>
     </Dialog>
   );

@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
 type Form = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
 const VACIO: Form = { codigo: "", razonSocial: "", tipo: "FABRICANTE", cuit: "", condicionIVA: "RI", circuitoHabitual: 1, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", unidadNegocioIds: ["un_cor"], activo: true, notas: "" };
@@ -29,7 +30,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
     if (proveedor) setF({ ...proveedor });
   }, [proveedor]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const er: Record<string, string> = {};
     if (!f.razonSocial.trim()) er.razonSocial = "Ingresá la razón social.";
@@ -38,7 +39,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) er.email = "Email inválido.";
     setErr(er);
     if (Object.keys(er).length) return;
-    const r = guardar({ ...f, cuit: formatearCUIT(f.cuit) }, proveedor?.id);
+    const r = await medir(proveedor ? "editarProveedor" : "crearProveedor", { proveedorId: proveedor?.id }, () => guardar({ ...f, cuit: formatearCUIT(f.cuit) }, proveedor?.id));
     if (r.ok) {
       toast.success(proveedor ? "Proveedor actualizado" : "Proveedor creado");
       onSaved(r.data);
@@ -62,6 +63,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
         </FormField>
         <FormField label="Circuito habitual">
           <Select disabled={ro} value={String(f.circuitoHabitual)} onValueChange={(v) => set("circuitoHabitual", Number(v) as 1 | 2)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
+          <ImpactoCampo campo={`circuito.${f.circuitoHabitual}`} />
         </FormField>
         <FormField label="Contacto" htmlFor="pv-contacto">
           <Input id="pv-contacto" disabled={ro} value={f.contacto} onChange={(e) => set("contacto", e.target.value)} />
@@ -102,6 +104,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
           <Button type="submit"><Save /> {proveedor ? "Guardar cambios" : "Crear proveedor"}</Button>
         </div>
       )}
+      {!ro && !proveedor && <Impacto accion="crearProveedor" />}
     </form>
   );
 }

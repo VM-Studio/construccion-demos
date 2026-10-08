@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRightLeft, Ban, CalendarClock, PackageOpen, Printer, SlidersHorizontal, Wallet } from "lucide-react";
 import { useStore } from "@/store";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { useAcopiosResumen, useDb, usePendientes, usePuede } from "@/store/selectors";
 import type { Acopio } from "@/domain/types";
 import { numeroCorto } from "@/domain/numeracion";
@@ -213,8 +214,8 @@ function TraspasoDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: num
   const sugerida = d ? `${numeroCorto(d.acopio.numero)}. Se traspasa el saldo del ${numeroCorto(acopio.numero)}, a pedido del cliente.` : "";
   const [desc, setDesc] = React.useState(sugerida);
   React.useEffect(() => setDesc(sugerida), [sugerida]);
-  const confirmar = () => {
-    const r = useStore.getState().traspasarSaldo(acopio.id, destino, monto, desc);
+  const confirmar = async () => {
+    const r = await medir("traspasarSaldoAcopio", { clienteId: acopio.clienteId, acopioId: acopio.id }, () => useStore.getState().traspasarSaldo(acopio.id, destino, monto, desc));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Saldo traspasado: ${r.data.salida} → ${r.data.entrada}`);
     onClose();
@@ -235,6 +236,7 @@ function TraspasoDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: num
             <FormField label="Descripción" htmlFor="tr-d" hint="Se ve en el detalle del acopio (editable)">
               <Input id="tr-d" value={desc} onChange={(e) => setDesc(e.target.value)} />
             </FormField>
+            <Impacto accion="traspasarSaldoAcopio" />
           </div>
         )}
       </DialogContent>
@@ -246,8 +248,8 @@ function AjusteDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => void
   const [monto, setMonto] = React.useState(0);
   const [signo, setSigno] = React.useState("1");
   const [motivo, setMotivo] = React.useState("");
-  const confirmar = () => {
-    const r = useStore.getState().ajustarSaldoAcopio(acopio.id, Number(signo) * monto, motivo);
+  const confirmar = async () => {
+    const r = await medir("ajustarSaldoAcopio", { clienteId: acopio.clienteId, acopioId: acopio.id }, () => useStore.getState().ajustarSaldoAcopio(acopio.id, Number(signo) * monto, motivo));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Ajuste ${r.data} registrado`);
     onClose();
@@ -259,6 +261,7 @@ function AjusteDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => void
           <FormField label="Tipo"><Select aria-label="Tipo de ajuste" value={signo} onValueChange={setSigno} options={[{ value: "1", label: "Suma al saldo" }, { value: "-1", label: "Resta del saldo" }]} /></FormField>
           <FormField label="Monto" htmlFor="aj-m"><NumberInput id="aj-m" value={monto} min={0} onValueChange={setMonto} /></FormField>
           <FormField label="Motivo" required htmlFor="aj-mo"><Input id="aj-mo" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. bonificación por demora en la entrega" /></FormField>
+          <Impacto accion="ajustarSaldoAcopio" />
         </div>
       </DialogContent>
     </Dialog>
@@ -267,9 +270,9 @@ function AjusteDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => void
 
 function ExtenderDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => void }) {
   const [fecha, setFecha] = React.useState(diaLocal(new Date(Date.parse(acopio.fechaVencimiento) + 60 * 86_400_000)));
-  const confirmar = () => {
+  const confirmar = async () => {
     const [y, m, d] = fecha.split("-").map(Number);
-    const r = useStore.getState().extenderVencimientoAcopio(acopio.id, new Date(y, m - 1, d, 12).toISOString());
+    const r = await medir("extenderVencimientoAcopio", { clienteId: acopio.clienteId, acopioId: acopio.id }, () => useStore.getState().extenderVencimientoAcopio(acopio.id, new Date(y, m - 1, d, 12).toISOString()));
     if (!r.ok) return toast.error(r.error);
     toast.success("Vencimiento extendido");
     onClose();
@@ -277,7 +280,10 @@ function ExtenderDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => vo
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="sm" title="Extender vencimiento" description={`Vence actualmente el ${formatDate(acopio.fechaVencimiento)}.`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={confirmar}>Extender</Button></>}>
-        <FormField label="Nueva fecha de vencimiento" htmlFor="ex-f"><Input id="ex-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
+        <div className="space-y-3">
+          <FormField label="Nueva fecha de vencimiento" htmlFor="ex-f"><Input id="ex-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /><ImpactoCampo campo="acopio.vencimiento" /></FormField>
+          <Impacto accion="extenderVencimientoAcopio" />
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -285,8 +291,8 @@ function ExtenderDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => vo
 
 function CancelarDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: number; onClose: () => void }) {
   const [motivo, setMotivo] = React.useState("");
-  const confirmar = () => {
-    const r = useStore.getState().cancelarAcopio(acopio.id, motivo);
+  const confirmar = async () => {
+    const r = await medir("cancelarAcopio", { clienteId: acopio.clienteId, acopioId: acopio.id }, () => useStore.getState().cancelarAcopio(acopio.id, motivo));
     if (!r.ok) return toast.error(r.error);
     toast.success("Acopio cancelado", { description: r.data ? `Se emitió la nota de crédito ${r.data} por el saldo.` : undefined });
     onClose();
@@ -294,7 +300,10 @@ function CancelarDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: num
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="sm" title={`Cancelar ${acopio.numero}`} description={saldo > 0 ? `El saldo de ${formatMoney(saldo)} vuelve al cliente con una nota de crédito.` : "El acopio no tiene saldo."} footer={<><Button variant="secondary" onClick={onClose}>Volver</Button><Button variant="danger" onClick={confirmar} disabled={!motivo.trim()}><Ban /> Cancelar acopio</Button></>}>
-        <FormField label="Motivo" required htmlFor="ca-m"><Input id="ca-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. el cliente suspendió la obra" /></FormField>
+        <div className="space-y-3">
+          <FormField label="Motivo" required htmlFor="ca-m"><Input id="ca-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. el cliente suspendió la obra" /></FormField>
+          <Impacto accion="cancelarAcopio" />
+        </div>
       </DialogContent>
     </Dialog>
   );

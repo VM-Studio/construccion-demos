@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { SidebarNav } from "./sidebar";
 import { CommandPalette } from "./command-palette";
 import { useModuloActual } from "./use-modulo";
+import { InterruptorCapacitacion } from "@/capacitacion";
 
 /** Nombre del documento abierto (último segmento de la URL si es un id). */
 function useDocumento(pathname: string): string | undefined {
@@ -250,6 +251,7 @@ export function Header() {
         </Tooltip>
         <Favoritos />
         <CampanaAlertas />
+        <InterruptorCapacitacion />
         <Avatar />
       </div>
       <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>

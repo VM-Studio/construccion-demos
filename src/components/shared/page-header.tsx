@@ -5,6 +5,7 @@ import { Heart } from "lucide-react";
 import { useStore } from "@/store";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { BannerPagina } from "@/capacitacion";
 
 /** Corazón para marcar la página actual como favorita (persistido por usuario). */
 function FavoritoPagina() {
@@ -51,6 +52,7 @@ export function PageHeader({
           )}
         </div>
         {descripcion && <p className="mt-0.5 text-[13px] text-muted">{descripcion}</p>}
+        <BannerPagina />
         {children}
       </div>
       {acciones && <div className="flex max-w-full flex-wrap items-center gap-2" data-tour="acciones">{acciones}</div>}

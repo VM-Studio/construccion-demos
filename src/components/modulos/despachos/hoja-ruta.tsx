@@ -21,6 +21,7 @@ import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { pesoDespacho } from "./documentos";
 import { useAccionesDespacho } from "./despachos-view";
+import { Impacto, medir } from "@/capacitacion";
 
 /** Hoja de ruta: envíos del día por vehículo, conectada a los estados de despacho. */
 export function HojaRutaView() {
@@ -69,7 +70,7 @@ export function HojaRutaView() {
                   <div className="text-[11px] text-muted">{d.numero} · {d.direccionEntrega} · {formatNumber(pesoDespacho(d, db.productos), 0)} kg</div>
                   {puede && (
                     <div className="mt-1.5 w-[200px]">
-                      <SelectorVehiculo aria-label="Asignar a vehículo" value="" placeholder="Asignar a vehículo…" onChange={(v) => v && run(useStore.getState().asignarAHojaRuta(d.id, v, fechaISO()), "Asignado a la hoja de ruta")} />
+                      <SelectorVehiculo aria-label="Asignar a vehículo" value="" placeholder="Asignar a vehículo…" onChange={async (v) => v && run(await medir("armarHojaRuta", {}, () => useStore.getState().asignarAHojaRuta(d.id, v, fechaISO())), "Asignado a la hoja de ruta")} />
                     </div>
                   )}
                 </li>
@@ -82,6 +83,7 @@ export function HojaRutaView() {
             const h = hojas.find((x) => x.vehiculoId === v.id);
             const paradas = (h?.despachoIds ?? []).map((id) => db.despachos.find((d) => d.id === id)!).filter(Boolean);
             const carga = paradas.reduce((a, d) => a + pesoDespacho(d, db.productos), 0);
+            const ctx = { productoIds: paradas.flatMap((d) => d.items.map((i) => i.productoId)), depositoIds: [...new Set(paradas.map((d) => d.depositoId))] };
             return (
               <Card key={v.id}>
                 <CardHeader className="flex-wrap">
@@ -93,14 +95,19 @@ export function HojaRutaView() {
                   </div>
                   {h && (
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="w-[190px]"><SelectorChofer aria-label="Chofer" placeholder="Elegí el chofer…" disabled={h.estado !== "PLANIFICADA" || !puede} value={h.choferId} onChange={(c) => c && run(useStore.getState().cambiarChoferHoja(h.id, c), "Chofer asignado")} /></div>
+                      <div className="w-[190px]"><SelectorChofer aria-label="Chofer" placeholder="Elegí el chofer…" disabled={h.estado !== "PLANIFICADA" || !puede} value={h.choferId} onChange={async (c) => c && run(await medir("armarHojaRuta", {}, () => useStore.getState().cambiarChoferHoja(h.id, c)), "Chofer asignado")} /></div>
                       <StatusBadge tipo="HOJA" estado={h.estado} />
                       <Button size="sm" variant="ghost" onClick={() => setImprimir(h)}><Printer /> Imprimir</Button>
-                      {puede && h.estado === "PLANIFICADA" && <Button size="sm" onClick={() => run(useStore.getState().iniciarRecorrido(h.id), "Recorrido iniciado")}><Play /> Iniciar recorrido</Button>}
-                      {puede && h.estado === "EN_CURSO" && <Button size="sm" variant="secondary" onClick={() => run(useStore.getState().cerrarHojaRuta(h.id), "Hoja de ruta cerrada")}><CheckCheck /> Cerrar hoja</Button>}
+                      {puede && h.estado === "PLANIFICADA" && <Button size="sm" onClick={async () => run(await medir("iniciarRecorrido", ctx, () => useStore.getState().iniciarRecorrido(h.id)), "Recorrido iniciado")}><Play /> Iniciar recorrido</Button>}
+                      {puede && h.estado === "EN_CURSO" && <Button size="sm" variant="secondary" onClick={async () => run(await medir("cerrarHojaRuta", ctx, () => useStore.getState().cerrarHojaRuta(h.id)), "Hoja de ruta cerrada")}><CheckCheck /> Cerrar hoja</Button>}
                     </div>
                   )}
                 </CardHeader>
+                {h && puede && (h.estado === "PLANIFICADA" || h.estado === "EN_CURSO") && (
+                  <div className="px-4 pb-3 empty:hidden">
+                    <Impacto accion={h.estado === "PLANIFICADA" ? "iniciarRecorrido" : "marcarEntregado"} />
+                  </div>
+                )}
                 {paradas.length === 0 ? (
                   <p className="px-4 pb-4 text-[13px] text-muted">Sin paradas asignadas.</p>
                 ) : (
@@ -116,9 +123,9 @@ export function HojaRutaView() {
                         {puede && d.estado === "EN_VIAJE" && <Button size="sm" variant="secondary" onClick={() => entregar(d)}><CheckCircle2 /> Entregado</Button>}
                         {puede && h?.estado === "PLANIFICADA" && (
                           <span className={cn("flex")}>
-                            <Button size="icon-sm" variant="ghost" aria-label="Subir" onClick={() => useStore.getState().moverEnHojaRuta(h.id, d.id, -1)}><ArrowUp /></Button>
-                            <Button size="icon-sm" variant="ghost" aria-label="Bajar" onClick={() => useStore.getState().moverEnHojaRuta(h.id, d.id, 1)}><ArrowDown /></Button>
-                            <Button size="icon-sm" variant="ghost" aria-label="Quitar" onClick={() => run(useStore.getState().quitarDeHojaRuta(d.id))}><X /></Button>
+                            <Button size="icon-sm" variant="ghost" aria-label="Subir" onClick={() => void medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, -1))}><ArrowUp /></Button>
+                            <Button size="icon-sm" variant="ghost" aria-label="Bajar" onClick={() => void medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, 1))}><ArrowDown /></Button>
+                            <Button size="icon-sm" variant="ghost" aria-label="Quitar" onClick={async () => run(await medir("armarHojaRuta", {}, () => useStore.getState().quitarDeHojaRuta(d.id)))}><X /></Button>
                           </span>
                         )}
                       </li>

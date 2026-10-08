@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatDate, formatMoney } from "@/lib/format";
+import { Impacto } from "@/capacitacion";
 import { cn } from "@/lib/utils";
 import { PagoDialog } from "@/components/modulos/cuentas/pago-dialog";
 import { OrdenPagoDocumento } from "@/components/modulos/cuentas/documentos";
@@ -91,6 +92,7 @@ export function OrdenesPagoView() {
       <Dialog open={elegir} onOpenChange={setElegir}>
         <DialogContent size="sm" title="Nueva orden de pago" description="Elegí el proveedor." footer={<><Button variant="secondary" onClick={() => setElegir(false)}>Cancelar</Button><Button disabled={!provId} onClick={() => { setPagar(provId); setElegir(false); }}>Continuar</Button></>}>
           <SelectorProveedor aria-label="Proveedor" value={provId} onChange={setProvId} />
+          <Impacto accion="crearOrdenPago" className="mt-3" />
         </DialogContent>
       </Dialog>
       {pagar && <PagoDialog open onOpenChange={(v) => !v && setPagar(null)} proveedorId={pagar} />}

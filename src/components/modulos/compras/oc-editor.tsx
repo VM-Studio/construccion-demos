@@ -36,6 +36,7 @@ import { diaLocal } from "@/lib/periodos";
 import { newId } from "@/lib/utils";
 import { totalesOC } from "@/store/slices/compras";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { OCDocumento } from "./oc-documento";
 import { RecepcionDialog } from "./recepcion-dialog";
 
@@ -159,8 +160,12 @@ export function OCEditor({ id }: { id: string }) {
     items: items.map<ItemOC>((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: i.cantidadRecibida, costoUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct ?? 0 })),
   });
 
-  const guardar = (silencioso = false): string | null => {
-    const r = acciones.guardarOC(datos(), oc?.id);
+  const ctx = () => ({ proveedorId: proveedorId || undefined, productoIds: items.map((i) => i.productoId), depositoIds: [depositoId], acopioProveedorId: origen === "ACOPIO" ? acpId || undefined : undefined });
+  const idConfirmar = origen === "ACOPIO" ? "confirmarOrdenCompraDeAcopio" : "confirmarOrdenCompra";
+  const idRecepcion = origen === "ACOPIO" ? "registrarRecepcionDeAcopio" : "registrarRecepcion";
+
+  const guardar = async (silencioso = false): Promise<string | null> => {
+    const r = await medir("crearOrdenCompra", ctx(), () => acciones.guardarOC(datos(), oc?.id));
     if (!r.ok) {
       toast.error(r.error);
       return null;
@@ -170,8 +175,9 @@ export function OCEditor({ id }: { id: string }) {
     return r.data;
   };
 
-  const cambiar = (estado: Parameters<typeof acciones.cambiarEstadoOC>[1], msg: string) => {
-    const r = useStore.getState().cambiarEstadoOC(oc!.id, estado);
+  const cambiar = async (estado: Parameters<typeof acciones.cambiarEstadoOC>[1], msg: string) => {
+    const accionId = estado === "CONFIRMADA" ? idConfirmar : estado === "CANCELADA" ? "cancelarOrdenCompra" : estado === "ENVIADA" ? "enviarOrdenCompra" : "crearOrdenCompra";
+    const r = await medir(accionId, ctx(), () => useStore.getState().cambiarEstadoOC(oc!.id, estado));
     if (r.ok) toast.success(msg);
     else toast.error(r.error);
   };
@@ -218,6 +224,7 @@ export function OCEditor({ id }: { id: string }) {
               </FormField>
               <FormField label="Depósito destino">
                 <Select disabled={!editable} value={depositoId} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
+                <ImpactoCampo campo="oc.deposito" />
               </FormField>
               <FormField label="Fecha de emisión" htmlFor="oc-fecha">
                 <Input id="oc-fecha" type="date" disabled={!editable} value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -234,6 +241,7 @@ export function OCEditor({ id }: { id: string }) {
                 ) : (
                   <div className="flex h-9 items-center text-[13px]">{origen === "ACOPIO" ? "Retiro de acopio con proveedor" : "Compra nueva"}</div>
                 )}
+                <ImpactoCampo campo={`oc.origen.${origen}`} />
               </FormField>
               <FormField label="Circuito">
                 {editable && origen === "NUEVA" ? (
@@ -241,6 +249,7 @@ export function OCEditor({ id }: { id: string }) {
                 ) : (
                   <div className="flex h-9 items-center"><CircuitoBadge circuito={circuito} /></div>
                 )}
+                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
               {origen === "ACOPIO" && (
                 <FormField label="Acopio con el proveedor" error={editable && proveedorId && !acpsProveedor.length ? "El proveedor no tiene acopios vigentes con saldo." : undefined}>
@@ -377,15 +386,15 @@ export function OCEditor({ id }: { id: string }) {
                       <Button
                         variant="secondary"
                         disabled={!items.length}
-                        onClick={() => {
-                          if (guardar(true)) setEmail(true);
+                        onClick={async () => {
+                          if (await guardar(true)) setEmail(true);
                         }}
                       >
                         <Mail /> Enviar al proveedor
                       </Button>
                     )}
                     {oc && (
-                      <Button variant="ghost" onClick={() => confirmar({ titulo: `Eliminar ${oc.numero}`, descripcion: "La orden en borrador se elimina definitivamente.", confirmLabel: "Eliminar", variant: "danger", onConfirm: () => { const r = acciones.eliminarOC(oc.id); if (r.ok) { toast.success("Orden eliminada"); router.push("/compras/ordenes"); } else toast.error(r.error); } })}>
+                      <Button variant="ghost" onClick={() => confirmar({ titulo: `Eliminar ${oc.numero}`, descripcion: "La orden en borrador se elimina definitivamente.", confirmLabel: "Eliminar", variant: "danger", onConfirm: async () => { const r = await medir("eliminarOrdenCompra", ctx(), () => acciones.eliminarOC(oc.id)); if (r.ok) { toast.success("Orden eliminada"); router.push("/compras/ordenes"); } else toast.error(r.error); } })}>
                         <Trash2 /> Eliminar
                       </Button>
                     )}
@@ -420,8 +429,8 @@ export function OCEditor({ id }: { id: string }) {
                             descripcion: "Lo que falta recibir deja de figurar en tránsito y la orden se cierra.",
                             confirmLabel: "Cancelar saldo",
                             variant: "danger",
-                            onConfirm: () => {
-                              const r = acciones.cancelarSaldoOC(oc.id);
+                            onConfirm: async () => {
+                              const r = await medir("cancelarOrdenCompra", ctx(), () => acciones.cancelarSaldoOC(oc.id));
                               if (r.ok) toast.success("Saldo pendiente cancelado");
                               else toast.error(r.error);
                             },
@@ -439,6 +448,13 @@ export function OCEditor({ id }: { id: string }) {
                   </p>
                 )}
               </div>
+              {editable ? (
+                <Impacto accion={oc?.estado === "BORRADOR" ? "enviarOrdenCompra" : "crearOrdenCompra"} />
+              ) : oc?.estado === "ENVIADA" && puedeConfirmar ? (
+                <Impacto accion={idConfirmar} />
+              ) : (oc?.estado === "CONFIRMADA" || oc?.estado === "RECIBIDA_PARCIAL") && puedeRecibir ? (
+                <Impacto accion={idRecepcion} />
+              ) : null}
             </CardContent>
           </Card>
         </aside>

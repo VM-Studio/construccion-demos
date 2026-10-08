@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/input";
 import { formatDate, formatDateTime, formatQty } from "@/lib/format";
 import { nombreUsuario } from "@/lib/referencias";
 import { newId } from "@/lib/utils";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
 export function TransferenciasTab({ abrirId, nuevo, productoInicial }: { abrirId?: string | null; nuevo?: boolean; productoInicial?: string | null }) {
   const db = useDb();
@@ -89,8 +90,8 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
   }, [open, productoInicial]);
   const excede = items.some((i) => i.cantidad > (posiciones.get(i.productoId)?.porDeposito[origen]?.disponible ?? 0));
 
-  const guardar = () => {
-    const r = crear({ depositoOrigenId: origen, depositoDestinoId: destino, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })), observacion: obs || undefined });
+  const guardar = async () => {
+    const r = await medir("transferirStock", { productoIds: items.map((i) => i.productoId), depositoIds: [origen, destino] }, () => crear({ depositoOrigenId: origen, depositoDestinoId: destino, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })), observacion: obs || undefined }));
     if (r.ok) {
       toast.success(`Transferencia ${r.data.numero} creada`, { description: "Queda pendiente de despacho." });
       onClose(r.data.id);
@@ -119,6 +120,7 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
           </FormField>
           <FormField label="Depósito destino" error={origen === destino ? "Debe ser distinto del origen." : undefined}>
             <Select value={destino} onValueChange={setDestino} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
+            <ImpactoCampo campo="transferencia.destino" />
           </FormField>
         </div>
         <ItemsGrid
@@ -135,6 +137,7 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
         <FormField label="Observación" htmlFor="trf-obs">
           <Textarea id="trf-obs" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej. Reposición para obra de la zona sur" />
         </FormField>
+        <Impacto accion="transferirStock" />
       </div>
     </EntitySheet>
   );
@@ -151,6 +154,7 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
   const dep = (x: string) => db.depositos.find((d) => d.id === x)?.nombre ?? "";
   const prod = (x: string) => db.productos.find((p) => p.id === x);
   const run = (r: { ok: boolean; error?: string }, msg: string) => (r.ok ? toast.success(msg) : toast.error(r.error));
+  const ctx = { productoIds: t.items.map((i) => i.productoId), depositoIds: [t.depositoOrigenId, t.depositoDestinoId] };
 
   return (
     <>
@@ -163,12 +167,12 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
         acciones={
           <>
             {puede && t.estado === "PENDIENTE" && (
-              <Button size="sm" onClick={() => run(despacharTransferencia(t.id), "Transferencia despachada: el stock salió del origen")}>
+              <Button size="sm" onClick={async () => run(await medir("transferirStock", ctx, () => despacharTransferencia(t.id)), "Transferencia despachada: el stock salió del origen")}>
                 <Truck /> Despachar
               </Button>
             )}
             {puede && t.estado === "EN_TRANSITO" && (
-              <Button size="sm" onClick={() => run(recibirTransferencia(t.id), "Transferencia recibida: el stock ingresó al destino")}>
+              <Button size="sm" onClick={async () => run(await medir("recibirTransferencia", ctx, () => recibirTransferencia(t.id)), "Transferencia recibida: el stock ingresó al destino")}>
                 <PackageCheck /> Recibir
               </Button>
             )}
@@ -176,7 +180,7 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
               <Printer /> Imprimir
             </Button>
             {puede && t.estado === "PENDIENTE" && (
-              <Button size="sm" variant="ghost" onClick={() => confirmar({ titulo: `Cancelar ${t.numero}`, confirmLabel: "Cancelar transferencia", variant: "danger", onConfirm: () => { run(cancelarTransferencia(t.id), "Transferencia cancelada"); } })}>
+              <Button size="sm" variant="ghost" onClick={() => confirmar({ titulo: `Cancelar ${t.numero}`, confirmLabel: "Cancelar transferencia", variant: "danger", onConfirm: async () => { run(await medir("cancelarTransferencia", ctx, () => cancelarTransferencia(t.id)), "Transferencia cancelada"); } })}>
                 <X /> Cancelar
               </Button>
             )}
@@ -184,6 +188,8 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
         }
       >
         <div className="space-y-4">
+          {puede && t.estado === "PENDIENTE" && <Impacto accion="transferirStock" />}
+          {puede && t.estado === "EN_TRANSITO" && <Impacto accion="recibirTransferencia" />}
           <table className="w-full text-table">
             <thead>
               <tr className="border-b border-border text-[12px] text-muted">

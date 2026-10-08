@@ -2,6 +2,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useStore } from "@/store";
+import { Impacto, medir } from "@/capacitacion";
 import { useDb } from "@/store/selectors";
 import { Combobox } from "./combobox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -15,8 +16,8 @@ export function NuevaObraDialog({ clienteId, open, onOpenChange, onCreada }: { c
   React.useEffect(() => {
     if (open) setF({ nombre: "", direccion: "", localidad: "" });
   }, [open]);
-  const guardar = () => {
-    const r = useStore.getState().guardarObra({ clienteId, nombre: f.nombre, direccion: f.direccion || undefined, localidad: f.localidad || undefined, activa: true });
+  const guardar = async () => {
+    const r = await medir("crearObra", { clienteId }, () => useStore.getState().guardarObra({ clienteId, nombre: f.nombre, direccion: f.direccion || undefined, localidad: f.localidad || undefined, activa: true }));
     if (!r.ok) return toast.error(r.error);
     toast.success("Obra creada");
     onCreada?.(r.data);
@@ -29,6 +30,7 @@ export function NuevaObraDialog({ clienteId, open, onOpenChange, onCreada }: { c
           <FormField label="Nombre" required htmlFor="ob-n"><Input id="ob-n" autoFocus value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Barrio Los Álamos, lote 12" /></FormField>
           <FormField label="Dirección" htmlFor="ob-d"><Input id="ob-d" value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} /></FormField>
           <FormField label="Localidad" htmlFor="ob-l"><Input id="ob-l" value={f.localidad} onChange={(e) => setF({ ...f, localidad: e.target.value })} /></FormField>
+          <Impacto accion="crearObra" />
         </div>
       </DialogContent>
     </Dialog>

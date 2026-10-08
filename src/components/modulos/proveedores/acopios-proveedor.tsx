@@ -22,6 +22,7 @@ import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { EmptyState } from "@/components/shared/empty-state";
 import { AdjuntosPanel, ClipContador, useAdjuntos } from "@/components/shared/adjuntos-panel";
 import { HistorialEntidad } from "@/components/shared/historial-entidad";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,7 +123,8 @@ export function AcopioProveedorNuevo() {
   const totalCantidad = Object.entries(cantidades).reduce((a, [pid, q]) => a + q * (costos[pid] ?? 0), 0);
   const total = modalidad === "MONTO" ? importe : totalCantidad;
   const crear = async () => {
-    const r = useStore.getState().crearAcopioProveedor({
+    const productoIds = modalidad === "CANTIDAD" ? Object.keys(cantidades).filter((pid) => cantidades[pid] > 0) : productos.map((p) => p.id);
+    const r = await medir("crearAcopioProveedor", { proveedorId, productoIds, depositoIds: [deposito] }, () => useStore.getState().crearAcopioProveedor({
       proveedorId,
       sucursalId,
       depositoDestinoId: deposito,
@@ -135,7 +137,7 @@ export function AcopioProveedorNuevo() {
       formaPago: forma,
       costos,
       observaciones: obs || undefined,
-    });
+    }));
     if (!r.ok) return toast.error(r.error);
     if (archivo) {
       const { guardarAdjunto } = await import("@/lib/adjuntos");
@@ -156,17 +158,19 @@ export function AcopioProveedorNuevo() {
               <FormField label="Proveedor" required className="sm:col-span-2">
                 <SelectorProveedor aria-label="Proveedor" value={proveedorId} onChange={setProveedorId} />
               </FormField>
-              <FormField label="Circuito"><Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /></FormField>
+              <FormField label="Circuito"><Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /><ImpactoCampo campo={`circuito.${circuito}`} /></FormField>
               <FormField label="Sucursal"><Select aria-label="Sucursal" value={sucursalId} onValueChange={(v) => { setSucursalId(v); setDeposito(db.sucursales.find((s) => s.id === v)?.depositoId ?? deposito); }} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} /></FormField>
-              <FormField label="Depósito destino"><Select aria-label="Depósito destino" value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} /></FormField>
+              <FormField label="Depósito destino"><Select aria-label="Depósito destino" value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} /><ImpactoCampo campo="oc.deposito" /></FormField>
               <FormField label="Fecha" htmlFor="acp-f"><Input id="acp-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
               <FormField label="Vencimiento" htmlFor="acp-v"><Input id="acp-v" type="date" value={vence} onChange={(e) => setVence(e.target.value)} /></FormField>
               <FormField label="Modalidad" hint={modalidad === "CANTIDAD" ? "Ej. 2.000 bolsas de cemento a costo congelado" : "Importe a retirar en cualquier artículo del proveedor"}>
                 <Segmented value={modalidad} onChange={setModalidad} options={[{ value: "MONTO", label: "Por monto" }, { value: "CANTIDAD", label: "Por cantidades" }]} />
+                <ImpactoCampo campo={`acopioProveedor.modalidad.${modalidad}`} />
               </FormField>
               {modalidad === "MONTO" && <FormField label="Importe" required htmlFor="acp-i"><NumberInput id="acp-i" value={importe} min={0} onValueChange={setImporte} /></FormField>}
               <FormField label="Forma de pago" hint={forma === "ANTICIPO" ? "Genera la orden de pago ahora" : "Queda como deuda y se paga en cuotas"}>
                 <Segmented value={forma} onChange={setForma} options={[{ value: "ANTICIPO", label: "Anticipo" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
+                <ImpactoCampo campo={`acopio.formaPago.${forma}`} />
               </FormField>
               <FormField label="Propuesta / factura del proveedor" className="sm:col-span-2"><Input type="file" accept="image/*,application/pdf" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} /></FormField>
               <FormField label="Observaciones" htmlFor="acp-o" className="sm:col-span-2 lg:col-span-3"><Input id="acp-o" value={obs} onChange={(e) => setObs(e.target.value)} /></FormField>
@@ -218,6 +222,7 @@ export function AcopioProveedorNuevo() {
                 <dt className="border-t border-border pt-1.5 font-semibold">Importe</dt><dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(total)}</dd>
               </dl>
               <Button className="w-full" disabled={!proveedorId || !(total > 0)} onClick={() => void crear()}><Factory /> Crear acopio con proveedor</Button>
+              <Impacto accion="crearAcopioProveedor" />
             </CardContent>
           </Card>
         </aside>
@@ -392,8 +397,9 @@ function ExtenderACP({ acopio, onClose }: { acopio: AcopioProveedor; onClose: ()
   const [fecha, setFecha] = React.useState(diaLocal(new Date(Date.parse(acopio.fechaVencimiento) + 60 * 86_400_000)));
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="sm" title="Extender vencimiento" footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().extenderVencimientoACP(acopio.id, aIso(fecha)); if (r.ok) { toast.success("Vencimiento extendido"); onClose(); } else toast.error(r.error); }}>Extender</Button></>}>
+      <DialogContent size="sm" title="Extender vencimiento" footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const r = await medir("extenderVencimientoAcopioProveedor", { proveedorId: acopio.proveedorId, acopioProveedorId: acopio.id }, () => useStore.getState().extenderVencimientoACP(acopio.id, aIso(fecha))); if (r.ok) { toast.success("Vencimiento extendido"); onClose(); } else toast.error(r.error); }}>Extender</Button></>}>
         <FormField label="Nueva fecha" htmlFor="eacp"><Input id="eacp" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
+        <Impacto accion="extenderVencimientoAcopioProveedor" className="mt-3" />
       </DialogContent>
     </Dialog>
   );
@@ -403,8 +409,9 @@ function CancelarACP({ acopio, onClose }: { acopio: AcopioProveedor; onClose: ()
   const [motivo, setMotivo] = React.useState("");
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="sm" title={`Cancelar ${acopio.numero}`} footer={<><Button variant="secondary" onClick={onClose}>Volver</Button><Button variant="danger" disabled={!motivo.trim()} onClick={() => { const r = useStore.getState().cancelarACP(acopio.id, motivo); if (r.ok) { toast.success("Acopio cancelado"); onClose(); } else toast.error(r.error); }}><Ban /> Cancelar acopio</Button></>}>
+      <DialogContent size="sm" title={`Cancelar ${acopio.numero}`} footer={<><Button variant="secondary" onClick={onClose}>Volver</Button><Button variant="danger" disabled={!motivo.trim()} onClick={async () => { const r = await medir("cancelarAcopioProveedor", { proveedorId: acopio.proveedorId, acopioProveedorId: acopio.id }, () => useStore.getState().cancelarACP(acopio.id, motivo)); if (r.ok) { toast.success("Acopio cancelado"); onClose(); } else toast.error(r.error); }}><Ban /> Cancelar acopio</Button></>}>
         <FormField label="Motivo" required htmlFor="cacp"><Input id="cacp" value={motivo} onChange={(e) => setMotivo(e.target.value)} /></FormField>
+        <Impacto accion="cancelarAcopioProveedor" className="mt-3" />
       </DialogContent>
     </Dialog>
   );

@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { useStore } from "@/store";
+import { Impacto, medir } from "@/capacitacion";
 import { useDb, usePuede } from "@/store/selectors";
 import type { Permiso } from "@/domain/permisos";
 import { ClienteForm } from "@/components/modulos/ventas/cliente-form";
@@ -63,8 +64,8 @@ export function AltaRapidaSheet({ tipo, open, onOpenChange, onCreado, unidadNego
 function FormVehiculo({ onSaved }: { onSaved: (id: string) => void }) {
   const db = useDb();
   const [f, setF] = React.useState({ patente: "", descripcion: "", capacidadKg: 3500, choferId: "" });
-  const guardar = () => {
-    const r = useStore.getState().guardarVehiculo({ ...f, patente: f.patente.toUpperCase(), choferId: f.choferId || undefined, activo: true });
+  const guardar = async () => {
+    const r = await medir("crearVehiculo", {}, () => useStore.getState().guardarVehiculo({ ...f, patente: f.patente.toUpperCase(), choferId: f.choferId || undefined, activo: true }));
     if (!r.ok) return toast.error(r.error);
     toast.success("Vehículo creado");
     onSaved(r.data);
@@ -78,14 +79,15 @@ function FormVehiculo({ onSaved }: { onSaved: (id: string) => void }) {
         <FormField label="Chofer habitual" className="sm:col-span-2"><Select value={f.choferId} onValueChange={(x) => setF({ ...f, choferId: x })} options={[{ value: "", label: "Sin chofer habitual" }, ...db.choferes.filter((c) => c.activo).map((c) => ({ value: c.id, label: c.nombre }))]} /></FormField>
       </div>
       <div className="flex justify-end"><Button onClick={guardar} disabled={!f.patente.trim()}><Save /> Guardar vehículo</Button></div>
+      <Impacto accion="crearVehiculo" />
     </div>
   );
 }
 
 function FormChofer({ onSaved }: { onSaved: (id: string) => void }) {
   const [f, setF] = React.useState({ nombre: "", telefono: "" });
-  const guardar = () => {
-    const r = useStore.getState().guardarChofer({ ...f, activo: true });
+  const guardar = async () => {
+    const r = await medir("crearChofer", {}, () => useStore.getState().guardarChofer({ ...f, activo: true }));
     if (!r.ok) return toast.error(r.error);
     toast.success("Chofer creado");
     onSaved(r.data);
@@ -95,6 +97,7 @@ function FormChofer({ onSaved }: { onSaved: (id: string) => void }) {
       <FormField label="Nombre" required htmlFor="ar-ch-n"><Input id="ar-ch-n" autoFocus value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
       <FormField label="Teléfono" htmlFor="ar-ch-t"><Input id="ar-ch-t" value={f.telefono} onChange={(e) => setF({ ...f, telefono: e.target.value })} /></FormField>
       <div className="flex justify-end"><Button onClick={guardar} disabled={!f.nombre.trim()}><Save /> Guardar chofer</Button></div>
+      <Impacto accion="crearChofer" />
     </div>
   );
 }

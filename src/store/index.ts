@@ -17,6 +17,7 @@ import { crearSliceFinanzas } from "./slices/finanzas";
 import { crearSliceConfig } from "./slices/config";
 import { crearSliceRemitos } from "./slices/remitos";
 import { crearSliceImportacion } from "./slices/importacion";
+import { CAPACITACION_INICIAL, crearSliceCapacitacion, persistirCapacitacion, type EstadoCapacitacion } from "@/capacitacion/slice";
 
 export const STORAGE_KEY = "cd-demo-v2";
 
@@ -90,6 +91,7 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     ...crearSliceConfig(set, get),
     ...crearSliceRemitos(set, get),
     ...crearSliceImportacion(set, get),
+    ...crearSliceCapacitacion(set, get),
   };
 }
 
@@ -102,6 +104,7 @@ export const useStore = create<Store>()(
       db: estadoVacio(),
       ui: UI_INICIAL,
       hidratado: false,
+      capacitacion: CAPACITACION_INICIAL,
       ...crearAcciones(set, get),
     }),
     {
@@ -109,12 +112,12 @@ export const useStore = create<Store>()(
       version: 2,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false } }),
+      partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false }, capacitacion: persistirCapacitacion(s.capacitacion) }),
       merge: (persisted, current) => {
-        const p = persisted as Partial<StoreBase> | undefined;
+        const p = persisted as (Omit<Partial<StoreBase>, "capacitacion"> & { capacitacion?: Partial<EstadoCapacitacion> }) | undefined;
         // Un db guardado sin estructura (versión vieja o reseteo) se descarta y se regenera la base.
         const valido = !!p?.db?.unidadesNegocio?.length && !!p.db.usuarios?.length && !!p.db.sucursales?.length && !!p.db.config;
-        return { ...current, db: valido ? p!.db! : current.db, ui: { ...current.ui, ...(p?.ui ?? {}) } };
+        return { ...current, db: valido ? p!.db! : current.db, ui: { ...current.ui, ...(p?.ui ?? {}) }, capacitacion: { ...current.capacitacion, ...(p?.capacitacion ?? {}) } };
       },
     },
   ),

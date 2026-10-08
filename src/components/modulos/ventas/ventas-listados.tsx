@@ -35,6 +35,7 @@ import { PRESETS_LISTADO, periodoDesdePreset, type Periodo } from "@/lib/periodo
 import { cn, newId } from "@/lib/utils";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento, ReciboDocumento } from "@/components/modulos/cuentas/documentos";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { DevolucionDialog } from "./nota-pedido-detalle";
 
 const useCliente = () => {
@@ -112,8 +113,17 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
     }
     return r.data;
   };
-  const estado = (id: string, e: Cotizacion["estado"], msg: string) => {
-    const r = useStore.getState().cambiarEstadoCotizacion(id, e);
+  /** Guarda midiendo el impacto (modo capacitación); devuelve el id o null. */
+  const guardarMedido = async (accion: "crearCotizacion" | "convertirCotizacion", despues?: (id: string) => void): Promise<string | null> => {
+    const r = await medir(accion, { clienteId, productoIds: items.map((i) => i.productoId) }, () => {
+      const id = guardar();
+      if (id) despues?.(id);
+      return id ? ({ ok: true, id } as const) : ({ ok: false, error: "" } as const);
+    });
+    return r.ok ? r.id : null;
+  };
+  const estado = async (id: string, e: Cotizacion["estado"], msg: string) => {
+    const r = await medir(e === "RECHAZADA" ? "rechazarCotizacion" : "crearCotizacion", {}, () => useStore.getState().cambiarEstadoCotizacion(id, e));
     if (r.ok) toast.success(msg);
     else toast.error(r.error);
   };
@@ -139,10 +149,10 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
           <>
             {actual && <Button variant="ghost" onClick={() => setImprimir(true)}><Printer /> Imprimir</Button>}
             {actual && (actual.estado === "BORRADOR" || actual.estado === "ENVIADA") && <Button variant="ghost" onClick={() => estado(actual.id, "RECHAZADA", "Cotización rechazada")}><ThumbsDown /> Rechazar</Button>}
-            {editable && <Button variant="secondary" onClick={() => { const id = guardar(); if (id) { toast.success("Cotización guardada"); if (!cot) onClose(); } }}><Save /> Guardar</Button>}
-            {editable && <Button variant="secondary" onClick={() => { const id = guardar(); if (id) estado(id, "ENVIADA", "Cotización enviada al cliente"); }}><Send /> Enviar</Button>}
+            {editable && <Button variant="secondary" onClick={async () => { const id = await guardarMedido("crearCotizacion"); if (id) { toast.success("Cotización guardada"); if (!cot) onClose(); } }}><Save /> Guardar</Button>}
+            {editable && <Button variant="secondary" onClick={() => guardarMedido("crearCotizacion", (id) => estado(id, "ENVIADA", "Cotización enviada al cliente"))}><Send /> Enviar</Button>}
             {(!actual || actual.estado !== "ACEPTADA") && editable && (
-              <Button onClick={() => { const id = guardar(); if (id) router.push(`/ventas/notas-pedido/nueva?cotizacion=${id}`); }}>
+              <Button onClick={async () => { const id = await guardarMedido("convertirCotizacion"); if (id) router.push(`/ventas/notas-pedido/nueva?cotizacion=${id}`); }}>
                 <ShoppingCart /> Convertir en nota de pedido
               </Button>
             )}
@@ -156,9 +166,10 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
               <SelectorCliente value={clienteId} disabled={!editable} onChange={elegirCliente} />
             </FormField>
             <FormField label="Obra"><ObraSelect clienteId={clienteId} value={obraId} onChange={setObraId} /></FormField>
-            <FormField label="Validez (días)" htmlFor="cot-v"><Input id="cot-v" type="number" min={1} value={validez} disabled={!editable} onChange={(e) => setValidez(Math.max(1, Number(e.target.value) || 1))} /></FormField>
+            <FormField label="Validez (días)" htmlFor="cot-v"><Input id="cot-v" type="number" min={1} value={validez} disabled={!editable} onChange={(e) => setValidez(Math.max(1, Number(e.target.value) || 1))} /><ImpactoCampo campo="cotizacion.validez" /></FormField>
             <FormField label="Circuito" className="sm:col-span-2">
               <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
+              <ImpactoCampo campo={`circuito.${circuito}`} />
             </FormField>
           </div>
           <ItemsGrid<LineaCot>
@@ -170,6 +181,8 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
             depositoId={cliente ? db.sucursales.find((s) => s.id === cliente.sucursalPreferidaId)?.depositoId : undefined}
             totales={{ descuentoPct: descuento, ivaPct: circuito === 1 ? db.config.ivaPct : 0, onDescuentoChange: setDescuento }}
           />
+          {editable && <Impacto accion="crearCotizacion" />}
+          {editable && (!actual || actual.estado !== "ACEPTADA") && <Impacto accion="convertirCotizacion" />}
         </div>
         {actual && (
           <PrintPreview open={imprimir} onOpenChange={setImprimir} titulo={`Cotización ${actual.numero}`}>

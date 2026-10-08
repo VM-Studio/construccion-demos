@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { formatDate, formatNumber } from "@/lib/format";
 import { pesoDespacho } from "./documentos";
+import { Impacto, medir } from "@/capacitacion";
 
 export function FlotaTab({ onAbrirDespacho }: { onAbrirDespacho: (id: string) => void }) {
   const db = useDb();
@@ -62,8 +63,8 @@ function VehiculoSheet({ id, onClose, onAbrirDespacho }: { id: string; onClose: 
   const v = id === "nuevo" ? undefined : db.vehiculos.find((x) => x.id === id);
   const [f, setF] = React.useState({ patente: v?.patente ?? "", descripcion: v?.descripcion ?? "", capacidadKg: v?.capacidadKg ?? 3500, choferId: v?.choferId ?? "", activo: v?.activo ?? true });
   const historial = v ? db.despachos.filter((d) => d.vehiculoId === v.id).sort((a, b) => b.fechaProgramada.localeCompare(a.fechaProgramada)) : [];
-  const guardar = () => {
-    const r = useStore.getState().guardarVehiculo({ ...f, patente: f.patente.toUpperCase(), choferId: f.choferId || undefined }, v?.id);
+  const guardar = async () => {
+    const r = await medir("crearVehiculo", {}, () => useStore.getState().guardarVehiculo({ ...f, patente: f.patente.toUpperCase(), choferId: f.choferId || undefined }, v?.id));
     if (r.ok) {
       toast.success(v ? "Vehículo actualizado" : "Vehículo creado");
       if (!v) onClose();
@@ -84,6 +85,7 @@ function VehiculoSheet({ id, onClose, onAbrirDespacho }: { id: string; onClose: 
       </div>
       <label className="flex items-center gap-3 text-[13px]"><Switch disabled={!puede} checked={f.activo} onCheckedChange={(x) => setF({ ...f, activo: x })} /> Vehículo activo</label>
       {puede && <div className="flex justify-end"><Button onClick={guardar}><Save /> Guardar</Button></div>}
+      {puede && !v && <Impacto accion="crearVehiculo" />}
     </div>
   );
   return (
@@ -135,8 +137,8 @@ function ChoferSheet({ id, onClose }: { id: string; onClose: () => void }) {
         {puede && (
           <div className="flex justify-end">
             <Button
-              onClick={() => {
-                const r = useStore.getState().guardarChofer(f, c?.id);
+              onClick={async () => {
+                const r = await medir("crearChofer", {}, () => useStore.getState().guardarChofer(f, c?.id));
                 if (r.ok) {
                   toast.success(c ? "Chofer actualizado" : "Chofer creado");
                   onClose();
@@ -147,6 +149,7 @@ function ChoferSheet({ id, onClose }: { id: string; onClose: () => void }) {
             </Button>
           </div>
         )}
+        {puede && !c && <Impacto accion="crearChofer" />}
       </div>
     </EntitySheet>
   );

@@ -1,4 +1,5 @@
 import type { EstadoInicial } from "@/domain/types";
+import type { EstadoCapacitacion } from "@/capacitacion/slice";
 
 export interface UIState {
   usuarioId: string | null;
@@ -25,6 +26,8 @@ export interface StoreBase {
   db: EstadoInicial;
   ui: UIState;
   hidratado: boolean;
+  /** Modo capacitación (aislado en src/capacitacion). */
+  capacitacion: EstadoCapacitacion;
 }
 
 export type SetFn = (partial: Partial<StoreBase> | ((s: StoreBase) => Partial<StoreBase>)) => void;

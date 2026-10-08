@@ -24,6 +24,7 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { SubirFirmadoDialog } from "@/components/modulos/remitos/subir-firmado";
+import { Impacto, ImpactoCampo, medir, type Contexto } from "@/capacitacion";
 
 /** Reloj que se actualiza cada `ms` para los minutos en curso. */
 export function useAhora(ms = 30_000) {
@@ -42,24 +43,26 @@ const Min = ({ v, total }: { v: number | null; total?: boolean }) => {
   return <span className={cn("tnum", nivel === "critico" ? "font-semibold text-danger" : nivel === "alto" ? "font-semibold text-warning" : "")}>{v}</span>;
 };
 
+const ctxDespacho = (d: Despacho): Contexto => ({ clienteId: d.clienteId, notaPedidoId: d.notaPedidoId, remitoId: d.remitoId, productoIds: d.items.map((i) => i.productoId), depositoIds: [d.depositoId] });
+
 /** Acciones de un despacho (iniciar preparación, finalizar, entregar…) reutilizadas en lista y en vivo. */
 export function useAccionesDespacho() {
   const [firmar, setFirmar] = React.useState<string | null>(null);
-  const iniciar = (d: Despacho, posicion?: string) => {
-    const r = useStore.getState().iniciarPreparacion(d.id, posicion);
+  const iniciar = async (d: Despacho, posicion?: string) => {
+    const r = await medir("iniciarPreparacion", ctxDespacho(d), () => useStore.getState().iniciarPreparacion(d.id, posicion));
     if (!r.ok) return toast.error(r.error);
     toast.success(`${d.numero} en preparación`, { description: "El remito pasó a picking." });
   };
-  const finalizar = (d: Despacho) => {
-    const r = useStore.getState().finalizarDespacho(d.id);
+  const finalizar = async (d: Despacho) => {
+    const r = await medir("finalizarDespacho", ctxDespacho(d), () => useStore.getState().finalizarDespacho(d.id));
     if (!r.ok) return toast.error(r.error);
     if (d.modalidad === "RETIRA") {
       toast.success(`${d.numero} finalizado`, { description: "Remito hecho: subí el remito firmado." });
       if (r.data) setFirmar(r.data);
     } else toast.success(`${d.numero} cargado`, { description: "Pasa a la hoja de ruta; el remito firmado se sube al entregar." });
   };
-  const entregar = (d: Despacho) => {
-    const r = useStore.getState().marcarEntregado(d.id);
+  const entregar = async (d: Despacho) => {
+    const r = await medir("marcarEntregado", ctxDespacho(d), () => useStore.getState().marcarEntregado(d.id));
     if (!r.ok) return toast.error(r.error);
     toast.success(`${d.numero} entregado`);
     if (r.data) setFirmar(r.data);
@@ -102,7 +105,7 @@ export function DespachosView() {
       cell: (d) =>
         puede && (d.estado === "ESPERA" || d.estado === "PREPARACION") ? (
           <div className="w-[120px]" onClick={(e) => e.stopPropagation()}>
-            <Select size="sm" aria-label="Posición" value={d.posicion} onValueChange={(v) => useStore.getState().asignarPosicion(d.id, v)} options={(db.depositos.find((x) => x.id === d.depositoId)?.posiciones ?? []).map((p) => ({ value: p, label: p }))} />
+            <Select size="sm" aria-label="Posición" value={d.posicion} onValueChange={(v) => void medir("asignarPosicion", {}, () => useStore.getState().asignarPosicion(d.id, v))} options={(db.depositos.find((x) => x.id === d.depositoId)?.posiciones ?? []).map((p) => ({ value: p, label: p }))} />
           </div>
         ) : (
           <span className="whitespace-nowrap text-muted">{d.posicion}</span>
@@ -134,7 +137,7 @@ export function DespachosView() {
               {puede && (d.estado === "ESPERA" || d.estado === "PREPARACION") && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => confirmar({ titulo: `Cancelar ${d.numero}`, descripcion: "La mercadería vuelve a quedar pendiente de entrega.", confirmLabel: "Cancelar despacho", variant: "danger", onConfirm: () => { const r = useStore.getState().cancelarDespacho(d.id); if (r.ok) toast.success("Despacho cancelado"); else toast.error(r.error); } })}><XCircle /> Cancelar</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => confirmar({ titulo: `Cancelar ${d.numero}`, descripcion: "La mercadería vuelve a quedar pendiente de entrega.", confirmLabel: "Cancelar despacho", variant: "danger", onConfirm: async () => { const r = await medir("cancelarDespacho", ctxDespacho(d), () => useStore.getState().cancelarDespacho(d.id)); if (r.ok) toast.success("Despacho cancelado"); else toast.error(r.error); } })}><XCircle /> Cancelar</DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -163,6 +166,14 @@ export function DespachosView() {
         <KpiCard label="Preparación promedio" valor={pPrep === null ? "—" : `${pPrep} min`} acento />
         <KpiCard label="Tiempo total promedio" valor={pTot === null ? "—" : `${pTot} min`} subtexto={<span>ámbar &gt; 45 · rojo &gt; 90 min</span>} />
       </div>
+      {puede && (
+        <div className="mb-4 space-y-2 empty:hidden">
+          {esp > 0 && <Impacto accion="iniciarPreparacion" />}
+          {prep > 0 && <Impacto accion="finalizarDespacho" />}
+          {delDia.some((d) => d.estado === "EN_VIAJE") && <Impacto accion="marcarEntregado" />}
+          {esp + prep > 0 && <ImpactoCampo campo="despacho.posicion" className="mt-0" />}
+        </div>
+      )}
       <DataTable
         rows={filas}
         columns={columnas}
@@ -193,10 +204,11 @@ function ReprogramarDialog({ d, onClose }: { d: Despacho; onClose: () => void })
   const [motivo, setMotivo] = React.useState("");
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="sm" title={`Reprogramar ${d.numero}`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const [y, m, dd] = fecha.split("-").map(Number); const r = useStore.getState().reprogramarDespacho(d.id, new Date(y, m - 1, dd, 9).toISOString(), motivo || undefined); if (r.ok) { toast.success("Despacho reprogramado"); onClose(); } else toast.error(r.error); }}>Reprogramar</Button></>}>
+      <DialogContent size="sm" title={`Reprogramar ${d.numero}`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const [y, m, dd] = fecha.split("-").map(Number); const r = await medir("reprogramarDespacho", ctxDespacho(d), () => useStore.getState().reprogramarDespacho(d.id, new Date(y, m - 1, dd, 9).toISOString(), motivo || undefined)); if (r.ok) { toast.success("Despacho reprogramado"); onClose(); } else toast.error(r.error); }}>Reprogramar</Button></>}>
         <div className="space-y-3">
           <FormField label="Nueva fecha" htmlFor="rp-f"><Input id="rp-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
           <FormField label="Motivo" htmlFor="rp-m"><Input id="rp-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. lluvia, el cliente pidió otro día" /></FormField>
+          <Impacto accion="programarEntrega" />
         </div>
       </DialogContent>
     </Dialog>

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { DevolucionDialog, saldosDeNP } from "@/components/modulos/ventas/nota-pedido-detalle";
 import { RemitoDocumento } from "./remito-documento";
 import { SubirFirmadoDialog } from "./subir-firmado";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
 const PASOS = ["INICIAL", "PICKING", "HECHO"] as const;
 const PASO_LABEL = { INICIAL: "Inicial", PICKING: "Picking", HECHO: "Hecho" };
@@ -62,14 +63,17 @@ export function RemitoDetalle({ id }: { id: string }) {
   const pasoActual = r.estado === "ANULADO" ? -1 : PASOS.indexOf(r.estado as (typeof PASOS)[number]);
   const devoluciones = db.devoluciones.filter((d) => d.notaPedidoId === r.notaPedidoId);
 
-  const iniciarPicking = () => {
-    const x = useStore.getState().iniciarPicking(r.id);
+  const ctx = { remitoId: r.id, clienteId: r.clienteId, notaPedidoId: r.notaPedidoId, acopioId: r.acopioId, productoIds: r.items.map((i) => i.productoId), depositoIds: [r.depositoId] };
+  const proxima = r.estado === "INICIAL" && puedeOperar ? "iniciarPicking" : r.estado === "PICKING" && puedeOperar ? "marcarRemitoHecho" : r.estado === "HECHO" && !firmado && puedeOperar ? "subirRemitoFirmado" : null;
+
+  const iniciarPicking = async () => {
+    const x = await medir("iniciarPicking", ctx, () => useStore.getState().iniciarPicking(r.id));
     if (!x.ok) return toast.error(x.error);
     toast.success("Picking iniciado", { description: "Imprimí la orden de picking para el depósito." });
     setImprimir("picking");
   };
-  const marcarHecho = () => {
-    const x = useStore.getState().marcarRemitoHecho(r.id);
+  const marcarHecho = async () => {
+    const x = await medir("marcarRemitoHecho", ctx, () => useStore.getState().marcarRemitoHecho(r.id));
     if (!x.ok) return toast.error(x.error);
     toast.success(`Remito ${r.numero} hecho`, { description: "Se descontó el stock y se actualizó lo entregado." });
     setSubir(true);
@@ -124,7 +128,8 @@ export function RemitoDetalle({ id }: { id: string }) {
           </div>
         }
       />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap gap-2">
         {r.estado === "INICIAL" && puedeOperar && <Button onClick={iniciarPicking}><PlayCircle /> Iniciar picking</Button>}
         {r.estado === "PICKING" && puedeOperar && <Button onClick={marcarHecho}><Check /> Marcar como hecho / entregado</Button>}
         {r.estado === "PICKING" && <Button variant="secondary" onClick={() => setImprimir("picking")}><ClipboardList /> Orden de picking</Button>}
@@ -133,10 +138,13 @@ export function RemitoDetalle({ id }: { id: string }) {
         <Button variant="secondary" onClick={() => setImprimir("remito")}><Printer /> {r.estado === "HECHO" ? "Reimprimir" : "Imprimir"}</Button>
         {r.estado === "HECHO" && np && r.tipo !== "DEVOLUCION" && puedeVender && <Button variant="ghost" onClick={() => setDevolver(true)}><Undo2 /> Generar devolución</Button>}
         {(r.estado === "INICIAL" || r.estado === "PICKING") && puedeAnular && (
-          <Button variant="ghost" onClick={() => confirmar({ titulo: `Anular ${r.numero}`, descripcion: "La mercadería vuelve a quedar pendiente de entrega.", confirmLabel: "Anular", variant: "danger", onConfirm: () => { const x = useStore.getState().anularRemito(r.id, "Anulado por el usuario"); if (x.ok) toast.success("Remito anulado"); else toast.error(x.error); } })}>
+          <Button variant="ghost" onClick={() => confirmar({ titulo: `Anular ${r.numero}`, descripcion: "La mercadería vuelve a quedar pendiente de entrega.", confirmLabel: "Anular", variant: "danger", onConfirm: async () => { const x = await medir("anularRemito", ctx, () => useStore.getState().anularRemito(r.id, "Anulado por el usuario")); if (x.ok) toast.success("Remito anulado"); else toast.error(x.error); } })}>
             <XCircle /> Anular
           </Button>
         )}
+      </div>
+        {proxima && <Impacto accion={proxima} />}
+        <ImpactoCampo campo={`remito.estado.${r.estado}`} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
@@ -199,7 +207,7 @@ export function RemitoDetalle({ id }: { id: string }) {
           {vista === "comentarios" && (
             <Card className="space-y-2 p-4">
               <Textarea aria-label="Comentario del remito" rows={4} value={comentario} onChange={(e) => setComentario(e.target.value)} placeholder="Comentario para el depósito o el chofer…" />
-              <div className="flex justify-end"><Button size="sm" onClick={() => { useStore.getState().comentarRemito(r.id, comentario); toast.success("Comentario guardado"); }}>Guardar comentario</Button></div>
+              <div className="flex justify-end"><Button size="sm" onClick={async () => { await medir("comentarRemito", { remitoId: r.id }, () => useStore.getState().comentarRemito(r.id, comentario)); toast.success("Comentario guardado"); }}>Guardar comentario</Button></div>
             </Card>
           )}
           {vista === "despacho" && (

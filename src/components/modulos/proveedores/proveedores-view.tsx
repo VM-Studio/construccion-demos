@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Boxes, Download, Factory, FileUp, Mail, PackageCheck, Pencil, Plus, ShoppingCart, Wallet } from "lucide-react";
 import { useStore } from "@/store";
+import { medir } from "@/capacitacion";
 import { useAcopiosProveedorResumen, useDb, usePuede, useSaldosProveedores } from "@/store/selectors";
 import type { OrdenCompra, Proveedor, RecepcionMercaderia } from "@/domain/types";
 import { CONDICION_PAGO_LABEL, TIPO_PROVEEDOR_LABEL, opciones } from "@/domain/estados";
@@ -423,7 +424,7 @@ function ReclamoDialog({ oc, onClose }: { oc: OrdenCompra; onClose: () => void }
   const [texto, setTexto] = React.useState(`Hola ${prov?.contacto ?? ""}, te escribimos por la orden de compra ${oc.numero} con entrega estimada el ${formatDate(oc.fechaEntregaEstimada)}: todavía no la recibimos completa. ¿Nos confirmás una fecha de entrega? Gracias. ${db.config.empresa.empresa}`);
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="md" title={`Reclamar ${oc.numero}`} description={`Para: ${prov?.email ?? ""} · queda registrado en el historial`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().reclamarOC(oc.id, texto); if (r.ok) { toast.success("Reclamo registrado", { description: "Plantilla lista para enviar por mail." }); onClose(); } else toast.error(r.error); }}><Mail /> Registrar reclamo</Button></>}>
+      <DialogContent size="md" title={`Reclamar ${oc.numero}`} description={`Para: ${prov?.email ?? ""} · queda registrado en el historial`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const r = await medir("reclamarOC", { proveedorId: oc.proveedorId }, () => useStore.getState().reclamarOC(oc.id, texto)); if (r.ok) { toast.success("Reclamo registrado", { description: "Plantilla lista para enviar por mail." }); onClose(); } else toast.error(r.error); }}><Mail /> Registrar reclamo</Button></>}>
         <Textarea aria-label="Mensaje del reclamo" rows={6} value={texto} onChange={(e) => setTexto(e.target.value)} />
       </DialogContent>
     </Dialog>

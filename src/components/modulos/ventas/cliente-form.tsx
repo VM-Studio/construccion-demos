@@ -14,6 +14,7 @@ import { Input, NumberInput, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
 type Form = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
 
@@ -54,7 +55,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   }, [cliente]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const er: Record<string, string> = {};
     if (!f.razonSocial.trim()) er.razonSocial = "Ingresá la razón social o el nombre.";
@@ -66,7 +67,8 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
     if (f.condicionPago.startsWith("CTA_CTE") && f.limiteCredito <= 0) er.limiteCredito = "Para cuenta corriente definí un límite de crédito.";
     setErr(er);
     if (Object.keys(er).length) return;
-    const r = guardar({ ...f, cuit: f.cuit ? formatearCUIT(f.cuit) : "", nombreFantasia: f.nombreFantasia || undefined }, cliente?.id);
+    const ejecutar = () => guardar({ ...f, cuit: f.cuit ? formatearCUIT(f.cuit) : "", nombreFantasia: f.nombreFantasia || undefined }, cliente?.id);
+    const r = await medir(cliente ? "editarCliente" : "crearCliente", { clienteId: cliente?.id }, ejecutar);
     if (r.ok) {
       toast.success(cliente ? "Cliente actualizado" : `Cliente ${f.razonSocial} creado`);
       onSaved(r.data);
@@ -126,6 +128,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
         </FormField>
         <FormField label="Límite de crédito" error={err.limiteCredito} htmlFor="cl-lim">
           <NumberInput id="cl-lim" disabled={ro} value={f.limiteCredito} min={0} onValueChange={(v) => set("limiteCredito", v)} />
+          <ImpactoCampo campo="cliente.limiteCredito" />
         </FormField>
         <FormField label="Sucursal preferida">
           <Select disabled={ro} value={f.sucursalPreferidaId} onValueChange={(v) => set("sucursalPreferidaId", v)} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} />
@@ -149,6 +152,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
           <Button type="submit"><Save /> {cliente ? "Guardar cambios" : "Crear cliente"}</Button>
         </div>
       )}
+      {!ro && !cliente && <Impacto accion="crearCliente" />}
     </form>
   );
 }

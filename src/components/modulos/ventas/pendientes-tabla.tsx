@@ -18,6 +18,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { formatDate, formatMoney, formatQty } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
+import { Impacto, medir } from "@/capacitacion";
 
 export interface FilaPendiente extends LineaPendiente {
   key: string;
@@ -72,11 +73,16 @@ export function ProgramarEntregaDialog({ filas, open, onOpenChange, onListo }: {
     setFecha(diaLocal(new Date()));
     setModalidad(db.notasPedido.find((n) => n.id === filas[0].notaPedidoId)?.modalidadEntrega ?? "ENVIO");
   }, [open, filas, db.notasPedido]);
-  const confirmar = () => {
+  const confirmar = async () => {
     const [y, m, d] = fecha.split("-").map(Number);
-    const r = useStore.getState().programarEntregas(
-      filas.map((f) => ({ notaPedidoId: f.notaPedidoId, itemId: f.itemId, cantidad: f.pendiente })),
-      { fechaProgramada: new Date(y, m - 1, d, 9).toISOString(), modalidad },
+    const r = await medir(
+      "programarEntrega",
+      { clienteId: filas[0]?.clienteId, productoIds: filas.map((f) => f.productoId), depositoIds: [...new Set(filas.map((f) => f.depositoId))], notaPedidoId: filas[0]?.notaPedidoId },
+      () =>
+        useStore.getState().programarEntregas(
+          filas.map((f) => ({ notaPedidoId: f.notaPedidoId, itemId: f.itemId, cantidad: f.pendiente })),
+          { fechaProgramada: new Date(y, m - 1, d, 9).toISOString(), modalidad },
+        ),
     );
     if (!r.ok) return toast.error(r.error);
     toast.success(`Entrega programada: ${r.data.join(", ")}`, { description: "Quedó en espera en Despachos." });
@@ -93,6 +99,7 @@ export function ProgramarEntregaDialog({ filas, open, onOpenChange, onListo }: {
           <FormField label="Fecha programada" htmlFor="pe-f">
             <Input id="pe-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </FormField>
+          <Impacto accion="programarEntrega" />
         </div>
       </DialogContent>
     </Dialog>
@@ -109,15 +116,23 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
   const prod = (id: string) => db.productos.find((p) => p.id === id);
   const elegidas = filas.filter((f) => sel.has(f.key));
 
-  const retirado = (fs: FilaPendiente[]) => {
+  const retirado = async (fs: FilaPendiente[]) => {
     const porNP = new Map<string, FilaPendiente[]>();
     for (const f of fs) porNP.set(f.notaPedidoId, [...(porNP.get(f.notaPedidoId) ?? []), f]);
     const nums: string[] = [];
-    for (const [npId, ls] of porNP) {
-      const r = useStore.getState().retiroEnMostrador(npId, ls.map((l) => ({ itemId: l.itemId, cantidad: l.pendiente })));
-      if (!r.ok) return toast.error(r.error);
-      nums.push(r.data.numero);
-    }
+    const r = await medir(
+      "retiroEnMostrador",
+      { clienteId: fs[0]?.clienteId, productoIds: fs.map((f) => f.productoId), depositoIds: [...new Set(fs.map((f) => f.depositoId))], notaPedidoId: fs[0]?.notaPedidoId },
+      (): { ok: true } | { ok: false; error: string } => {
+        for (const [npId, ls] of porNP) {
+          const x = useStore.getState().retiroEnMostrador(npId, ls.map((l) => ({ itemId: l.itemId, cantidad: l.pendiente })));
+          if (!x.ok) return { ok: false, error: x.error };
+          nums.push(x.data.numero);
+        }
+        return { ok: true };
+      },
+    );
+    if (!r.ok) return toast.error(r.error);
     toast.success(`Remito hecho: ${nums.join(", ")}`, { description: "Se descontó el stock y se actualizó lo entregado." });
     setSel(new Set());
   };
@@ -174,6 +189,7 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
           ) : undefined
         }
       />
+      {puede && elegidas.length > 0 && <Impacto accion="retiroEnMostrador" className="mt-2" />}
       <ProgramarEntregaDialog filas={programar ?? []} open={!!programar} onOpenChange={(v) => !v && setProgramar(null)} onListo={() => setSel(new Set())} />
     </>
   );

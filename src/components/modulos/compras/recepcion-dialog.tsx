@@ -18,6 +18,7 @@ import { FormField } from "@/components/ui/form-field";
 import { ActualizacionMasivaDialog } from "@/components/modulos/productos/actualizacion-masiva";
 import { formatMoney, formatPercent, formatQty, unidadCorta } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Impacto, medir } from "@/capacitacion";
 
 interface Linea {
   itemOCId: string;
@@ -94,11 +95,13 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
   const neto = lineas.reduce((a, l) => a + l.cantidad * l.costo, 0);
   const umbral = (db.config.umbralSubaCostoPct ?? 3) / 100;
 
-  const confirmar = () => {
+  const accionId = oc.origen === "ACOPIO" ? "registrarRecepcionDeAcopio" : "registrarRecepcion";
+
+  const confirmar = async () => {
     const [y, m, d] = fecha.split("-").map(Number);
     const ahora = new Date();
     const f = new Date(y, m - 1, d, ahora.getHours(), ahora.getMinutes()).toISOString();
-    const r = recibir({
+    const r = await medir(accionId, { proveedorId: oc.proveedorId, productoIds: lineas.map((l) => l.productoId), depositoIds: [deposito], acopioProveedorId: oc.acopioProveedorId }, () => recibir({
       ordenCompraId: oc.id,
       remitoProveedor: remito,
       facturaProveedor: factura || undefined,
@@ -106,7 +109,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
       depositoId: deposito,
       observaciones: obs || undefined,
       items: lineas.map((l) => ({ itemOCId: l.itemOCId, cantidad: l.cantidad, costoUnitario: l.costo, diferencia: l.diferencia })),
-    });
+    }));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Recepción ${r.data.numero} registrada`, { description: r.data.completa ? "La orden quedó recibida completa." : "La orden quedó recibida parcial." });
     for (const a of archivos) {
@@ -210,6 +213,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
             <FormField label="Observaciones" htmlFor="rec-obs">
               <Input id="rec-obs" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej. 2 bolsas rotas, el chofer firmó la diferencia" />
             </FormField>
+            <Impacto accion={accionId} />
           </div>
         </DialogContent>
       </Dialog>

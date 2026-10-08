@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { History, Info, Landmark, Wallet } from "lucide-react";
 import { useStore } from "@/store";
+import { medir } from "@/capacitacion";
 import { useDb, usePuede, useSaldosClientes, useSaldosProveedores, useSucursalActiva } from "@/store/selectors";
 import type { Cheque, Cliente, Proveedor } from "@/domain/types";
 import { antiguedadDeuda } from "@/domain/cuentasCorrientes";
@@ -248,8 +249,8 @@ function Cheques() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button size="sm" variant="ghost">Acciones</Button></DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onSelect={() => { const r = useStore.getState().cambiarEstadoCheque(c.id, "DEPOSITADO"); if (r.ok) toast.success("Cheque depositado"); else toast.error(r.error); }}>Depositar</DropdownMenuItem>
-              <DropdownMenuItem danger onSelect={() => { const r = useStore.getState().cambiarEstadoCheque(c.id, "RECHAZADO"); if (r.ok) toast.success("Cheque marcado como rechazado"); else toast.error(r.error); }}>Marcar rechazado</DropdownMenuItem>
+              <DropdownMenuItem onSelect={async () => { const r = await medir("cambiarEstadoCheque", { clienteId: c.clienteId }, () => useStore.getState().cambiarEstadoCheque(c.id, "DEPOSITADO")); if (r.ok) toast.success("Cheque depositado"); else toast.error(r.error); }}>Depositar</DropdownMenuItem>
+              <DropdownMenuItem danger onSelect={async () => { const r = await medir("cambiarEstadoCheque", { clienteId: c.clienteId }, () => useStore.getState().cambiarEstadoCheque(c.id, "RECHAZADO")); if (r.ok) toast.success("Cheque marcado como rechazado"); else toast.error(r.error); }}>Marcar rechazado</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null,

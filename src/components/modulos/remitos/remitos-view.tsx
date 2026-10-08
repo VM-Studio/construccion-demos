@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Eye, FileText, MoreHorizontal, Plus, Printer, Upload, XCircle } from "lucide-react";
 import { useStore } from "@/store";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { useDb, usePuede, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
 import type { Remito } from "@/domain/types";
 import { TIPO_REMITO_LABEL } from "@/domain/estados";
@@ -116,7 +117,7 @@ export function RemitosView() {
               {(r.estado === "INICIAL" || r.estado === "PICKING") && puedeAnular && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => confirmar({ titulo: `Anular ${r.numero}`, confirmLabel: "Anular", variant: "danger", onConfirm: () => { const x = useStore.getState().anularRemito(r.id, "Anulado desde el listado"); if (x.ok) toast.success("Remito anulado"); else toast.error(x.error); } })}><XCircle /> Anular</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => confirmar({ titulo: `Anular ${r.numero}`, confirmLabel: "Anular", variant: "danger", onConfirm: async () => { const x = await medir("anularRemito", { remitoId: r.id, clienteId: r.clienteId, notaPedidoId: r.notaPedidoId, productoIds: r.items.map((i) => i.productoId), depositoIds: [r.depositoId] }, () => useStore.getState().anularRemito(r.id, "Anulado desde el listado")); if (x.ok) toast.success("Remito anulado"); else toast.error(x.error); } })}><XCircle /> Anular</DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -177,8 +178,9 @@ function NuevoRemitoDialog({ onClose }: { onClose: () => void }) {
   const [estado, setEstado] = React.useState<"PICKING" | "HECHO">("PICKING");
   const pendientes = lineasPendientes(db.notasPedido, db.remitos);
   const nps = [...new Set(pendientes.map((l) => l.notaPedidoId))].map((id) => db.notasPedido.find((n) => n.id === id)!).filter((n) => !db.remitos.some((r) => r.notaPedidoId === n.id && r.estado === "INICIAL"));
-  const generar = () => {
-    const r = useStore.getState().generarRemito(npId, { estado });
+  const generar = async () => {
+    const nota = db.notasPedido.find((n) => n.id === npId);
+    const r = await medir("generarRemito", { notaPedidoId: npId, clienteId: nota?.clienteId, acopioId: nota?.acopioId, productoIds: nota?.items.map((i) => i.productoId) }, () => useStore.getState().generarRemito(npId, { estado }));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Remito ${r.data.numero} generado`);
     onClose();
@@ -198,7 +200,9 @@ function NuevoRemitoDialog({ onClose }: { onClose: () => void }) {
           )}
           <Combobox aria-label="Nota de pedido" value={npId} onChange={setNpId} placeholder="Buscar NP por número o cliente…" opciones={nps.map((n) => ({ value: n.id, label: `${n.numero} · ${db.clientes.find((c) => c.id === n.clienteId)?.nombreFantasia ?? db.clientes.find((c) => c.id === n.clienteId)?.razonSocial}`, detalle: n.origen === "ACOPIO" ? "Acopio" : "Venta" }))} />
           <Segmented value={estado} onChange={setEstado} options={[{ value: "PICKING", label: "Pasa a picking" }, { value: "HECHO", label: "Retira ahora (hecho)" }]} />
+          <ImpactoCampo campo={`remito.estado.${estado}`} />
           <p className="text-[12px] text-muted">El remito toma todo lo pendiente de la NP. Para entregas parciales usá Pendientes de entrega.</p>
+          <Impacto accion="generarRemito" />
         </div>
       </DialogContent>
     </Dialog>

@@ -38,15 +38,23 @@ Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas d
 - Toda regla de negocio vive en `src/domain/` como funciones puras. Los componentes solo renderizan y llaman acciones del store.
 - `pnpm seed:check` (base vacía + datos de ejemplo: kardex, saldos, acopios, Ramos = $ 844,85) y `pnpm flujos:check` (flujos completos sobre el store, incluido el recorrido desde el sistema vacío).
 
-## Sistema vacío y carga inicial
-- El store arranca con `seedBase()` (solo estructura: empresa, 2 sucursales/depósitos con posiciones, unidades de negocio y rubros, 3 listas sin precios — Mayorista 22 %, Corralón 28 %, Público 45 % —, motivos de ajuste, 4 usuarios, numeración en 0). `seedEjemplo()` (todo el ejemplo, Ramos incluido) se construye encima y se carga a pedido con `cargarDatosEjemplo()` desde Configuración → Datos del demo. `resetearDemo()` vuelve a la base.
-- Prerrequisitos por pantalla en `src/domain/prerequisitos.ts` (`prerequisitos(pagina, db)`); textos de estados vacíos en `src/config/vacios.ts` (`<VacioGuiado pagina>`); guía de carga en `src/domain/cargaInicial.ts`.
-- Importación CSV (papaparse) en `src/domain/importacion.ts` + `ImportarCsvDialog`; plantillas y ejemplos en `public/plantillas/`.
-- Alta rápida: `SelectorCliente/Proveedor/Vehiculo/Chofer` (`src/components/shared/alta-rapida.tsx`) y "Crear artículo nuevo…" en `ProductoPicker`.
-- Inventario inicial = ajuste con motivo `INVENTARIO_INICIAL` y costo unitario editable; saldos iniciales de cuenta corriente = comprobante `SALDO_INICIAL` (código `SI`).
 - Dinero en ARS con `formatMoney`. Fechas con date-fns y `formatDate`. Nunca `toLocaleString` suelto.
 - UI: primitivas de `src/components/ui`. Solo tokens de color, un acento ámbar. Densidad alta. Nada de colores llamativos.
 - Español rioplatense en toda la UI. Sin anglicismos innecesarios. Textos de empresa desde `BRAND` / configuración.
 - Cada página: título, acción primaria arriba a la derecha, filtros, tabla o grilla, estado vacío con CTA.
 - Escritorio prioritario, responsive obligatorio.
 - Commits en español, imperativo, cortos.
+
+## Sistema vacío y carga inicial
+- El store arranca con `seedBase()` (solo estructura: empresa, 2 sucursales/depósitos con posiciones, unidades de negocio y rubros, 3 listas sin precios — Mayorista 22 %, Corralón 28 %, Público 45 % —, motivos de ajuste, 4 usuarios, numeración en 0). `seedEjemplo()` (todo el ejemplo, Ramos incluido) se construye encima y se carga a pedido con `cargarDatosEjemplo()` desde Configuración → Datos del demo. `resetearDemo()` vuelve a la base.
+- Prerrequisitos por pantalla en `src/domain/prerequisitos.ts` (`prerequisitos(pagina, db)`); textos de estados vacíos en `src/config/vacios.ts` (`<VacioGuiado pagina>`); guía de carga en `src/domain/cargaInicial.ts`.
+- Importación CSV (papaparse) en `src/domain/importacion.ts` + `ImportarCsvDialog`; plantillas y ejemplos en `public/plantillas/`.
+- Alta rápida: `SelectorCliente/Proveedor/Vehiculo/Chofer` (`src/components/shared/alta-rapida.tsx`) y "Crear artículo nuevo…" en `ProductoPicker`.
+- Inventario inicial = ajuste con motivo `INVENTARIO_INICIAL` y costo unitario editable; saldos iniciales de cuenta corriente = comprobante `SALDO_INICIAL` (código `SI`).
+
+## Modo capacitación (`src/capacitacion/`)
+- Todo vive en esa carpeta y detrás de un solo interruptor (`capacitacion.modo` en el store, persistido; default `true` en demo; solo DUENO y ADMINISTRACION lo cambian desde el ícono `GraduationCap` del header o Configuración → Datos del demo).
+- `impactos.ts` es el ÚNICO lugar con textos: `IMPACTOS` (qué cambia con cada acción), `CAMPOS` (una línea por valor de campo) y `PAGINAS` (de qué se alimenta cada pantalla y a qué alimenta).
+- Fuera de la carpeta solo se usan, desde `@/capacitacion`: `<Impacto accion>` (debajo del botón primario o arriba del footer del dialog), `<ImpactoCampo campo>`, `<BannerPagina>` (ya está en `PageHeader`), los interruptores y `medir(accionId, contexto, fn)` alrededor de cada acción que escribe en el store. Con el modo apagado los componentes devuelven `null` y `medir()` solo ejecuta `fn()`.
+- `medir.ts` es genérico: foto de métricas antes/después (stock por artículo × depósito, costos, cuentas de clientes y proveedores, acopios, KPIs del tablero, documentos y altas) y muestra el aviso "Listo · Esto cambió:" (`AvisoCambios.tsx`). El historial de la sesión (máx. 50, no persistido) se ve en el panel "¿Qué pasó?" (`PanelQuePaso.tsx`).
+- **Para quitar el modo capacitación:** poner default `false` en `CAPACITACION_INICIAL.modo` (`src/capacitacion/slice.ts`) y se oculta todo; o borrar `src/capacitacion/`, los `<Impacto>`/`<ImpactoCampo>`/`<BannerPagina>`/interruptores que quedan vacíos, reemplazar cada `await medir(id, ctx, fn)` por `fn()` y sacar la clave `capacitacion` del store (`src/store/index.ts`, `src/store/types.ts`).

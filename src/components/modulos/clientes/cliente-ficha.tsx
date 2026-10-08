@@ -31,6 +31,7 @@ import { PendientesTabla } from "@/components/modulos/ventas/pendientes-tabla";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { EstadoCuenta } from "@/components/modulos/cuentas/estado-cuenta";
 import { DescargarDesacopio } from "@/components/modulos/acopios/descargar-desacopio";
+import { Impacto, medir } from "@/capacitacion";
 
 export function ClienteFicha({ id }: { id: string }) {
   const db = useDb();
@@ -138,9 +139,10 @@ function ResumenCliente({ id }: { id: string }) {
   const puede = editaCliente || editaVentas;
   const [edit, setEdit] = React.useState<Partial<Obra> & { id?: string } | null>(null);
   const [notas, setNotas] = React.useState(c.notas ?? "");
-  const guardarObra = () => {
+  const guardarObra = async () => {
     if (!edit) return;
-    const r = useStore.getState().guardarObra({ clienteId: id, nombre: edit.nombre ?? "", direccion: edit.direccion, localidad: edit.localidad, activa: edit.activa ?? true }, edit.id);
+    const ejecutar = () => useStore.getState().guardarObra({ clienteId: id, nombre: edit.nombre ?? "", direccion: edit.direccion, localidad: edit.localidad, activa: edit.activa ?? true }, edit.id);
+    const r = await medir(edit.id ? "editarObra" : "crearObra", { clienteId: id }, ejecutar);
     if (!r.ok) return toast.error(r.error);
     toast.success(edit.id ? "Obra actualizada" : "Obra creada");
     setEdit(null);
@@ -225,6 +227,7 @@ function ResumenCliente({ id }: { id: string }) {
               </tbody>
             </table>
           </div>
+          {edit && !edit.id && <div className="border-t border-border p-3"><Impacto accion="crearObra" /></div>}
         </Card>
         <Card>
           <CardHeader><CardTitle>Notas internas</CardTitle></CardHeader>
@@ -235,10 +238,10 @@ function ResumenCliente({ id }: { id: string }) {
                 size="sm"
                 variant="secondary"
                 disabled={notas === (c.notas ?? "")}
-                onClick={() => {
+                onClick={async () => {
                   const { id: _id, creadoEn: _c, actualizadoEn: _a, ...data } = c;
                   void _id; void _c; void _a;
-                  const r = useStore.getState().guardarCliente({ ...data, notas }, c.id);
+                  const r = await medir("editarCliente", { clienteId: c.id }, () => useStore.getState().guardarCliente({ ...data, notas }, c.id));
                   if (r.ok) toast.success("Notas guardadas");
                   else toast.error(r.error);
                 }}

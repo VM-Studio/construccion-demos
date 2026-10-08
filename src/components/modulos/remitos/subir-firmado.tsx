@@ -8,6 +8,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatearTamano } from "@/components/shared/adjuntos-panel";
 import { cn } from "@/lib/utils";
+import { Impacto, medir } from "@/capacitacion";
 
 /**
  * "Subir remito firmado": zona de arrastre o click (foto o PDF), vista previa y guardado en
@@ -47,7 +48,7 @@ export function SubirFirmadoDialog({ remitoId, open, onOpenChange }: { remitoId:
     if (!file) return;
     setGuardando(true);
     const nombre = `Remito firmado ${remito?.numero.replace(/\s+/g, "_") ?? ""}${file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ""}`;
-    const r = await guardarAdjunto(file, { entidadTipo: "REMITO", entidadId: remitoId, categoria: "REMITO_FIRMADO", nombre });
+    const r = await medir("subirRemitoFirmado", { remitoId, clienteId: remito?.clienteId, notaPedidoId: remito?.notaPedidoId }, () => guardarAdjunto(file, { entidadTipo: "REMITO", entidadId: remitoId, categoria: "REMITO_FIRMADO", nombre }));
     setGuardando(false);
     if (!r.ok) return toast.error(r.error);
     toast.success("Remito firmado guardado", { description: "Queda en Adjuntos del remito." });
@@ -93,6 +94,7 @@ export function SubirFirmadoDialog({ remitoId, open, onOpenChange }: { remitoId:
         </button>
         {file && <p className="mt-2 text-[12px] text-muted">{file.name} · {formatearTamano(file.size)}</p>}
         {error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
+        <Impacto accion="subirRemitoFirmado" className="mt-3" />
       </DialogContent>
     </Dialog>
   );

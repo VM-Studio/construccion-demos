@@ -24,6 +24,7 @@ import { LineaChart } from "@/components/charts";
 import { formatDate, formatDateTime, formatMoney, formatPercent, formatQty } from "@/lib/format";
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { cn } from "@/lib/utils";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
 type Form = Omit<Producto, "id" | "creadoEn" | "actualizadoEn">;
 
@@ -101,7 +102,8 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
   }, [producto]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
 
-  const submit = (e: React.FormEvent) => {
+  const accionId = producto ? "editarArticulo" : "crearArticulo";
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err: Record<string, string> = {};
     if (!f.nombre.trim()) err.nombre = "Ingresá el nombre.";
@@ -111,7 +113,7 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
     setErrores(err);
     if (Object.keys(err).length) return;
     const data = { ...f, costoPromedio: producto ? f.costoPromedio : f.costoPromedio || f.costoUltimo, marca: f.marca || undefined, codigoBarras: f.codigoBarras || undefined };
-    const r = guardar(data, producto?.id);
+    const r = await medir(accionId, { productoIds: producto ? [producto.id] : [], proveedorId: f.proveedorHabitualId }, () => guardar(data, producto?.id));
     if (r.ok) {
       toast.success(producto ? "Producto actualizado" : `Producto ${f.codigo} creado`);
       onSaved(r.data);
@@ -173,6 +175,7 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
         {verCostos && (
           <FormField label="Costo último" htmlFor="p-costo" error={errores.costoUltimo} hint={producto ? `Actualizado ${formatDate(producto.fechaUltimoCosto)}` : "Sin IVA"}>
             <NumberInput id="p-costo" disabled={ro} value={f.costoUltimo} min={0} onValueChange={(v) => set("costoUltimo", v)} />
+            <ImpactoCampo campo="producto.costo" />
           </FormField>
         )}
         {verCostos && (
@@ -182,6 +185,7 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
         )}
         <FormField label="Stock mínimo" htmlFor="p-min" hint="Total entre depósitos">
           <NumberInput id="p-min" disabled={ro} value={f.stockMinimo} min={0} onValueChange={(v) => set("stockMinimo", v)} />
+          <ImpactoCampo campo="producto.stockMinimo" />
         </FormField>
         <FormField label="Peso (kg por unidad)" htmlFor="p-peso" hint="Para calcular la carga de los camiones">
           <NumberInput id="p-peso" disabled={ro} value={f.pesoKg ?? 0} min={0} onValueChange={(v) => set("pesoKg", v || undefined)} />
@@ -199,6 +203,7 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
           </Button>
         </div>
       )}
+      {!ro && <Impacto accion={accionId} />}
     </form>
   );
 }
@@ -209,8 +214,8 @@ function TabPrecios({ producto }: { producto: Producto }) {
   const puedeEditar = usePuede("precios.editar");
   const verCostos = usePuede("margenes.ver");
   const [editando, setEditando] = React.useState<Record<string, number>>({});
-  const guardar = (listaId: string, precio: number) => {
-    const r = actualizar(producto.id, listaId, precio);
+  const guardar = async (listaId: string, precio: number) => {
+    const r = await medir("actualizarPrecio", { productoIds: [producto.id] }, () => actualizar(producto.id, listaId, precio));
     if (r.ok) toast.success("Precio actualizado");
     else toast.error(r.error);
   };
@@ -272,8 +277,10 @@ function TabPrecios({ producto }: { producto: Producto }) {
       {puedeEditar && (
         <Button
           variant="secondary"
-          onClick={() => {
-            for (const l of db.listasPrecios) actualizar(producto.id, l.id, calcularPrecioDesdeMarkup(producto.costoPromedio, l.markupPorDefecto));
+          onClick={async () => {
+            await medir("actualizarPreciosMasivo", { productoIds: [producto.id], n: db.listasPrecios.length }, () => {
+              for (const l of db.listasPrecios) actualizar(producto.id, l.id, calcularPrecioDesdeMarkup(producto.costoPromedio, l.markupPorDefecto));
+            });
             toast.success("Precios recalculados desde costo promedio + markup de cada lista");
           }}
         >
@@ -281,6 +288,7 @@ function TabPrecios({ producto }: { producto: Producto }) {
           Recalcular desde markup
         </Button>
       )}
+      {puedeEditar && <Impacto accion="actualizarPrecio" />}
     </div>
   );
 }

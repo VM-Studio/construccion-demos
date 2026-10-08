@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { cn, descargarArchivo } from "@/lib/utils";
 import { useStore } from "@/store";
+import { Impacto, medir } from "@/capacitacion";
 import { useDb } from "@/store/selectors";
 import {
   COLUMNAS,
@@ -54,6 +55,8 @@ function parsearCSV(texto: string, nombre: string): ArchivoCargado {
 }
 
 /** Importación de artículos, clientes o proveedores desde un CSV, con mapeo de columnas y vista previa validada. */
+const ACCION = { articulos: "importarArticulos", clientes: "importarClientes", proveedores: "importarProveedores" } as const;
+
 export function ImportarCsvDialog({
   tipo,
   open,
@@ -135,15 +138,17 @@ export function ImportarCsvDialog({
   const columnasVisibles = columnas.filter((c) => mapeo[c.clave]);
   const erroresOcultos = validadas.slice(FILAS_VISTA_PREVIA).filter((v) => !v.ok);
 
-  const importar = () => {
+  const importar = async () => {
     if (!validas.length) return;
-    // La acción vive en el slice de importación (cableado en src/store/index.ts).
     const acciones = useStore.getState();
     setImportando(true);
-    let r;
-    if (tipo === "articulos") r = acciones.importarArticulos(validas.map((v) => v.datos as DatosImportacion["articulos"]));
-    else if (tipo === "clientes") r = acciones.importarClientes(validas.map((v) => v.datos as DatosImportacion["clientes"]));
-    else r = acciones.importarProveedores(validas.map((v) => v.datos as DatosImportacion["proveedores"]));
+    const r = await medir(ACCION[tipo], { n: validas.length }, () =>
+      tipo === "articulos"
+        ? acciones.importarArticulos(validas.map((v) => v.datos as DatosImportacion["articulos"]))
+        : tipo === "clientes"
+          ? acciones.importarClientes(validas.map((v) => v.datos as DatosImportacion["clientes"]))
+          : acciones.importarProveedores(validas.map((v) => v.datos as DatosImportacion["proveedores"])),
+    );
     setImportando(false);
     if (!r.ok) {
       toast.error(r.error);
@@ -171,12 +176,9 @@ export function ImportarCsvDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <div className="flex flex-col items-end gap-1">
-              <Button onClick={importar} disabled={validas.length === 0} loading={importando}>
-                Importar {validas.length} {validas.length === 1 ? "fila válida" : "filas válidas"}
-              </Button>
-              {/* Lugar para <Impacto accion="importarArticulos" /> */}
-            </div>
+            <Button onClick={importar} disabled={validas.length === 0} loading={importando}>
+              Importar {validas.length} {validas.length === 1 ? "fila válida" : "filas válidas"}
+            </Button>
           </>
         }
       >
@@ -337,6 +339,7 @@ export function ImportarCsvDialog({
               </section>
             </>
           )}
+          <Impacto accion={ACCION[tipo]} n={validas.length} />
         </div>
       </DialogContent>
     </Dialog>

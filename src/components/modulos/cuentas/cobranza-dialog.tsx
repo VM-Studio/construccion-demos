@@ -22,6 +22,7 @@ import { PrintPreview } from "@/components/shared/print-layout";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
+import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { ReciboDocumento } from "./documentos";
 
 type FilaMedio = MedioCobro & { _id: string };
@@ -97,8 +98,8 @@ export function CobranzaDialog({
     setImput(Object.fromEntries(r.imputaciones.map((i) => [i.comprobanteId, i.importe])));
   };
 
-  const confirmar = () => {
-    const r = registrar({
+  const confirmar = async () => {
+    const r = await medir("registrarCobro", { clienteId }, () => registrar({
       clienteId,
       circuito,
       fecha: deInput(fecha),
@@ -108,7 +109,7 @@ export function CobranzaDialog({
       }),
       imputaciones: Object.entries(imput).map(([comprobanteId, importe]) => ({ comprobanteId, importe })),
       observaciones: obs || undefined,
-    });
+    }));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Recibo ${r.data.numero} registrado`, { description: `${formatMoney(total)} de ${cliente?.razonSocial}` });
     onOpenChange(false);
@@ -165,6 +166,7 @@ export function CobranzaDialog({
                   }}
                   options={[1, 2].map((c) => ({ value: String(c), label: CIRCUITO_LABEL[c as Circuito] }))}
                 />
+                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
             </div>
 
@@ -179,7 +181,8 @@ export function CobranzaDialog({
                 {medios.map((m) => {
                   const esCheque = m.medio === "CHEQUE" || m.medio === "ECHEQ";
                   return (
-                    <div key={m._id} className="grid gap-2 rounded-control border border-border p-2 sm:grid-cols-[160px_150px_1fr_auto]">
+                    <div key={m._id}>
+                    <div className="grid gap-2 rounded-control border border-border p-2 sm:grid-cols-[160px_150px_1fr_auto]">
                       <Select size="sm" aria-label="Medio" value={m.medio} onValueChange={(v) => upMedio(m._id, { medio: v as MedioPago })} options={opciones(MEDIO_PAGO_LABEL)} />
                       <NumberInput aria-label="Importe" value={m.importe} min={0} className="h-8" onValueChange={(v) => upMedio(m._id, { importe: v })} />
                       {esCheque ? (
@@ -200,6 +203,8 @@ export function CobranzaDialog({
                       <Button size="icon-sm" variant="ghost" aria-label="Quitar medio" disabled={medios.length === 1} onClick={() => setMedios(medios.filter((x) => x._id !== m._id))}>
                         <Trash2 className="text-muted" />
                       </Button>
+                    </div>
+                    {esCheque && <ImpactoCampo campo="cobro.medio.CHEQUE" />}
                     </div>
                   );
                 })}
@@ -273,6 +278,7 @@ export function CobranzaDialog({
             <FormField label="Observaciones" htmlFor="cob-obs">
               <Input id="cob-obs" value={obs} onChange={(e) => setObs(e.target.value)} />
             </FormField>
+            <Impacto accion="registrarCobro" />
           </div>
         </DialogContent>
       </Dialog>

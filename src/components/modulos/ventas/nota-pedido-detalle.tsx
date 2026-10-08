@@ -16,7 +16,8 @@ import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { AdjuntosPanel, ClipContador, useAdjuntos } from "@/components/shared/adjuntos-panel";
 import { HistorialEntidad } from "@/components/shared/historial-entidad";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
-import { useConfirm } from "@/components/shared/confirm-dialog";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Impacto, medir } from "@/capacitacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +54,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
   const puedeFacturar = usePuede("ventas.facturar");
   const puedeCobrar = usePuede("ctacte.cobrar");
   const puedeAnular = usePuede("ventas.anular");
-  const { confirmar, dialog } = useConfirm();
+  const [anular, setAnular] = React.useState(false);
   const [imprimir, setImprimir] = React.useState(false);
   const [cobrar, setCobrar] = React.useState(false);
   const [devolver, setDevolver] = React.useState(false);
@@ -71,6 +72,9 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
   const filasPend = useFilasPendientes(lineasPend);
   const hayPendienteSinRemito = lineasPend.length > 0;
   const prod = (id: string) => db.productos.find((p) => p.id === id);
+  const ctx = { clienteId: np.clienteId, productoIds: np.items.map((i) => i.productoId), depositoIds: [np.depositoId], acopioId: np.acopioId, notaPedidoId: np.id };
+  const puedeGenerarRemito = abierta && hayPendienteSinRemito && puedeEditar;
+  const puedeFacturarNP = abierta && np.origen !== "ACOPIO" && !factura && puedeFacturar;
 
   const run = (r: { ok: true; data?: unknown } | { ok: false; error: string }, msg: string) => {
     if (!r.ok) {
@@ -81,9 +85,9 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
     return true;
   };
 
-  const generarRemito = () => {
+  const generarRemito = async () => {
     const directo = np.pendienteEntrega && np.modalidadEntrega === "RETIRA";
-    const r = useStore.getState().generarRemito(np.id, { estado: directo ? "HECHO" : "PICKING" });
+    const r = await medir("generarRemito", ctx, () => useStore.getState().generarRemito(np.id, { estado: directo ? "HECHO" : "PICKING" }));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Remito ${r.data.numero} ${directo ? "hecho (cliente retira)" : "en picking"}`, { action: { label: "Ver remito", onClick: () => router.push(`/remitos/${r.data.id}`) } });
   };
@@ -125,7 +129,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                 </Tooltip>
               ) : (
                 !factura && puedeFacturar && (
-                  <Button variant="secondary" onClick={() => { const r = useStore.getState().facturarNotaPedido(np.id); if (r.ok) { toast.success(`Factura ${r.data.numero} emitida`); if (np.formaPago === "CONTADO") setCobrar(true); } else toast.error(r.error); }}>
+                  <Button variant="secondary" onClick={async () => { const r = await medir("facturarNotaPedido", ctx, () => useStore.getState().facturarNotaPedido(np.id)); if (r.ok) { toast.success(`Factura ${r.data.numero} emitida`); if (np.formaPago === "CONTADO") setCobrar(true); } else toast.error(r.error); }}>
                     <Receipt /> Facturar {np.circuito === 1 ? "F1" : "F2"}
                   </Button>
                 )
@@ -138,18 +142,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
               )}
               <Button variant="ghost" onClick={() => setImprimir(true)}><Printer /> Imprimir</Button>
               {puedeAnular && !np.items.some((i) => i.entregados > 0) && (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    confirmar({
-                      titulo: `Anular ${np.numero}`,
-                      descripcion: np.acopioId ? "El monto vuelve al saldo del acopio y se anulan los remitos y despachos pendientes." : "Se anulan los remitos y despachos pendientes.",
-                      confirmLabel: "Anular",
-                      variant: "danger",
-                      onConfirm: () => run(useStore.getState().anularNotaPedido(np.id, "Anulada por el usuario"), "Nota de pedido anulada"),
-                    })
-                  }
-                >
+                <Button variant="ghost" onClick={() => setAnular(true)}>
                   <Ban /> Anular
                 </Button>
               )}
@@ -157,6 +150,12 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
           )
         }
       />
+      {(puedeGenerarRemito || puedeFacturarNP) && (
+        <div className="mb-4 space-y-2">
+          {puedeGenerarRemito && <Impacto accion="generarRemito" />}
+          {puedeFacturarNP && <Impacto accion="facturarNotaPedido" />}
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <Tabs value={tab} onValueChange={setTab} className="min-w-0">
           <TabsList className="mb-3">
@@ -315,7 +314,20 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
       <CobranzaDialog open={cobrar} onOpenChange={setCobrar} clienteId={np.clienteId} comprobanteId={factura?.id} />
       <DevolucionDialog np={np} open={devolver} onOpenChange={setDevolver} />
       <ProgramarEntregaDialog filas={filasPend} open={programar} onOpenChange={setProgramar} />
-      {dialog}
+      <ConfirmDialog
+        open={anular}
+        onOpenChange={setAnular}
+        titulo={`Anular ${np.numero}`}
+        descripcion={np.acopioId ? "El monto vuelve al saldo del acopio y se anulan los remitos y despachos pendientes." : "Se anulan los remitos y despachos pendientes."}
+        confirmLabel="Anular"
+        variant="danger"
+        onConfirm={async () => run(await medir("anularNotaPedido", ctx, () => useStore.getState().anularNotaPedido(np.id, "Anulada por el usuario")), "Nota de pedido anulada")}
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-muted">Esta acción queda registrada en la auditoría.</p>
+          <Impacto accion="anularNotaPedido" />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }
@@ -332,8 +344,8 @@ export function DevolucionDialog({ np, open, onOpenChange }: { np: NotaPedido; o
     }
   }, [open]);
   const total = np.items.reduce((a, i) => a + (cant[i.id] ?? 0) * i.precioUnitario * (1 - (i.descuentoPct ?? 0) / 100), 0);
-  const registrar = () => {
-    const r = useStore.getState().registrarDevolucion({ notaPedidoId: np.id, items: Object.entries(cant).map(([itemId, cantidad]) => ({ itemId, cantidad })), motivo });
+  const registrar = async () => {
+    const r = await medir("crearDevolucion", { clienteId: np.clienteId, productoIds: np.items.filter((i) => (cant[i.id] ?? 0) > 0).map((i) => i.productoId), depositoIds: [np.depositoId], acopioId: np.acopioId, notaPedidoId: np.id }, () => useStore.getState().registrarDevolucion({ notaPedidoId: np.id, items: Object.entries(cant).map(([itemId, cantidad]) => ({ itemId, cantidad })), motivo }));
     if (!r.ok) return toast.error(r.error);
     toast.success(`Devolución ${r.data.numero} registrada`, { description: np.acopioId ? "El saldo del acopio volvió a subir." : r.data.remitoId ? "Se generó el remito de devolución y reingresó el stock." : undefined });
     onOpenChange(false);
@@ -372,6 +384,7 @@ export function DevolucionDialog({ np, open, onOpenChange }: { np: NotaPedido; o
             </tbody>
           </table>
           <FormField label="Motivo" required htmlFor="dev-m"><Input id="dev-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. sobrante de obra, material fallado…" /></FormField>
+          <Impacto accion="crearDevolucion" />
         </div>
       </DialogContent>
     </Dialog>

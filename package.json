@@ -16,7 +16,8 @@
     "db:seed:ejemplo": "tsx --env-file-if-exists=.env.local prisma/seed-ejemplo.ts",
     "db:check": "tsx --env-file-if-exists=.env.local scripts/db-check.ts",
     "db:studio": "bash -c 'set -a && . ./.env.local && prisma studio'",
-    "db:test:mapeo": "tsx --env-file-if-exists=.env.local scripts/db-mapeo-check.ts"
+    "db:test:mapeo": "tsx --env-file-if-exists=.env.local scripts/db-mapeo-check.ts",
+    "db:test:concurrencia": "tsx --env-file-if-exists=.env.local scripts/concurrencia-check.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -37,7 +38,6 @@
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
-    "idb-keyval": "^6.3.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.2",

@@ -10,7 +10,7 @@ import { COLECCIONES, leerEstado } from "../src/server/datos/mapeo";
 const esFecha = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v);
 function normal(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(normal);
-  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined && x !== null).map(([k, x]) => [k, normal(x)]).sort(([a], [b]) => a.localeCompare(b)));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined && x !== null).map(([k, x]) => [k, normal(x)]).sort(([a], [b]) => String(a).localeCompare(String(b))));
   if (esFecha(v)) return new Date(v as string).toISOString();
   if (typeof v === "number") return Math.round(v * 10000) / 10000;
   return v;

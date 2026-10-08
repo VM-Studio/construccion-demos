@@ -39,6 +39,7 @@ import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { OCDocumento } from "./oc-documento";
 import { RecepcionDialog } from "./recepcion-dialog";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 type Linea = LineaBase & { cantidadRecibida: number };
 
@@ -125,7 +126,7 @@ export function OCEditor({ id }: { id: string }) {
     setProveedorId(v);
     setAcpId("");
     // Del store y no del render: si el proveedor se acaba de crear con el alta rápida todavía no está en `db`.
-    const p = useStore.getState().db.proveedores.find((x) => x.id === v);
+    const p = obtenerDb().proveedores.find((x) => x.id === v);
     if (p) {
       setEntrega(aInput(addDays(new Date(deInput(fecha)), p.plazoEntregaDias).toISOString()));
       setCircuito(p.circuitoHabitual);

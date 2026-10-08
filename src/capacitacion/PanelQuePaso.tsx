@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Trash2 } from "lucide-react";
 import { useStore } from "@/store";
+import { useAuditoria } from "@/lib/datos/hooks";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
@@ -10,6 +11,7 @@ import { useModoCapacitacion } from "./flag";
 import { IMPACTOS, NOMBRES_CREADOS, TEXTOS } from "./impactos";
 import { FilaDiferencia } from "./AvisoCambios";
 import type { Medicion } from "./slice";
+import { useDb } from "@/lib/datos/almacen";
 
 /** "12 artículos, 3 clientes, 1 proveedor, 1 OC, 1 ingreso…" a partir de lo medido en la sesión. */
 export function resumenSesion(historial: Medicion[]): string {
@@ -33,9 +35,20 @@ export function PanelQuePaso() {
   const activo = useModoCapacitacion();
   const abierto = useStore((s) => s.capacitacion.panelAbierto);
   const abrir = useStore((s) => s.abrirPanelQuePaso);
-  const historial = useStore((s) => s.capacitacion.historial);
-  const limpiar = useStore((s) => s.limpiarHistorial);
-  const usuarios = useStore((s) => s.db.usuarios);
+  const usuarios = useDb().usuarios;
+  // "La sesión" es el día de hoy (o desde que se limpió el panel): lo que hicieron TODOS los
+  // usuarios, leído de la auditoría del servidor con los efectos medidos en cada transacción.
+  const [desde, setDesde] = React.useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  });
+  const { auditoria } = useAuditoria({ conEfectos: true, desde, tamano: 200 }, activo && abierto);
+  const historial: Medicion[] = React.useMemo(
+    () => auditoria.map((a) => ({ id: a.id, fecha: a.fecha, usuarioId: a.usuarioId, accionId: a.accionId ?? a.accion, diferencias: (a.efectos as Medicion["diferencias"]) ?? [] })),
+    [auditoria],
+  );
+  const limpiar = () => setDesde(new Date().toISOString());
   if (!activo) return null;
   const cronologico = [...historial].reverse();
   const resumen = resumenSesion(historial);
@@ -61,7 +74,7 @@ export function PanelQuePaso() {
                   <span className="absolute -left-[5px] top-1.5 size-2.5 rounded-full border-2 border-surface bg-accent" />
                   <div className="flex flex-wrap items-baseline gap-x-2">
                     <span className="text-[12px] text-muted tnum">{i + 1} · {formatDate(m.fecha, "HH:mm")}</span>
-                    <span className="text-[13px] font-semibold text-ink">{IMPACTOS[m.accionId]?.titulo ?? m.accionId}</span>
+                    <span className="text-[13px] font-semibold text-ink">{IMPACTOS[m.accionId]?.titulo ?? auditoria.find((a) => a.id === m.id)?.accion ?? m.accionId}</span>
                     <span className="text-[12px] text-muted">{usuarios.find((u) => u.id === m.usuarioId)?.nombre}</span>
                   </div>
                   {m.diferencias.length ? (

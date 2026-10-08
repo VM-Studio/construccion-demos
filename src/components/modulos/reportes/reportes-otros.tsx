@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos, useAuditoria } from "@/lib/datos/hooks";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -23,7 +24,9 @@ import { pesoDespacho } from "@/components/modulos/despachos/documentos";
 // ───────────────────────── 7. Compras ─────────────────────────
 
 export function ReporteCompras() {
-  const db = useDb();
+  const dbBase = useDb();
+  const { movimientos } = useMovimientos(); // kardex leído del servidor
+  const db = React.useMemo(() => ({ ...dbBase, movimientos }), [dbBase, movimientos]);
   const router = useRouter();
   const suc = useSucursalActiva();
   const [periodo, setPeriodo] = usePeriodoReporte();
@@ -217,7 +220,9 @@ export function ReporteDespachos() {
 // ───────────────────────── 12. Auditoría ─────────────────────────
 
 export function ReporteAuditoria() {
-  const db = useDb();
+  const dbBase = useDb();
+  const { auditoria } = useAuditoria({ tamano: 2000 }); // auditoría leída del servidor
+  const db = React.useMemo(() => ({ ...dbBase, auditoria }), [dbBase, auditoria]);
   const [periodo, setPeriodo] = usePeriodoReporte("90D");
   const [usuario, setUsuario] = React.useState("");
   const [entidad, setEntidad] = React.useState("");

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -98,7 +99,8 @@ function EnTransitoSheet({ productoId, depositoId, onClose }: { productoId: stri
 }
 
 export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }) {
-  const db = useDb();
+  const dbBase = useDb();
+  const db = React.useMemo(() => ({ ...dbBase,  }), [dbBase, ]);
   const router = useRouter();
   const posiciones = usePosiciones();
   const depActivo = useDepositoActivo();

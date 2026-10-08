@@ -12,7 +12,7 @@ neonConfig.webSocketConstructor = ws;
 function crearCliente() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("Falta DATABASE_URL");
-  return new PrismaClient({ adapter: new PrismaNeon({ connectionString }), log: process.env.PRISMA_LOG ? ["query", "warn", "error"] : ["warn", "error"] });
+  return new PrismaClient({ adapter: new PrismaNeon({ connectionString }), log: process.env.PRISMA_LOG ? ["query", "warn", "error"] : ["warn"] });
 }
 
 const global_ = globalThis as unknown as { __prisma?: PrismaClient };

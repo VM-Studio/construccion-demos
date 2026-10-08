@@ -222,13 +222,22 @@ export async function leerNumeradores(db: Cliente): Promise<Numeradores> {
   return Object.fromEntries(filas.map((f) => [f.tipo, f.ultimo]));
 }
 
-/** Estado completo (o sin las colecciones excluidas, que quedan vacías). */
-export async function leerEstado(db: Cliente, opts: { excluir?: Coleccion[] } = {}): Promise<EstadoInicial> {
+/**
+ * Estado completo (o sin las colecciones excluidas, que quedan vacías).
+ * `paralelo`: consultas en paralelo (fuera de una transacción interactiva).
+ */
+export async function leerEstado(db: Cliente, opts: { excluir?: Coleccion[]; paralelo?: boolean } = {}): Promise<EstadoInicial> {
   const excluir = new Set(opts.excluir ?? []);
   const out: Record<string, unknown> = {};
-  for (const k of COLECCIONES) out[k] = excluir.has(k) ? [] : await leerColeccion(db, k);
-  out.config = await leerConfig(db);
-  out.numeradores = await leerNumeradores(db);
+  const tareas: [string, () => Promise<unknown>][] = [
+    ...COLECCIONES.map((k): [string, () => Promise<unknown>] => [k, () => (excluir.has(k) ? Promise.resolve([]) : leerColeccion(db, k))]),
+    ["config", () => leerConfig(db)],
+    ["numeradores", () => leerNumeradores(db)],
+  ];
+  if (opts.paralelo) {
+    const valores = await Promise.all(tareas.map(([, f]) => f()));
+    tareas.forEach(([k], i) => (out[k] = valores[i]));
+  } else for (const [k, f] of tareas) out[k] = await f();
   return out as unknown as EstadoInicial;
 }
 

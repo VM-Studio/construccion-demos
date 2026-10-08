@@ -1,4 +1,5 @@
 "use client";
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -258,7 +259,9 @@ export function ProveedorFicha({ id }: { id: string }) {
 }
 
 function ResumenProveedorTab({ p }: { p: Proveedor }) {
-  const db = useDb();
+  const dbBase = useDb();
+  const { movimientos } = useMovimientos(); // kardex leído del servidor
+  const db = React.useMemo(() => ({ ...dbBase, movimientos }), [dbBase, movimientos]);
   const verCostos = usePuede("margenes.ver");
   const prods = db.productos.filter((x) => x.proveedorHabitualId === p.id);
   const variacion = (pid: string) => {

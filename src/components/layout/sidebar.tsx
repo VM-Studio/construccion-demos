@@ -2,16 +2,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle } from "lucide-react";
 import { useStore } from "@/store";
 import { useEmpresa, useUsuario } from "@/store/selectors";
 import { coincidencia } from "@/config/modulos";
 import { ROL_LABEL } from "@/domain/permisos";
 import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useConfirm } from "@/components/shared/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { useModuloActual, useModulosVisibles } from "./use-modulo";
+import { useDb } from "@/lib/datos/almacen";
 
 function iniciales(nombre: string) {
   return nombre
@@ -40,12 +40,10 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
   const empresa = useEmpresa();
   const logout = useStore((s) => s.logout);
   const abrirTour = useStore((s) => s.abrirTour);
-  const resetear = useStore((s) => s.resetearDemo);
   const setModulo = useStore((s) => s.setModuloActivo);
-  const sucursales = useStore((s) => s.db.sucursales);
+  const sucursales = useDb().sucursales;
   const visibles = useModulosVisibles();
   const { modulo, pagina, pathname, search } = useModuloActual();
-  const { confirmar, dialog } = useConfirm();
   const enInicio = pathname === "/inicio";
 
   const irModulo = (id: string) => {
@@ -156,30 +154,10 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
                 <PlayCircle />
                 Ver recorrido
               </DropdownMenuItem>
-              {usuario.rol === "DUENO" && (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    confirmar({
-                      titulo: "Vaciar datos del demo",
-                      descripcion: "Se borran todos los datos cargados y queda solo la estructura de la empresa, lista para cargar de cero.",
-                      confirmLabel: "Vaciar datos",
-                      variant: "danger",
-                      onConfirm: () => {
-                        resetear();
-                        router.push("/inicio");
-                      },
-                    })
-                  }
-                >
-                  <RotateCcw />
-                  Vaciar datos del demo
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
-                  logout();
-                  router.replace("/login");
+                  void logout().then(() => router.replace("/login"));
                 }}
               >
                 <LogOut />
@@ -189,7 +167,6 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
           </DropdownMenu>
         </div>
       )}
-      {dialog}
     </div>
   );
 }

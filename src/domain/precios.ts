@@ -31,7 +31,24 @@ export interface FiltroActualizacion {
 export type ModoActualizacion =
   | { tipo: "AUMENTAR"; pct: number }
   | { tipo: "DISMINUIR"; pct: number }
-  | { tipo: "MARKUP"; markups: Record<string, number> };
+  | { tipo: "MARKUP"; markups: Record<string, number> }
+  /** Solo artículos con costo en USD: costo USD × tipo de cambio × (1 + markup de la lista). */
+  | { tipo: "DESDE_USD"; markups: Record<string, number>; tipoCambio: number };
+
+/** Costo en pesos de un costo en dólares (redondeado a centavos). */
+export function costoEnPesos(costoUSD: number, tipoCambio: number): number {
+  return Math.round(costoUSD * tipoCambio * 100) / 100;
+}
+
+/** El artículo tiene su costo de referencia en dólares. */
+export function costoEnDolares(p: Pick<Producto, "monedaCosto" | "costoUSD">): boolean {
+  return p.monedaCosto === "USD" && (p.costoUSD ?? 0) > 0;
+}
+
+/** Precio de venta desde el costo en USD: costo USD × tipo de cambio × (1 + markup). */
+export function calcularPrecioDesdeUSD(costoUSD: number, tipoCambio: number, markupPct: number, redondeo: Redondeo = 10): number {
+  return calcularPrecioDesdeMarkup(costoUSD * tipoCambio, markupPct, redondeo);
+}
 
 export interface CambioPrecio {
   productoId: string;
@@ -44,6 +61,8 @@ export interface CambioPrecio {
  * Calcula los cambios de una actualización masiva de precios.
  * - AUMENTAR / DISMINUIR aplican el % sobre el precio actual.
  * - MARKUP recalcula desde el costo promedio + markup por lista.
+ * - DESDE_USD recalcula desde el costo en dólares × tipo de cambio + markup por lista; los
+ *   artículos con costo en pesos se saltean.
  * Devuelve sólo los cambios (no muta).
  */
 export function calcularActualizacionMasiva(
@@ -59,11 +78,13 @@ export function calcularActualizacionMasiva(
   for (const productoId of filtro.productoIds) {
     const p = prods.get(productoId);
     if (!p) continue;
+    if (modo.tipo === "DESDE_USD" && !costoEnDolares(p)) continue;
     for (const listaId of listas) {
       const anterior = obtenerPrecio(productoId, listaId, precios);
       let nuevo = anterior;
       if (modo.tipo === "AUMENTAR") nuevo = redondearPrecio(anterior * (1 + modo.pct / 100), redondeo);
       else if (modo.tipo === "DISMINUIR") nuevo = redondearPrecio(anterior * (1 - modo.pct / 100), redondeo);
+      else if (modo.tipo === "DESDE_USD") nuevo = calcularPrecioDesdeUSD(p.costoUSD ?? 0, modo.tipoCambio, modo.markups[listaId] ?? 0, redondeo);
       else nuevo = calcularPrecioDesdeMarkup(p.costoPromedio, modo.markups[listaId] ?? 0, redondeo);
       cambios.push({ productoId, listaPreciosId: listaId, anterior, nuevo });
     }

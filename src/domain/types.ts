@@ -572,7 +572,10 @@ export interface ItemOC {
   productoId: string;
   cantidadPedida: number;
   cantidadRecibida: number;
+  /** Pesos (OC en USD: costoUSD × tipo de cambio de la OC). */
   costoUnitario: number;
+  /** OC en USD: costo cargado en dólares. */
+  costoUSD?: number;
   descuentoPct: number;
 }
 
@@ -600,7 +603,10 @@ export interface ItemRecepcion {
   itemOCId: string;
   productoId: string;
   cantidadRecibida: number;
+  /** Pesos: el costo que entra al stock. */
   costoUnitario: number;
+  /** OC en USD: costo en dólares de la recepción. */
+  costoUSD?: number;
   diferencia?: DiferenciaRecepcion;
   observacion?: string;
 }
@@ -615,6 +621,9 @@ export interface RecepcionMercaderia extends Entidad {
   usuarioId: string;
   observaciones?: string;
   comprobanteId?: string;
+  /** OC en USD: tipo de cambio del día de la recepción. */
+  tipoCambioAplicado?: number;
+  tipoCambioFecha?: string;
 }
 
 export interface CostoCongelado {
@@ -764,10 +773,23 @@ export interface Configuracion {
   tipoCambioUSD?: number;
   tipoCambioModo?: "AUTO" | "MANUAL";
   tipoCambioManual?: number;
+  /**
+   * Tipo de cambio vigente (obtenerVigente() del servidor). NO se guarda en la base: el motor lo
+   * inyecta antes de correr cada acción para que las reglas del dominio lo lean de `tx.config`.
+   */
+  tipoCambioVigente?: TipoCambioVigente;
   tamanoMaxAdjuntoMB: number;
   categoriasAdjunto: { codigo: CategoriaAdjunto; nombre: string }[];
   empresa: DatosEmpresa;
   motivosAjuste: { codigo: string; nombre: string; activo: boolean }[];
+}
+
+export interface TipoCambioVigente {
+  /** Dólar divisa vendedor (o el valor manual). */
+  valor: number;
+  /** Fecha de la cotización (ISO). */
+  fecha: string;
+  fuente: string;
 }
 
 /** Último número usado por clave `${codigo}|${circuito}|${puntoVenta}`. */

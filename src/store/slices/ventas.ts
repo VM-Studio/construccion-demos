@@ -1,4 +1,4 @@
-import type { Circuito, Comprobante, Cotizacion, DevolucionNP, FormaPagoVenta, ItemNP, ItemVenta, ModalidadEntrega, NotaPedido, OrigenVenta, Remito } from "@/domain/types";
+import type { Circuito, Cliente, Comprobante, Cotizacion, DevolucionNP, FormaPagoVenta, ItemNP, ItemVenta, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Remito } from "@/domain/types";
 import { pendienteLinea, precioCongelado, validarRetiro, retiradoAcopio, pagadoAcopio } from "@/domain/acopios";
 import { calcularTotales } from "@/domain/ventas";
 import { saldoCliente } from "@/domain/cuentasCorrientes";
@@ -20,6 +20,19 @@ import {
 } from "../ops";
 import type { Tx } from "../tx";
 import type { GetFn, SetFn } from "../types";
+import { tipoCambioVigente } from "./catalogo";
+
+/**
+ * Precios en USD (clientes con `facturaEnUSD`). Regla: los importes del documento se guardan
+ * SIEMPRE en pesos (listas de precios, cuentas corrientes, acopios y reportes siguen igual);
+ * `moneda: "USD"` indica que el documento se presenta en dólares dividiendo por el
+ * `tipoCambioAplicado`, que se congela al confirmar la NP o al guardar la cotización.
+ */
+function monedaDocumento(c: Cliente, pedida: Moneda | undefined, esAcopio = false): Moneda {
+  if (pedida !== "USD" || esAcopio) return "ARS";
+  if (!c.facturaEnUSD) throw new ErrorNegocio(`${c.razonSocial} no tiene habilitados los precios en USD (ficha del cliente).`);
+  return "USD";
+}
 
 export interface ItemNPInput {
   id?: string;
@@ -48,6 +61,8 @@ export interface NotaPedidoInput {
   direccionEntrega?: string;
   observaciones?: string;
   cotizacionId?: string;
+  /** USD: la NP se presenta en dólares (importes en pesos; ver `monedaDocumento`). */
+  moneda?: Moneda;
 }
 
 export interface OpcionesConfirmacion {
@@ -69,6 +84,8 @@ export interface CotizacionInput {
   items: ItemVenta[];
   descuentoPct: number;
   observaciones?: string;
+  /** USD: la cotización se presenta en dólares (importes en pesos; ver `monedaDocumento`). */
+  moneda?: Moneda;
 }
 
 /** Arma los ítems y totales de una NP a partir del input (precios congelados si es de acopio). */
@@ -139,6 +156,9 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
       fechaEntregaProgramada: data.fechaEntregaProgramada,
       direccionEntrega: data.direccionEntrega,
       observaciones: data.observaciones,
+      moneda: monedaDocumento(c, data.moneda, data.origen === "ACOPIO"),
+      tipoCambioAplicado: undefined,
+      tipoCambioFecha: undefined,
     };
     if (id) {
       const np = tx.must("notasPedido", id);
@@ -198,9 +218,11 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
         }
       }
     }
+    const tc = np.moneda === "USD" ? tipoCambioVigente(tx) : undefined;
     const numero = tx.numero("NP", np.circuito, puntoVentaDe(tx, np.sucursalId));
     tx.patch("notasPedido", np.id, {
       numero,
+      ...(tc ? { tipoCambioAplicado: tc.valor, tipoCambioFecha: tc.fecha } : {}),
       estado: "PENDIENTE",
       fechaConfirmacion: tx.ahora,
       forzadoSinDisponible: faltantes.length > 0 || undefined,
@@ -421,7 +443,9 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
         const items = data.items.filter((i) => i.productoId && i.cantidad > 0).map((i) => ({ ...i, id: i.id || newId("icot"), costoUnitarioSnapshot: tx.find("productos", i.productoId)?.costoPromedio ?? 0 }));
         if (!items.length) throw new ErrorNegocio("Agregá al menos un producto con cantidad.");
         const t = calcularTotales(items, data.descuentoPct, data.circuito === 1 ? tx.config.ivaPct : 0);
-        const base = { ...data, items, subtotal: t.subtotal, iva: t.iva, total: t.total };
+        const moneda = monedaDocumento(tx.must("clientes", data.clienteId), data.moneda);
+        const tc = moneda === "USD" ? tipoCambioVigente(tx) : undefined;
+        const base = { ...data, items, subtotal: t.subtotal, iva: t.iva, total: t.total, moneda, tipoCambioAplicado: tc?.valor, tipoCambioFecha: tc?.fecha };
         if (id) {
           const c = tx.must("cotizaciones", id);
           if (c.estado !== "BORRADOR" && c.estado !== "ENVIADA") throw new ErrorNegocio("La cotización ya no se puede editar.");

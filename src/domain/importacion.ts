@@ -212,6 +212,8 @@ export const COLUMNAS: Record<TipoImportacion, ColumnaPlantilla[]> = {
     col("rubro", "Rubro", ["categoria", "familia", "rubro_nombre"], true),
     col("unidad", "Unidad", ["unidad_medida", "unidad_de_medida", "um", "u_m", "medida"], true),
     col("costo", "Costo", ["precio_costo", "costo_unitario", "costo_sin_iva", "precio_de_costo", "costo_ultimo", "costo_reposicion"]),
+    col("moneda_costo", "Moneda del costo", ["moneda", "moneda_de_costo", "divisa"]),
+    col("costo_usd", "Costo USD", ["costo_dolares", "costo_en_dolares", "costo_u_s_d", "usd", "costo_dolar"]),
     col("stock_minimo", "Stock mínimo", ["minimo", "stock_min", "punto_de_pedido", "punto_pedido"]),
     col("unidades_por_pallet", "Unidades por pallet", ["por_pallet", "x_pallet", "un_pallet", "unidades_pallet", "pallet"]),
     col("codigo_barras", "Código de barras", ["ean", "ean13", "codigo_de_barras", "cod_barras", "barras"]),
@@ -376,6 +378,17 @@ export function validarFilaArticulo(f: FilaSistema, db: DbImportacion, ctx: Cont
   }
 
   const costo = numero(f, "costo", "Costo", errores, { min: 0 }) ?? 0;
+  // Moneda del costo: ARS (por defecto) o USD. Con USD, el costo en pesos lo calcula el servidor
+  // con el tipo de cambio vigente al importar.
+  const costoUSD = numero(f, "costo_usd", "Costo USD", errores, { min: 0 });
+  let monedaCosto: "ARS" | "USD" = costoUSD ? "USD" : "ARS";
+  if (f.moneda_costo?.trim()) {
+    const m = normalizarClave(f.moneda_costo);
+    if (["usd", "u_s_d", "us", "dolar", "dolares", "u_s"].includes(m)) monedaCosto = "USD";
+    else if (["ars", "pesos", "peso", "arg", "$"].includes(m) || !m) monedaCosto = "ARS";
+    else errores.push(`Moneda del costo desconocida: "${f.moneda_costo}" (usá ARS o USD).`);
+  }
+  if (monedaCosto === "USD" && !costoUSD) errores.push("Falta el costo en USD (columna costo_usd).");
   const stockMinimo = numero(f, "stock_minimo", "Stock mínimo", errores, { min: 0 }) ?? 0;
   const porPallet = numero(f, "unidades_por_pallet", "Unidades por pallet", errores, { min: 0, entero: true });
 
@@ -417,6 +430,10 @@ export function validarFilaArticulo(f: FilaSistema, db: DbImportacion, ctx: Cont
     stockMinimo,
     activo: true,
   };
+  if (monedaCosto === "USD" && costoUSD) {
+    datos.monedaCosto = "USD";
+    datos.costoUSD = costoUSD;
+  }
   if (f.marca) datos.marca = f.marca.trim();
   if (porPallet) datos.unidadesPorPallet = porPallet;
   if (codigoBarras) datos.codigoBarras = codigoBarras;

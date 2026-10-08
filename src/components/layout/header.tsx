@@ -170,8 +170,7 @@ function Avatar() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {
-            logout();
-            router.replace("/login");
+            void logout().then(() => router.replace("/login"));
           }}
         >
           <LogOut /> Cerrar sesión
@@ -187,8 +186,8 @@ export function Header() {
   const [buscarAbierto, setBuscarAbierto] = React.useState(false);
   const usuario = useUsuario();
   const empresa = useEmpresa();
-  const sucursales = useStore((s) => s.db.sucursales);
-  const unidades = useStore((s) => s.db.unidadesNegocio);
+  const sucursales = useDb().sucursales;
+  const unidades = useDb().unidadesNegocio;
   const sucursalActiva = useStore((s) => s.ui.sucursalActivaId);
   const unActiva = useStore((s) => s.ui.unidadNegocioId);
   const setSucursal = useStore((s) => s.setSucursalActiva);

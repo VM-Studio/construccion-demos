@@ -37,6 +37,7 @@ import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento, ReciboDocumento } from "@/components/modulos/cuentas/documentos";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { DevolucionDialog } from "./nota-pedido-detalle";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 const useCliente = () => {
   const db = useDb();
@@ -104,23 +105,20 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
   const [imprimir, setImprimir] = React.useState(false);
   const editable = !cot || cot.estado === "BORRADOR" || cot.estado === "ENVIADA";
   const lista = cliente?.listaPreciosId ?? "lst_gen";
-  const guardar = (): string | null => {
+  const guardar = async () => {
     const its: ItemVenta[] = items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId ?? (obraId || undefined), cantidad: i.cantidad, precioUnitario: i.precio ?? 0, costoUnitarioSnapshot: 0, descuentoPct: i.descuentoPct ?? 0 }));
-    const r = useStore.getState().guardarCotizacion({ clienteId, obraId: obraId || undefined, sucursalId: cliente?.sucursalPreferidaId ?? "suc_central", circuito, fecha: cot?.fecha ?? new Date().toISOString(), validezDias: validez, items: its, descuentoPct: descuento }, cot?.id);
-    if (!r.ok) {
-      toast.error(r.error);
-      return null;
-    }
-    return r.data;
+    const r = await useStore.getState().guardarCotizacion({ clienteId, obraId: obraId || undefined, sucursalId: cliente?.sucursalPreferidaId ?? "suc_central", circuito, fecha: cot?.fecha ?? new Date().toISOString(), validezDias: validez, items: its, descuentoPct: descuento }, cot?.id);
+    if (!r.ok) toast.error(r.error);
+    return r;
   };
   /** Guarda midiendo el impacto (modo capacitación); devuelve el id o null. */
   const guardarMedido = async (accion: "crearCotizacion" | "convertirCotizacion", despues?: (id: string) => void): Promise<string | null> => {
-    const r = await medir(accion, { clienteId, productoIds: items.map((i) => i.productoId) }, () => {
-      const id = guardar();
-      if (id) despues?.(id);
-      return id ? ({ ok: true, id } as const) : ({ ok: false, error: "" } as const);
+    const r = await medir(accion, { clienteId, productoIds: items.map((i) => i.productoId) }, async () => {
+      const x = await guardar();
+      if (x.ok) despues?.(x.data);
+      return x;
     });
-    return r.ok ? r.id : null;
+    return r.ok ? r.data : null;
   };
   const estado = async (id: string, e: Cotizacion["estado"], msg: string) => {
     const r = await medir(e === "RECHAZADA" ? "rechazarCotizacion" : "crearCotizacion", {}, () => useStore.getState().cambiarEstadoCotizacion(id, e));
@@ -132,12 +130,12 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
   const elegirCliente = (v: string) => {
     setClienteId(v);
     // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
-    const c = useStore.getState().db.clientes.find((x) => x.id === v);
+    const c = obtenerDb().clientes.find((x) => x.id === v);
     setCircuito(c?.circuitoHabitual ?? 1);
     setObraId("");
     // Los precios cargados eran de la lista del cliente anterior.
     const listaNueva = c?.listaPreciosId ?? "lst_gen";
-    setItems((its) => its.map((i) => ({ ...i, precio: obtenerPrecio(i.productoId, listaNueva, useStore.getState().db.precios) })));
+    setItems((its) => its.map((i) => ({ ...i, precio: obtenerPrecio(i.productoId, listaNueva, obtenerDb().precios) })));
   };
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>

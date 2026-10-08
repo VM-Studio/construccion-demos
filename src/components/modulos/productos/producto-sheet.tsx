@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -366,11 +367,12 @@ function TabMovimientos({ producto }: { producto: Producto }) {
   const db = useDb();
   const [dep, setDep] = React.useState("");
   const verCostos = usePuede("margenes.ver");
+  const { movimientos } = useMovimientos({ productoId: producto.id, depositoId: dep || null });
   const movs = React.useMemo(() => {
-    const lista = db.movimientos.filter((m) => m.productoId === producto.id && (!dep || m.depositoId === dep)).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const lista = [...movimientos].sort((a, b) => a.fecha.localeCompare(b.fecha));
     let saldo = 0;
     return lista.map((m) => ({ m, saldo: (saldo += m.signo * m.cantidad) })).reverse();
-  }, [db.movimientos, producto.id, dep]);
+  }, [movimientos]);
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -419,13 +421,14 @@ function TabMovimientos({ producto }: { producto: Producto }) {
 
 function TabCostos({ producto }: { producto: Producto }) {
   const db = useDb();
+  const { movimientos } = useMovimientos({ productoId: producto.id, tipo: "INGRESO_COMPRA,AJUSTE_POSITIVO" });
   const serie = React.useMemo(
     () =>
-      db.movimientos
-        .filter((m) => m.productoId === producto.id && (m.tipo === "INGRESO_COMPRA" || (m.tipo === "AJUSTE_POSITIVO" && m.referenciaId.startsWith("aju_apertura"))))
+      movimientos
+        .filter((m) => m.tipo === "INGRESO_COMPRA" || (m.tipo === "AJUSTE_POSITIVO" && (m.observacion === "INVENTARIO_INICIAL" || m.referenciaId.startsWith("aju_apertura"))))
         .sort((a, b) => a.fecha.localeCompare(b.fecha))
         .map((m) => ({ clave: m.fecha, valor: m.costoUnitario, ref: referenciaMovimiento(db, m).label })),
-    [db, producto.id],
+    [db, movimientos],
   );
   const primero = serie[0]?.valor ?? producto.costoUltimo;
   const variacion = primero ? (producto.costoUltimo - primero) / primero : 0;

@@ -1,13 +1,15 @@
 import { addDays, parseISO } from "date-fns";
-import type { AcopioProveedor, Circuito, Comprobante, DiferenciaRecepcion, EstadoOC, FormaPagoAcopio, ItemOC, OrdenCompra, OrigenVenta, RecepcionMercaderia } from "@/domain/types";
+import type { AcopioProveedor, Circuito, Comprobante, DiferenciaRecepcion, EstadoOC, FormaPagoAcopio, ItemOC, Moneda, OrdenCompra, OrigenVenta, RecepcionMercaderia } from "@/domain/types";
 import { saldoDisponible as saldoACP } from "@/domain/acopiosProveedor";
 import { formatMoney } from "@/lib/format";
 import { recalcularCostoPromedio, variacionCosto } from "@/domain/costos";
-import { markupEfectivo, obtenerPrecio } from "@/domain/precios";
+import { costoEnPesos, markupEfectivo, obtenerPrecio } from "@/domain/precios";
 import { diasCondicionPago } from "@/domain/ventas";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir, r2 } from "../helpers";
 import type { GetFn, SetFn } from "../types";
+import type { Tx } from "../tx";
+import { tipoCambioVigente } from "./catalogo";
 
 export interface OCInput {
   proveedorId: string;
@@ -20,6 +22,11 @@ export interface OCInput {
   fechaEntregaEstimada: string;
   items: ItemOC[];
   observaciones?: string;
+  /**
+   * USD: los ítems se cargan en dólares (`costoUSD`); el servidor guarda `costoUnitario` en pesos
+   * (al vigente mientras es borrador y al tipo de cambio de la OC desde que se confirma).
+   */
+  moneda?: Moneda;
 }
 
 export interface RecepcionInput {
@@ -30,7 +37,8 @@ export interface RecepcionInput {
   fecha: string;
   depositoId: string;
   observaciones?: string;
-  items: { itemOCId: string; cantidad: number; costoUnitario: number; diferencia: DiferenciaRecepcion; observacion?: string }[];
+  /** `costoUSD`: OC en USD (el servidor lo pasa a pesos con el tipo de cambio del día). */
+  items: { itemOCId: string; cantidad: number; costoUnitario: number; costoUSD?: number; diferencia: DiferenciaRecepcion; observacion?: string }[];
 }
 
 export interface AvisoSubaCosto {
@@ -55,11 +63,29 @@ export interface AcopioProveedorInput {
   /** productoId → costo a congelar (snapshot editable). */
   costos: Record<string, number>;
   observaciones?: string;
+  /** USD: importe y costos llegan en dólares y se guardan en pesos al tipo de cambio de alta. */
+  moneda?: Moneda;
 }
 
 export function totalesOC(items: ItemOC[], ivaPct = 21) {
   const subtotal = r2(items.reduce((a, i) => a + i.cantidadPedida * i.costoUnitario * (1 - (i.descuentoPct || 0) / 100), 0));
   return { subtotal, iva: r2(subtotal * (ivaPct / 100)), total: r2(subtotal * (1 + ivaPct / 100)) };
+}
+
+/** Totales en dólares de una OC en USD (desde `costoUSD`). */
+export function totalesOCUSD(items: ItemOC[], ivaPct = 21) {
+  const subtotal = r2(items.reduce((a, i) => a + i.cantidadPedida * (i.costoUSD ?? 0) * (1 - (i.descuentoPct || 0) / 100), 0));
+  return { subtotal, iva: r2(subtotal * (ivaPct / 100)), total: r2(subtotal * (1 + ivaPct / 100)) };
+}
+
+/** Ítems en USD → costo en pesos al tipo de cambio dado. */
+function itemsAPesos(items: ItemOC[], tc: number): ItemOC[] {
+  return items.map((i) => ({ ...i, costoUnitario: costoEnPesos(i.costoUSD ?? 0, tc) }));
+}
+
+function exigirCostosUSD(tx: Tx, items: ItemOC[]) {
+  const sin = items.find((i) => !((i.costoUSD ?? 0) > 0));
+  if (sin) throw new ErrorNegocio(`Falta el costo en USD de ${tx.find("productos", sin.productoId)?.nombre ?? "un producto"}.`);
 }
 
 const TRANSICIONES: Record<EstadoOC, EstadoOC[]> = {
@@ -87,6 +113,13 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         if (!data.proveedorId) throw new ErrorNegocio("Elegí un proveedor.");
         let items = data.items.filter((i) => i.productoId && i.cantidadPedida > 0);
         if (!items.length) throw new ErrorNegocio("Agregá al menos un producto con cantidad.");
+        // Los retiros de acopio van a costo congelado (en pesos).
+        const moneda: Moneda = data.origen === "ACOPIO" ? "ARS" : (data.moneda ?? "ARS");
+        data = { ...data, moneda };
+        if (moneda === "USD") {
+          exigirCostosUSD(tx, items);
+          items = itemsAPesos(items, tipoCambioVigente(tx).valor);
+        } else items = items.map((i) => ({ ...i, costoUSD: undefined }));
         if (data.origen === "ACOPIO") {
           if (!data.acopioProveedorId) throw new ErrorNegocio("Elegí el acopio con el proveedor.");
           const acp = tx.must("acopiosProveedor", data.acopioProveedorId);
@@ -135,6 +168,14 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         exigir(tx, estado === "CANCELADA" || estado === "BORRADOR" ? "compras.editar" : "compras.confirmar");
         const oc = tx.must("ordenesCompra", id);
         if (!TRANSICIONES[oc.estado].includes(estado)) throw new ErrorNegocio(`No se puede pasar de ${oc.estado} a ${estado}.`);
+        // OC en USD: al confirmar queda el tipo de cambio de la OC y los pesos se recalculan con él.
+        if (estado === "CONFIRMADA" && oc.moneda === "USD") {
+          const tc = tipoCambioVigente(tx);
+          const items = itemsAPesos(oc.items, tc.valor);
+          tx.patch("ordenesCompra", id, { estado, items, ...totalesOC(items, oc.circuito === 1 ? tx.config.ivaPct : 0), tipoCambioAplicado: tc.valor, tipoCambioFecha: tc.fecha });
+          tx.auditar(ETIQUETA[estado]!, "OrdenCompra", id, `${oc.numero} · USD ${totalesOCUSD(oc.items, oc.circuito === 1 ? tx.config.ivaPct : 0).total} · dólar ${tc.valor}`);
+          return;
+        }
         tx.patch("ordenesCompra", id, { estado });
         tx.auditar(ETIQUETA[estado] ?? "Cambió estado de OC", "OrdenCompra", id, oc.numero);
       }),
@@ -177,6 +218,9 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         const lineas = data.items.filter((i) => i.cantidad > 0);
         if (!lineas.length) throw new ErrorNegocio("Indicá al menos una cantidad recibida.");
 
+        // OC en USD: el costo que entra al stock es el del día de la recepción, en pesos.
+        const tcRecepcion = oc.moneda === "USD" ? tipoCambioVigente(tx) : undefined;
+        let diferenciaTipoCambio = 0;
         const avisos: AvisoSubaCosto[] = [];
         const umbral = (tx.config.umbralSubaCostoPct ?? 3) / 100;
         const recepcion: RecepcionMercaderia = {
@@ -189,6 +233,8 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
           items: [],
           usuarioId: tx.usuarioId,
           observaciones: data.observaciones,
+          tipoCambioAplicado: tcRecepcion?.valor,
+          tipoCambioFecha: tcRecepcion?.fecha,
           ...tx.meta(),
         };
         let neto = 0;
@@ -196,6 +242,12 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
         for (const l of lineas) {
           const item = oc.items.find((i) => i.id === l.itemOCId);
           if (!item) throw new ErrorNegocio("Ítem de OC inexistente.");
+          let costoUSD: number | undefined;
+          if (tcRecepcion) {
+            costoUSD = l.costoUSD ?? item.costoUSD ?? 0;
+            l.costoUnitario = costoEnPesos(costoUSD, tcRecepcion.valor);
+            diferenciaTipoCambio += l.cantidad * costoUSD * (tcRecepcion.valor - (oc.tipoCambioAplicado ?? tcRecepcion.valor));
+          }
           const prod = tx.must("productos", item.productoId);
           const stockAntes = tx.fisicoTotal(prod.id);
           const promedio = recalcularCostoPromedio(stockAntes, prod.costoPromedio, l.cantidad, l.costoUnitario);
@@ -217,7 +269,7 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
             observacion: `Remito ${recepcion.remitoProveedor}`,
             fecha: data.fecha,
           });
-          recepcion.items.push({ itemOCId: item.id, productoId: prod.id, cantidadRecibida: l.cantidad, costoUnitario: l.costoUnitario, diferencia: l.diferencia, observacion: l.observacion });
+          recepcion.items.push({ itemOCId: item.id, productoId: prod.id, cantidadRecibida: l.cantidad, costoUnitario: l.costoUnitario, costoUSD, diferencia: l.diferencia, observacion: l.observacion });
           recibidoPorItem.set(item.id, (recibidoPorItem.get(item.id) ?? 0) + l.cantidad);
           neto += l.cantidad * l.costoUnitario;
         }
@@ -250,8 +302,14 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
           recepcion.comprobanteId = factura.id;
         }
         tx.insert("recepciones", recepcion);
-        tx.auditar("Registró recepción de mercadería", "RecepcionMercaderia", recepcion.id, `${oc.numero} · remito ${recepcion.remitoProveedor} · ${completa ? "completa" : "parcial"}`);
-        return { recepcionId: recepcion.id, numero: recepcion.numero, completa, avisos };
+        diferenciaTipoCambio = r2(diferenciaTipoCambio);
+        tx.auditar(
+          "Registró recepción de mercadería",
+          "RecepcionMercaderia",
+          recepcion.id,
+          `${oc.numero} · remito ${recepcion.remitoProveedor} · ${completa ? "completa" : "parcial"}${tcRecepcion ? ` · dólar ${tcRecepcion.valor} (OC ${oc.tipoCambioAplicado ?? "—"}) · diferencia ${formatMoney(diferenciaTipoCambio)}` : ""}`,
+        );
+        return { recepcionId: recepcion.id, numero: recepcion.numero, completa, avisos, tipoCambio: tcRecepcion?.valor, diferenciaTipoCambio: tcRecepcion ? diferenciaTipoCambio : undefined };
       }),
 
     reclamarOC: (id: string, texto: string) =>
@@ -267,6 +325,13 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "acopiosProveedor.editar");
         const prov = tx.must("proveedores", data.proveedorId);
+        // Acopio en USD: se carga en dólares y queda en pesos al tipo de cambio del alta (snapshot),
+        // así saldos, retiros (OC de acopio) y pagos siguen en pesos.
+        const tcAlta = data.moneda === "USD" ? tipoCambioVigente(tx) : undefined;
+        if (tcAlta) {
+          const a = (n: number) => costoEnPesos(n, tcAlta.valor);
+          data = { ...data, importe: data.importe !== undefined ? a(data.importe) : undefined, costos: Object.fromEntries(Object.entries(data.costos).map(([k, v]) => [k, a(v)])) };
+        }
         const preciosCongelados = Object.entries(data.costos).filter(([, c]) => c > 0).map(([productoId, costo]) => ({ productoId, costo: r2(costo) }));
         if (!preciosCongelados.length) throw new ErrorNegocio("No hay costos para congelar.");
         let importe = data.importe ?? 0;
@@ -296,6 +361,9 @@ export function crearSliceCompras(set: SetFn, get: GetFn) {
           ordenPagoIds: [],
           estado: "VIGENTE",
           observaciones: data.observaciones,
+          moneda: tcAlta ? "USD" : "ARS",
+          tipoCambioAplicado: tcAlta?.valor,
+          tipoCambioFecha: tcAlta?.fecha,
           ...tx.meta(),
         };
         const subtotal = data.circuito === 1 ? r2(importe / 1.21) : importe;

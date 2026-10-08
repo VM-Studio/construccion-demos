@@ -32,6 +32,7 @@ import { cn, newId } from "@/lib/utils";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { PendientesTabla } from "./pendientes-tabla";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 interface Linea extends LineaBase {
   obraId?: string;
@@ -90,7 +91,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const elegirCliente = (id: string) => {
     setClienteId(id);
     // Se lee del store en el momento: si el cliente se acaba de crear con el alta rápida, todavía no está en `db`.
-    const c = useStore.getState().db.clientes.find((x) => x.id === id);
+    const c = obtenerDb().clientes.find((x) => x.id === id);
     if (!c) return;
     setCircuito(c.circuitoHabitual);
     setFormaPago(c.condicionPago === "CONTADO" ? "CONTADO" : "CUENTA_CORRIENTE");
@@ -181,7 +182,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
       else toast.error(r.error);
       return;
     }
-    const np = useStore.getState().db.notasPedido.find((n) => n.id === r.data)!;
+    const np = obtenerDb().notasPedido.find((n) => n.id === r.data)!;
     toast.success(`Nota de pedido ${np.numero} confirmada`, { description: acopio ? `Saldo del acopio luego del retiro: ${formatMoney(saldoDespues)}` : undefined });
     setBloqueo(null);
     router.replace(`/ventas/notas-pedido/${r.data}`);

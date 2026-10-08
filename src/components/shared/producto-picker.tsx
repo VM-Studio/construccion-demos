@@ -12,6 +12,7 @@ import { obtenerPrecio } from "@/domain/precios";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Producto } from "@/domain/types";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 /**
  * Buscador de productos (Popover + cmdk) por código, nombre, marca o código de barras.
@@ -130,7 +131,7 @@ export function ProductoPicker({
         onOpenChange={setAlta}
         unidadNegocioId={unActiva}
         onCreado={(id) => {
-          const p = useStore.getState().db.productos.find((x) => x.id === id);
+          const p = obtenerDb().productos.find((x) => x.id === id);
           if (p) onSelect(p);
         }}
       />

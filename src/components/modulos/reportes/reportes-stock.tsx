@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { addDays } from "date-fns";
@@ -157,7 +158,9 @@ export function ReporteDeudaMercaderia() {
 // ───────────────────────── 8. Stock crítico y reposición ─────────────────────────
 
 export function ReporteStockCritico() {
-  const db = useDb();
+  const dbBase = useDb();
+  const { movimientos } = useMovimientos(); // kardex leído del servidor
+  const db = React.useMemo(() => ({ ...dbBase, movimientos }), [dbBase, movimientos]);
   const router = useRouter();
   const posiciones = usePosiciones();
   const puedeOC = usePuede("compras.editar");
@@ -174,12 +177,12 @@ export function ReporteStockCritico() {
   const porProveedor = new Map<string, F[]>();
   for (const f of filas) if (f.proveedor && f.sugerida > 0) porProveedor.set(f.proveedor.id, [...(porProveedor.get(f.proveedor.id) ?? []), f]);
 
-  const generar = (proveedorId: string) => {
+  const generar = async (proveedorId: string) => {
     const prov = db.proveedores.find((p) => p.id === proveedorId)!;
     const items = (porProveedor.get(proveedorId) ?? []).map((f) => ({ id: newId("ioc"), productoId: f.p.id, cantidadPedida: f.sugerida, cantidadRecibida: 0, costoUnitario: f.p.costoUltimo, descuentoPct: 0 }));
     const u = db.usuarios.find((x) => x.id === useStore.getState().ui.usuarioId);
     const suc = u?.sucursalId ?? "suc_central";
-    const r = useStore.getState().guardarOC({ proveedorId, circuito: prov.circuitoHabitual, origen: "NUEVA", sucursalId: suc, depositoDestinoId: db.sucursales.find((s) => s.id === suc)?.depositoId ?? "dep_central", fechaEmision: new Date().toISOString(), fechaEntregaEstimada: addDays(new Date(), prov.plazoEntregaDias).toISOString(), items, observaciones: "Reposición sugerida desde el reporte de stock crítico." });
+    const r = await useStore.getState().guardarOC({ proveedorId, circuito: prov.circuitoHabitual, origen: "NUEVA", sucursalId: suc, depositoDestinoId: db.sucursales.find((s) => s.id === suc)?.depositoId ?? "dep_central", fechaEmision: new Date().toISOString(), fechaEntregaEstimada: addDays(new Date(), prov.plazoEntregaDias).toISOString(), items, observaciones: "Reposición sugerida desde el reporte de stock crítico." });
     if (r.ok) {
       toast.success(`OC borrador creada para ${prov.razonSocial}`, { action: { label: "Abrir", onClick: () => router.push(`/compras/oc/${r.data}`) } });
     } else toast.error(r.error);
@@ -239,7 +242,9 @@ export function ReporteStockCritico() {
 // ───────────────────────── 11. Movimientos de stock ─────────────────────────
 
 export function ReporteMovimientos() {
-  const db = useDb();
+  const dbBase = useDb();
+  const { movimientos } = useMovimientos(); // kardex leído del servidor
+  const db = React.useMemo(() => ({ ...dbBase, movimientos }), [dbBase, movimientos]);
   return (
     <ReporteLayout
       slug="movimientos"

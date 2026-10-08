@@ -37,6 +37,7 @@ import { diaLocal } from "@/lib/periodos";
 import { aCSV, cn, descargarArchivo } from "@/lib/utils";
 import { PagoDialog } from "@/components/modulos/cuentas/pago-dialog";
 import { DescargarDocumento } from "@/components/modulos/acopios/descargar-desacopio";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 const aIso = (v: string, h = 11) => {
   const [y, m, d] = v.split("-").map(Number);
@@ -266,7 +267,7 @@ export function AcopioProveedorDetalle({ id }: { id: string }) {
             {puede && res.estado !== "CANCELADO" && <Button onClick={() => router.push(`/compras/oc/nueva?acopio=${a.id}`)}><ShoppingCart /> Retirar (nueva OC)</Button>}
             {puedePagar && res.deuda > 0 && <Button variant="secondary" onClick={() => setDialogo("pago")}><Wallet /> Registrar pago</Button>}
             {puede && <Button variant="secondary" onClick={() => setDialogo("extender")}><CalendarClock /> Extender vencimiento</Button>}
-            <DescargarDocumento entidad="AcopioProveedor" entidadId={a.id} armar={() => documentoAcopioProveedor(useStore.getState().db, a.id)} />
+            <DescargarDocumento entidad="AcopioProveedor" entidadId={a.id} armar={() => documentoAcopioProveedor(obtenerDb(), a.id)} />
             {puede && res.estado !== "CANCELADO" && <Button variant="ghost" onClick={() => setDialogo("cancelar")}><Ban /> Cancelar</Button>}
           </>
         }

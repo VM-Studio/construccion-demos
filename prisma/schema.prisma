@@ -1003,6 +1003,8 @@ model ItemOC {
   cantidadPedida   Decimal     @db.Decimal(14, 3)
   cantidadRecibida Decimal     @db.Decimal(14, 3)
   costoUnitario    Decimal     @db.Decimal(14, 4)
+  /// OC en USD: costo cargado en dólares (costoUnitario queda en pesos al tipo de cambio de la OC).
+  costoUSD         Decimal?    @db.Decimal(14, 4)
   descuentoPct     Decimal     @db.Decimal(7, 3)
 
   @@index([ordenCompraId])
@@ -1020,6 +1022,9 @@ model RecepcionMercaderia {
   usuarioId       String
   observaciones   String?
   comprobanteId   String?
+  /// OC en USD: tipo de cambio del día de la recepción (el costo que entra al stock en pesos).
+  tipoCambioAplicado Decimal?     @db.Decimal(14, 4)
+  tipoCambioFecha    DateTime?
   creadoEn        DateTime        @default(now())
   actualizadoEn   DateTime        @updatedAt
 
@@ -1036,6 +1041,7 @@ model ItemRecepcion {
   productoId       String
   cantidadRecibida Decimal              @db.Decimal(14, 3)
   costoUnitario    Decimal              @db.Decimal(14, 4)
+  costoUSD         Decimal?             @db.Decimal(14, 4)
   diferencia       DiferenciaRecepcion?
   observacion      String?
 

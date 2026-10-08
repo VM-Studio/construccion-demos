@@ -1,37 +1,25 @@
 "use client";
 
+/**
+ * Store de INTERFAZ (zustand): sesión visible, sucursal y unidad de negocio activas, sidebar,
+ * favoritos, tour y modo capacitación. Los datos de negocio NO viven acá: se leen del servidor
+ * (src/lib/datos) y toda escritura es una server action (src/server/actions).
+ * Las acciones de negocio de este store son proxies asíncronos a esas server actions.
+ */
 import { useEffect, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { EstadoInicial } from "@/domain/types";
-import { configInicial, seedBase } from "@/data/seed";
-import { ejecutar } from "./helpers";
-import type { StoreBase, UIState } from "./types";
-import { crearSliceCatalogo } from "./slices/catalogo";
-import { crearSliceStock } from "./slices/stock";
-import { crearSliceCompras } from "./slices/compras";
-import { crearSliceVentas } from "./slices/ventas";
-import { crearSliceAcopios } from "./slices/acopios";
-import { crearSliceDespachos } from "./slices/despachos";
-import { crearSliceFinanzas } from "./slices/finanzas";
-import { crearSliceConfig } from "./slices/config";
-import { crearSliceRemitos } from "./slices/remitos";
-import { crearSliceImportacion } from "./slices/importacion";
+import { ACCIONES_SERVIDOR } from "@/server/actions";
+import { salir } from "@/server/actions/sesion";
+import { aplicarResultadoPropio } from "@/lib/datos/proveedor";
+import { obtenerDb } from "@/lib/datos/almacen";
+import type { RespuestaAccion } from "@/server/actions/correr";
+import { NOMBRES_EXPUESTOS, type NombreExpuesto } from "@/server/servicios/registro";
+import type { AccionesNegocio } from "./negocio";
+import type { UIState } from "./types";
 import { CAPACITACION_INICIAL, crearSliceCapacitacion, persistirCapacitacion, type EstadoCapacitacion } from "@/capacitacion/slice";
 
-export const STORAGE_KEY = "cd-demo-v2";
-
-/** Estado vacío para el primer render (antes de hidratar desde localStorage). */
-function estadoVacio(): EstadoInicial {
-  return {
-    sucursales: [], depositos: [], usuarios: [], unidadesNegocio: [], rubros: [], proveedores: [], productos: [], listasPrecios: [], precios: [],
-    stock: [], movimientos: [], transferencias: [], ajustes: [], ordenesCompra: [], recepciones: [], acopiosProveedor: [], clientes: [], obras: [],
-    cotizaciones: [], notasPedido: [], devoluciones: [], ajustesAcopio: [], acopios: [], remitos: [], adjuntos: [], comprobantes: [], vehiculos: [],
-    choferes: [], despachos: [], hojasRuta: [], cobranzas: [], pagosProveedores: [], cheques: [], auditoria: [],
-    config: configInicial(),
-    numeradores: {},
-  };
-}
+export const STORAGE_KEY = "aceros-rnf-interfaz-v1";
 
 const UI_INICIAL: UIState = {
   usuarioId: null,
@@ -46,14 +34,44 @@ const UI_INICIAL: UIState = {
   guiaOculta: {},
 };
 
-function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<StoreBase>)) => void, get: () => StoreBase) {
+interface EstadoInterfaz {
+  ui: UIState;
+  hidratado: boolean;
+  capacitacion: EstadoCapacitacion;
+}
+
+type SetUI = (p: Partial<EstadoInterfaz> | ((s: EstadoInterfaz) => Partial<EstadoInterfaz>)) => void;
+
+/** Resultado de una acción de negocio: el de la regla de dominio, más los efectos medidos en el servidor. */
+type ResultadoDe<N extends NombreExpuesto> = ReturnType<AccionesNegocio[N]> extends { ok: true; data: infer D } | { ok: false } ? RespuestaAccion<D> : RespuestaAccion;
+export type AccionesCliente = { [N in NombreExpuesto]: (...args: Parameters<AccionesNegocio[N]>) => Promise<ResultadoDe<N>> };
+
+/** Llama a la server action y, si salió bien, refresca lo que cambió antes de devolver. */
+async function llamar(nombre: NombreExpuesto, args: unknown[]): Promise<RespuestaAccion> {
+  const fn = (ACCIONES_SERVIDOR as unknown as Record<string, (...a: unknown[]) => Promise<RespuestaAccion>>)[nombre];
+  try {
+    const r = await fn(...args);
+    if (r.ok) await aplicarResultadoPropio(r.tipos).catch(() => undefined);
+    return r;
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: "No hay conexión con el servidor. Revisá internet y probá de nuevo.", codigo: "RED" };
+  }
+}
+
+const accionesNegocio = Object.fromEntries(NOMBRES_EXPUESTOS.map((n) => [n, (...args: unknown[]) => llamar(n, args)])) as unknown as AccionesCliente;
+
+function crearAcciones(set: SetUI, get: () => EstadoInterfaz) {
   return {
-    // ── auth ──
+    // ── sesión visible en la interfaz (la sesión real es la cookie del servidor) ──
     login: (usuarioId: string) => {
-      const u = get().db.usuarios.find((x) => x.id === usuarioId);
-      set((s) => ({ ui: { ...s.ui, usuarioId, sucursalActivaId: u?.sucursalId ?? null } }));
+      const u = obtenerDb().usuarios.find((x) => x.id === usuarioId);
+      set((s) => ({ ui: { ...s.ui, usuarioId, sucursalActivaId: u?.sucursalId ?? s.ui.sucursalActivaId } }));
     },
-    logout: () => set((s) => ({ ui: { ...s.ui, usuarioId: null, tourAbierto: false } })),
+    logout: async () => {
+      await salir();
+      set((s) => ({ ui: { ...s.ui, usuarioId: null, tourAbierto: false } }));
+    },
     setSucursalActiva: (sucursalActivaId: string | null) => set((s) => ({ ui: { ...s.ui, sucursalActivaId } })),
     setUnidadNegocio: (unidadNegocioId: string | null) => set((s) => ({ ui: { ...s.ui, unidadNegocioId } })),
     setModuloActivo: (moduloActivo: string | null) => set((s) => (s.ui.moduloActivo === moduloActivo ? {} : { ui: { ...s.ui, moduloActivo } })),
@@ -76,48 +94,36 @@ function crearAcciones(set: (p: Partial<StoreBase> | ((s: StoreBase) => Partial<
     toggleSidebar: () => set((s) => ({ ui: { ...s.ui, sidebarColapsado: !s.ui.sidebarColapsado } })),
     abrirTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: true } })),
     cerrarTour: () => set((s) => ({ ui: { ...s.ui, tourAbierto: false, tourVisto: { ...s.ui.tourVisto, [s.ui.usuarioId ?? ""]: true } } })),
-
-    // ── auditoría (eventos sólo de UI: impresiones, envíos por email demo) ──
-    registrarEvento: (accion: string, entidad: string, entidadId: string, detalle = "") =>
-      ejecutar(get, set, (tx) => tx.auditar(accion, entidad, entidadId, detalle)),
-
-    ...crearSliceCatalogo(set, get),
-    ...crearSliceStock(set, get),
-    ...crearSliceCompras(set, get),
-    ...crearSliceVentas(set, get),
-    ...crearSliceAcopios(set, get),
-    ...crearSliceDespachos(set, get),
-    ...crearSliceFinanzas(set, get),
-    ...crearSliceConfig(set, get),
-    ...crearSliceRemitos(set, get),
-    ...crearSliceImportacion(set, get),
-    ...crearSliceCapacitacion(set, get),
+    ...crearSliceCapacitacion(
+      set as never,
+      () => ({ ...get(), db: { usuarios: obtenerDb().usuarios } }) as never,
+    ),
   };
 }
 
-export type Acciones = ReturnType<typeof crearAcciones>;
-export type Store = StoreBase & Acciones;
+export type Acciones = ReturnType<typeof crearAcciones> & AccionesCliente;
+export type Store = EstadoInterfaz & Acciones;
 
 export const useStore = create<Store>()(
   persist(
-    (set, get) => ({
-      db: estadoVacio(),
-      ui: UI_INICIAL,
-      hidratado: false,
-      capacitacion: CAPACITACION_INICIAL,
-      ...crearAcciones(set, get),
-    }),
+    (set, get) =>
+      ({
+        ui: UI_INICIAL,
+        hidratado: false,
+        capacitacion: CAPACITACION_INICIAL,
+        ...accionesNegocio,
+        ...crearAcciones(set as SetUI, get as () => EstadoInterfaz),
+      }) as Store,
     {
       name: STORAGE_KEY,
-      version: 2,
+      version: 1,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      partialize: (s) => ({ db: s.db, ui: { ...s.ui, tourAbierto: false }, capacitacion: persistirCapacitacion(s.capacitacion) }),
+      // Solo preferencias de interfaz: ningún dato de negocio se guarda en el navegador.
+      partialize: (s) => ({ ui: { ...s.ui, tourAbierto: false, usuarioId: null }, capacitacion: persistirCapacitacion(s.capacitacion) }),
       merge: (persisted, current) => {
-        const p = persisted as (Omit<Partial<StoreBase>, "capacitacion"> & { capacitacion?: Partial<EstadoCapacitacion> }) | undefined;
-        // Un db guardado sin estructura (versión vieja o reseteo) se descarta y se regenera la base.
-        const valido = !!p?.db?.unidadesNegocio?.length && !!p.db.usuarios?.length && !!p.db.sucursales?.length && !!p.db.config;
-        return { ...current, db: valido ? p!.db! : current.db, ui: { ...current.ui, ...(p?.ui ?? {}) }, capacitacion: { ...current.capacitacion, ...(p?.capacitacion ?? {}) } };
+        const p = persisted as { ui?: Partial<UIState>; capacitacion?: Partial<EstadoCapacitacion> } | undefined;
+        return { ...current, ui: { ...current.ui, ...(p?.ui ?? {}), usuarioId: current.ui.usuarioId }, capacitacion: { ...current.capacitacion, ...(p?.capacitacion ?? {}) } } as Store;
       },
     },
   ),
@@ -125,20 +131,21 @@ export const useStore = create<Store>()(
 
 let hidratando = false;
 
-/** Hidrata el store desde localStorage (o crea la estructura base la primera vez). Llamar una vez en el cliente. */
+/** Restaura las preferencias de interfaz (localStorage). Los datos llegan del servidor. */
 export async function hidratarStore() {
   if (useStore.getState().hidratado || hidratando) return;
   hidratando = true;
+  try {
+    // Limpieza de la versión demo: los datos de negocio ya no se guardan en el navegador.
+    localStorage.removeItem("cd-demo-v2");
+    localStorage.removeItem("aceros-rnf-v1");
+  } catch {}
   await useStore.persist.rehydrate();
-  const { db } = useStore.getState();
-  if (!db.unidadesNegocio?.length || !db.usuarios?.length) useStore.setState({ db: seedBase(new Date()) });
   useStore.setState({ hidratado: true });
   hidratando = false;
-  // Los remitos firmados de los datos de ejemplo se generan en runtime (jsPDF) y se guardan en IndexedDB.
-  if (useStore.getState().db.adjuntos.length) void import("@/lib/adjuntos").then((m) => m.asegurarAdjuntosDemo()).catch(() => undefined);
 }
 
-/** true cuando el store ya se hidrató (evita mismatch SSR / flash de login). */
+/** true cuando las preferencias de interfaz ya se restauraron. */
 export function useHydrated(): boolean {
   const hidratado = useSyncExternalStore(
     (cb) => useStore.subscribe(cb),

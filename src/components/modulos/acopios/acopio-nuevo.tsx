@@ -28,6 +28,7 @@ import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { ConstanciaAcopio } from "./acopio-detalle";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 const aIso = (v: string, h = 10) => {
   const [y, m, d] = v.split("-").map(Number);
@@ -64,7 +65,7 @@ export function AcopioNuevo() {
   const elegirCliente = (id: string) => {
     setClienteId(id);
     // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
-    const actual = useStore.getState().db;
+    const actual = obtenerDb();
     const x = actual.clientes.find((k) => k.id === id);
     if (!x) return;
     setCircuito(x.circuitoHabitual);

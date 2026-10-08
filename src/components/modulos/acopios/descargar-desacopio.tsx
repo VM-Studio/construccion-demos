@@ -6,6 +6,7 @@ import { useStore } from "@/store";
 import { documentoAcopio, type DocDesacopio } from "@/lib/desacopio/datos";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 /**
  * Botón "Descargar" con menú PDF / Excel. La generación ocurre recién al elegir una opción
@@ -62,7 +63,7 @@ export function DescargarDesacopio({ acopioId, size, variant }: { acopioId: stri
       variant={variant}
       entidad="Acopio"
       entidadId={acopioId}
-      armar={() => documentoAcopio(useStore.getState().db, acopioId)}
+      armar={() => documentoAcopio(obtenerDb(), acopioId)}
     />
   );
 }

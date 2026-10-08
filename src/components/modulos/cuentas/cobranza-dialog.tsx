@@ -24,6 +24,7 @@ import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { ReciboDocumento } from "./documentos";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 type FilaMedio = MedioCobro & { _id: string };
 
@@ -147,7 +148,7 @@ export function CobranzaDialog({
                     setClienteId(v);
                     setImput({});
                     // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
-                    const c = useStore.getState().db.clientes.find((x) => x.id === v);
+                    const c = obtenerDb().clientes.find((x) => x.id === v);
                     if (c) setCircuito(c.circuitoHabitual === 2 && !veC2 ? 1 : c.circuitoHabitual);
                   }}
                   placeholder="Buscar cliente…"

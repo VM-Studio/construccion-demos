@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Importaciones CSV grandes viajan en una server action.
+  experimental: { serverActions: { bodySizeLimit: "10mb" } },
+  // El adapter de Neon usa WebSocket nativo de Node (ws) en el servidor.
+  serverExternalPackages: ["@prisma/client", "@prisma/adapter-neon", "@neondatabase/serverless", "ws"],
   async redirects() {
     return [
       { source: "/ventas", destination: "/ventas/notas-pedido", permanent: false },

@@ -51,26 +51,15 @@ export function ClipContador({ cantidad, firmado, onClick, className }: { cantid
   );
 }
 
-/** Visor de un adjunto (imagen o PDF) en un diálogo. */
+/** Visor de un adjunto (imagen o PDF) en un diálogo. El archivo lo sirve `/api/adjuntos/[id]`. */
 export function VisorAdjunto({ adjunto, onOpenChange }: { adjunto: Adjunto | null; onOpenChange: (v: boolean) => void }) {
-  const [url, setUrl] = React.useState<string | null>(null);
-  const [error, setError] = React.useState(false);
-  React.useEffect(() => {
-    if (!adjunto) return;
-    let revoke: (() => void) | undefined;
-    setUrl(null);
-    setError(false);
-    if (adjunto.url) {
-      setUrl(adjunto.url);
-      return;
-    }
-    obtenerUrl(adjunto.blobKey).then((r) => {
-      if (!r) return setError(true);
-      revoke = r.revoke;
-      setUrl(r.url);
-    });
-    return () => revoke?.();
-  }, [adjunto]);
+  const [errorId, setErrorId] = React.useState<string | null>(null);
+  const error = !!adjunto && errorId === adjunto.id;
+  const esEnlace = !!adjunto && !adjunto.blobKey;
+  const url = !adjunto ? null : esEnlace ? (adjunto.url ?? null) : obtenerUrl(adjunto.id);
+  const descargar = async () => {
+    if (adjunto && !(await descargarAdjunto(adjunto.id, adjunto.nombre))) toast.error("El archivo no está disponible.");
+  };
   return (
     <Dialog open={!!adjunto} onOpenChange={onOpenChange}>
       {adjunto && (
@@ -81,8 +70,8 @@ export function VisorAdjunto({ adjunto, onOpenChange }: { adjunto: Adjunto | nul
           footer={
             <>
               <Button variant="secondary" onClick={() => onOpenChange(false)}>Cerrar</Button>
-              {!adjunto.url && (
-                <Button onClick={() => descargarAdjunto(adjunto.blobKey, adjunto.nombre)}>
+              {!esEnlace && (
+                <Button onClick={() => void descargar()}>
                   <Download /> Descargar
                 </Button>
               )}
@@ -91,14 +80,14 @@ export function VisorAdjunto({ adjunto, onOpenChange }: { adjunto: Adjunto | nul
         >
           <div className="flex min-h-[420px] items-center justify-center rounded-card bg-subtle">
             {error ? (
-              <p className="text-[13px] text-muted">El archivo no está disponible en este navegador.</p>
+              <p className="text-[13px] text-muted">El archivo no está disponible.</p>
             ) : !url ? (
               <p className="text-[13px] text-muted">Cargando…</p>
-            ) : adjunto.url ? (
+            ) : esEnlace ? (
               <a href={url} target="_blank" rel="noreferrer" className="text-[13px] font-medium underline">Abrir enlace en otra pestaña</a>
             ) : adjunto.tipoMime.startsWith("image/") ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={url} alt={adjunto.nombre} className="max-h-[70vh] max-w-full object-contain" />
+              <img src={url} alt={adjunto.nombre} onError={() => setErrorId(adjunto.id)} className="max-h-[70vh] max-w-full object-contain" />
             ) : (
               <iframe src={url} title={adjunto.nombre} className="h-[70vh] w-full rounded-card border-0 bg-white" />
             )}
@@ -110,7 +99,7 @@ export function VisorAdjunto({ adjunto, onOpenChange }: { adjunto: Adjunto | nul
 }
 
 /**
- * Panel reutilizable de adjuntos: subir archivo (foto/PDF a IndexedDB), adjuntar enlace web,
+ * Panel reutilizable de adjuntos: subir archivo (foto/PDF a Vercel Blob), adjuntar enlace web,
  * listar con categoría, ver, descargar y eliminar.
  */
 export function AdjuntosPanel({ entidadTipo, entidadId, categoriaDefecto = "OTRO", className }: { entidadTipo: EntidadAdjunto; entidadId: string; categoriaDefecto?: CategoriaAdjunto; className?: string }) {
@@ -157,8 +146,8 @@ export function AdjuntosPanel({ entidadTipo, entidadId, categoriaDefecto = "OTRO
           <Input autoFocus aria-label="Dirección web" placeholder="https://…" value={enlace} onChange={(e) => setEnlace(e.target.value)} className="h-8" />
           <Button
             size="sm"
-            onClick={() => {
-              const r = adjuntarEnlace(enlace, { entidadTipo, entidadId, categoria });
+            onClick={async () => {
+              const r = await adjuntarEnlace(enlace, { entidadTipo, entidadId, categoria });
               if (!r.ok) return toast.error(r.error);
               toast.success("Enlace adjuntado");
               setEnlace(null);
@@ -201,9 +190,9 @@ export function AdjuntosPanel({ entidadTipo, entidadId, categoriaDefecto = "OTRO
                   <Tooltip content="Ver">
                     <Button variant="ghost" size="icon-sm" aria-label={`Ver ${a.nombre}`} onClick={() => setVer(a)}><Eye /></Button>
                   </Tooltip>
-                  {!a.url && (
+                  {!!a.blobKey && (
                     <Tooltip content="Descargar">
-                      <Button variant="ghost" size="icon-sm" aria-label={`Descargar ${a.nombre}`} onClick={async () => { if (!(await descargarAdjunto(a.blobKey, a.nombre))) toast.error("El archivo no está disponible en este navegador."); }}><Download /></Button>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Descargar ${a.nombre}`} onClick={async () => { if (!(await descargarAdjunto(a.id, a.nombre))) toast.error("El archivo no está disponible."); }}><Download /></Button>
                     </Tooltip>
                   )}
                   {puedeBorrar && (

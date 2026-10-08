@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 import { Impacto, medir } from "@/capacitacion";
 
 /**
- * "Subir remito firmado": zona de arrastre o click (foto o PDF), vista previa y guardado en
- * IndexedDB. "Hacer después" deja el remito hecho pero sin firmar.
+ * "Subir remito firmado": zona de arrastre o click (foto o PDF), vista previa y subida a
+ * Vercel Blob. "Hacer después" deja el remito hecho pero sin firmar.
  */
 export function SubirFirmadoDialog({ remitoId, open, onOpenChange }: { remitoId: string; open: boolean; onOpenChange: (v: boolean) => void }) {
   const db = useDb();

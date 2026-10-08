@@ -278,6 +278,7 @@ export function configInicial(): EstadoInicial["config"] {
     alertaStockMinimo: true,
     umbralSubaCostoPct: 3,
     tipoCambioUSD: 1450,
+    tipoCambioModo: "AUTO",
     tamanoMaxAdjuntoMB: 10,
     categoriasAdjunto: [
       { codigo: "REMITO_FIRMADO", nombre: "Remito firmado" },

@@ -24,7 +24,8 @@
     "db:seed:carga": "tsx scripts/seed-carga.ts",
     "db:rendimiento": "tsx scripts/rendimiento.ts",
     "db:rendimiento:estado": "tsx scripts/rendimiento-estado.ts",
-    "db:restore": "tsx scripts/db-restore.ts"
+    "db:restore": "tsx scripts/db-restore.ts",
+    "sentry:prueba": "tsx scripts/sentry-prueba.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -70,6 +71,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@sentry/node": "^11.6.0",
     "@tailwindcss/postcss": "^4",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20",

@@ -1,0 +1,79 @@
+name: Prueba de restauración
+
+# Restaura un backup de R2 (el último, o el indicado) en el branch `test` de Neon y verifica que
+# las tablas tengan las mismas filas que el dump. Nunca toca producción. Correrlo cada 3 meses
+# (y anotar el resultado en docs/BACKUPS.md): Actions → "Prueba de restauración" → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      archivo:
+        description: "Archivo de R2 (vacío = el último backup)"
+        required: false
+        default: ""
+
+concurrency:
+  group: integracion-neon-test
+  cancel-in-progress: false
+
+jobs:
+  restaurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DESTINO: ${{ secrets.DIRECT_URL_TEST }}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_REGION: auto
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+      BUCKET: aceros-rnf-backups
+    steps:
+      - name: El destino no es producción
+        run: |
+          if [ -z "$DESTINO" ]; then echo "::error::Falta DIRECT_URL_TEST"; exit 1; fi
+          if echo "$DESTINO" | grep -q "ep-lingering-shape"; then echo "::error::El destino es PRODUCCIÓN"; exit 1; fi
+
+      - name: Instalar postgresql-client-18 y rclone
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18 rclone
+
+      - name: Descargar el backup
+        run: |
+          ARCHIVO="${{ github.event.inputs.archivo }}"
+          if [ -z "$ARCHIVO" ]; then ARCHIVO=$(rclone lsf "r2:$BUCKET" --include "aceros-rnf-*.dump.gz" | sort | tail -1); fi
+          if [ -z "$ARCHIVO" ]; then echo "::error::No hay backups en R2"; exit 1; fi
+          echo "ARCHIVO=$ARCHIVO" >> "$GITHUB_ENV"
+          rclone copyto "r2:$BUCKET/$ARCHIVO" "$ARCHIVO"
+          gunzip -c "$ARCHIVO" > backup.dump
+          ls -l "$ARCHIVO" backup.dump
+
+      - name: Restaurar en el branch test
+        run: |
+          T0=$(date +%s)
+          /usr/lib/postgresql/18/bin/pg_restore --no-owner --no-privileges --clean --if-exists --single-transaction --dbname="$DESTINO" backup.dump
+          echo "SEGUNDOS=$(( $(date +%s) - T0 ))" >> "$GITHUB_ENV"
+
+      - name: Verificar filas por tabla
+        run: |
+          # Filas en el dump (lista de TABLE DATA) contra filas restauradas.
+          /usr/lib/postgresql/18/bin/pg_restore --list backup.dump | awk '/TABLE DATA public/ {print $(NF-1)}' | tr -d '"' | sort -u > tablas.txt
+          TOTAL=0; MAL=0
+          while read -r t; do
+            esperado=$(/usr/lib/postgresql/18/bin/pg_restore --data-only --table="$t" --file=- backup.dump | awk '/^COPY /{c=1;next} /^\\\.$/{c=0} c' | wc -l)
+            real=$(psql "$DESTINO" -tAc "SELECT count(*) FROM \"$t\"")
+            TOTAL=$((TOTAL + real))
+            if [ "$esperado" != "$real" ]; then echo "✘ $t: dump $esperado · restaurado $real"; MAL=$((MAL+1)); fi
+          done < tablas.txt
+          echo "Tablas: $(wc -l < tablas.txt) · filas restauradas: $TOTAL · diferencias: $MAL"
+          {
+            echo "### Restauración de ${ARCHIVO} en el branch test"
+            echo "- Duración: ${SEGUNDOS} s"
+            echo "- Tablas: $(wc -l < tablas.txt) · filas: ${TOTAL} · diferencias: ${MAL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MAL" -gt 0 ]; then exit 1; fi

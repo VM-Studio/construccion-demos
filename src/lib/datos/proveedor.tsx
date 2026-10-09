@@ -8,6 +8,7 @@
  *   Si el cambio lo hizo otro usuario, muestra un aviso discreto (como mucho uno cada 5 s).
  */
 import * as React from "react";
+import * as Sentry from "@sentry/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR, { SWRConfig, useSWRConfig } from "swr";
@@ -190,6 +191,8 @@ export function DatosProvider({ actorId, inicial, children }: { actorId: string;
     }
   }
   primera.current = false;
+  // Errores del navegador en Sentry con el id del usuario (nunca email ni nombre).
+  React.useEffect(() => Sentry.setUser({ id: actorId }), [actorId]);
   const datos = inicial?.datos ?? {};
   return (
     <SWRConfig value={{ dedupingInterval: 1000, keepPreviousData: true }}>

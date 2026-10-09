@@ -60,6 +60,13 @@ export async function refrescarColecciones(cols: string[]) {
   if (mutadorGlobal) for (const k of pedidas) void mutadorGlobal(["datos", k], datos[k], { revalidate: false });
 }
 
+/** Aplica colecciones que ya vinieron del servidor (en la respuesta de /api/cambios). */
+function aplicarDatos(datos: Record<string, unknown>) {
+  const cols = Object.keys(datos).filter((c) => ES_COLECCION.has(c));
+  establecerDatos(datos as Partial<EstadoInicial>);
+  if (mutadorGlobal) for (const k of cols) void mutadorGlobal(["datos", k], datos[k], { revalidate: false });
+}
+
 /** Después de una acción propia: refresca lo que cambió sin esperar al polling. */
 export async function aplicarResultadoPropio(tipos: string[]) {
   await refrescarColecciones(coleccionesDe(tipos));
@@ -81,7 +88,7 @@ interface CambioRemoto {
   href: string | null;
 }
 
-/** Polling de /api/cambios (3 s visible, 15 s oculta, al instante al volver el foco). */
+/** Polling de /api/cambios (2 s visible, 15 s oculta, al instante al volver el foco). */
 function useSincronizacion(actorId: string) {
   const pathname = usePathname();
   const rapida = pathname.startsWith("/despachos");
@@ -118,17 +125,23 @@ function useSincronizacion(actorId: string) {
       if (enCurso) return;
       enCurso = true;
       try {
-        const r = await fetch(`/api/cambios?desde=${ultimoCambio}`, { cache: "no-store" });
+        const r = await fetch(`/api/cambios?desde=${ultimoCambio}&datos=1`, { cache: "no-store" });
         if (r.status === 401) {
           window.location.href = "/login";
           return;
         }
         if (r.ok) {
-          const { ultimo, cambios } = (await r.json()) as { ultimo: string; cambios: CambioRemoto[] };
+          const { ultimo, cambios, datos } = (await r.json()) as { ultimo: string; cambios: CambioRemoto[]; datos?: Record<string, unknown> };
           const primera = ultimoCambio === "0";
           ultimoCambio = ultimo;
           if (!primera && cambios.length) {
-            await refrescarColecciones(coleccionesDe(cambios.flatMap((c) => c.tipos)));
+            const cols = coleccionesDe(cambios.flatMap((c) => c.tipos));
+            if (datos) {
+              aplicarDatos(datos);
+              // Lo que no viaja en la respuesta (kardex, auditoría, claves derivadas) se revalida aparte.
+              const faltan = cols.filter((c) => !(c in datos));
+              if (faltan.length) await refrescarColecciones(faltan);
+            } else await refrescarColecciones(cols);
             const ajenos = cambios.filter((c) => c.usuarioId && c.usuarioId !== actorId);
             if (ajenos.length) pendientesAviso.current.push(...ajenos);
           }
@@ -147,7 +160,7 @@ function useSincronizacion(actorId: string) {
       timer = setTimeout(async () => {
         await consultar();
         programar();
-      }, visible ? (rapida ? 2000 : 3000) : 15000);
+      }, visible ? (rapida ? 1500 : 2000) : 15000);
     };
     const alVolver = () => {
       if (document.visibilityState === "visible") {

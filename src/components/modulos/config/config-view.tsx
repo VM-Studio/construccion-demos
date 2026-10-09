@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Download, ImagePlus, Plus, RefreshCw, Save, ShieldCheck, XCircle } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useUsuario } from "@/store/selectors";
-import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types";
+import type { ListaPrecios, Rol, Rubro, Sucursal } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { type ResultadoIntegridad } from "@/domain/integridad";
 import { Impacto, InterruptorCapacitacionConfig, medir } from "@/capacitacion";
@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FlotaTab } from "@/components/modulos/despachos/flota";
+import { UsuariosTabla } from "./usuarios";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/config/brand";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -179,21 +180,12 @@ function SucursalDialog({ sucursal, onClose }: { sucursal?: Sucursal; onClose: (
 }
 
 function Usuarios({ editable }: { editable: boolean }) {
-  const db = useDb();
-  const [edit, setEdit] = React.useState<Usuario | "nuevo" | null>(null);
-  const columnas: Column<Usuario>[] = [
-    { key: "n", header: "Usuario", cell: (u) => <span className="flex items-center gap-2"><span className="flex size-7 items-center justify-center rounded-full bg-ink text-[10px] font-semibold text-white">{u.avatarIniciales}</span><span className="font-medium">{u.nombre}</span></span> },
-    { key: "e", header: "Email", cell: (u) => <span className="text-muted">{u.email}</span> },
-    { key: "r", header: "Rol", cell: (u) => <Badge variant={u.rol === "DUENO" ? "accent" : "neutral"}>{ROL_LABEL[u.rol]}</Badge> },
-    { key: "s", header: "Sucursal", cell: (u) => <span className="text-muted">{u.sucursalId ? db.sucursales.find((s) => s.id === u.sucursalId)?.nombre : "Todas"}</span> },
-    { key: "a", header: "Estado", cell: (u) => (u.activo ? <Badge variant="success">Activo</Badge> : <Badge>Inactivo</Badge>) },
-  ];
   const acciones = ["ver", "crear", "editar", "confirmar", "anular", "margenes"] as const;
   const etiqueta = { ver: "Ver", crear: "Crear", editar: "Editar", confirmar: "Confirmar", anular: "Anular", margenes: "Ver márgenes" };
   const roles: Rol[] = ["DUENO", "ADMINISTRACION", "VENTAS", "DEPOSITO"];
   return (
     <div className="space-y-4">
-      <DataTable rows={db.usuarios} columns={columnas} getRowId={(u) => u.id} onRowClick={editable ? setEdit : undefined} actions={editable ? <Button size="sm" onClick={() => setEdit("nuevo")}><Plus /> Nuevo usuario</Button> : <span className="text-[12px] text-muted">Sólo el Dueño administra usuarios</span>} />
+      <UsuariosTabla editable={editable} />
       <Card>
         <CardHeader><CardTitle>Matriz de permisos por rol</CardTitle><span className="text-[12px] text-muted">Informativa · se aplica en toda la app</span></CardHeader>
         <div className="overflow-x-auto">
@@ -229,30 +221,7 @@ function Usuarios({ editable }: { editable: boolean }) {
           </table>
         </div>
       </Card>
-      {edit && <UsuarioDialog usuario={edit === "nuevo" ? undefined : edit} onClose={() => setEdit(null)} />}
     </div>
-  );
-}
-
-function UsuarioDialog({ usuario, onClose }: { usuario?: Usuario; onClose: () => void }) {
-  const db = useDb();
-  const [f, setF] = React.useState({ nombre: usuario?.nombre ?? "", email: usuario?.email ?? "", rol: usuario?.rol ?? ("VENTAS" as Rol), sucursalId: usuario?.sucursalId ?? "suc_central", activo: usuario?.activo ?? true });
-  const iniciales = f.nombre.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        title={usuario ? `Editar ${usuario.nombre}` : "Nuevo usuario"}
-        footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarUsuario({ nombre: f.nombre, email: f.email, rol: f.rol, sucursalId: f.rol === "DUENO" || f.rol === "ADMINISTRACION" ? undefined : f.sucursalId, activo: f.activo, avatarIniciales: iniciales || "US" }, usuario?.id); ok(r, "Usuario guardado"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Nombre" required htmlFor="u-n"><Input id="u-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
-          <FormField label="Email" required htmlFor="u-e"><Input id="u-e" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></FormField>
-          <FormField label="Rol"><Select value={f.rol} onValueChange={(v) => setF({ ...f, rol: v as Rol })} options={(Object.keys(ROL_LABEL) as Rol[]).map((r) => ({ value: r, label: ROL_LABEL[r] }))} /></FormField>
-          {(f.rol === "VENTAS" || f.rol === "DEPOSITO") && <FormField label="Sucursal asignada"><Select value={f.sucursalId} onValueChange={(v) => setF({ ...f, sucursalId: v })} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} /></FormField>}
-          <label className="flex items-center gap-3 text-[13px] sm:col-span-2"><Switch checked={f.activo} onCheckedChange={(v) => setF({ ...f, activo: v })} /> Usuario activo</label>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -69,6 +69,7 @@ const P = {
   repAcopios: ["Reportes", "Acopios de clientes", "/reportes/deuda-mercaderia"],
   numeracion: ["Configuración", "Numeración", "/configuracion?tab=numeracion"],
   inicio: ["General", "Inicio", "/inicio"],
+  usuarios: ["Configuración", "Usuarios y roles", "/configuracion?tab=usuarios"],
 } as const satisfies Record<string, readonly [string, string, string]>;
 
 type ClaveP = keyof typeof P;
@@ -201,6 +202,16 @@ export const IMPACTOS: Record<string, Impacto> = {
       e("ccProveedores", "aparecen con saldo $0", "crea"),
     ],
     porQue: "Sin proveedor no hay compra: es de donde entra la mercadería y a quien se le debe.",
+  },
+  crearUsuario: {
+    titulo: "Crear usuario",
+    resumen: "Al crear el usuario se genera una contraseña temporal que se muestra una sola vez.",
+    efectos: [
+      e("usuarios", "aparece con estado “Contraseña temporal” hasta su primer ingreso", "crea"),
+      e("inicio", "al ingresar ve solo los módulos que permite su rol", "cambia"),
+      e("numeracion", "sus movimientos quedan firmados con su nombre en el historial", "cambia"),
+    ],
+    porQue: "Cada persona entra con su usuario: así el sistema sabe quién hizo cada cosa y qué puede ver.",
   },
   crearVehiculo: {
     titulo: "Crear vehículo",

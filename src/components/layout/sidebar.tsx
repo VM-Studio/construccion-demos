@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle } from "lucide-react";
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle, UserRound } from "lucide-react";
 import { useStore } from "@/store";
 import { useEmpresa, useUsuario } from "@/store/selectors";
 import { coincidencia } from "@/config/modulos";
@@ -11,6 +11,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useModuloActual, useModulosVisibles } from "./use-modulo";
+import { MiCuentaDialog } from "@/components/modulos/auth/mi-cuenta";
 import { useDb } from "@/lib/datos/almacen";
 
 function iniciales(nombre: string) {
@@ -39,6 +40,7 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
   const usuario = useUsuario();
   const empresa = useEmpresa();
   const logout = useStore((s) => s.logout);
+  const [miCuenta, setMiCuenta] = React.useState(false);
   const abrirTour = useStore((s) => s.abrirTour);
   const setModulo = useStore((s) => s.setModuloActivo);
   const sucursales = useDb().sucursales;
@@ -150,14 +152,17 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56">
               <DropdownMenuLabel>{usuario.email}</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
+              <DropdownMenuItem onSelect={() => setTimeout(() => setMiCuenta(true), 100)}>
+          <UserRound /> Mi cuenta
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
                 <PlayCircle />
                 Ver recorrido
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
-                  void logout().then(() => router.replace("/login"));
+                  void logout().then(() => (window.location.href = "/login"));
                 }}
               >
                 <LogOut />
@@ -165,6 +170,7 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {miCuenta && <MiCuentaDialog onClose={() => setMiCuenta(false)} />}
         </div>
       )}
     </div>

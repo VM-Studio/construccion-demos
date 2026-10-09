@@ -37,7 +37,7 @@ export const calcularAlertas = memo((db: EstadoInicial, sucursalId: string | nul
     const fis = new Map<string, number>();
     for (const s of db.stock) fis.set(s.productoId, (fis.get(s.productoId) ?? 0) + s.cantidadFisica);
     const bajo = db.productos.filter((p) => p.activo && estaBajoMinimo(p, fis.get(p.id) ?? 0)).length;
-    if (bajo) out.push({ id: "bajo-minimo", titulo: "Artículos bajo stock mínimo", detalle: "Reponer antes de quedar sin stock", cantidad: bajo, href: "/stock?filtro=bajo-minimo", severidad: "alta", icono: PackageX });
+    if (bajo) out.push({ id: "bajo-minimo", titulo: "Artículos bajo stock mínimo", detalle: "Reponer antes de quedar sin stock", cantidad: bajo, href: puede(usuario, "stock.ver") ? "/stock?filtro=bajo-minimo" : "/productos?filtro=bajo-minimo", severidad: "alta", icono: PackageX });
   }
 
   if (puede(usuario, "acopios.ver")) {

@@ -6,7 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Boxes, Building2, Factory, Package, Plus, Receipt, Search, ShoppingCart, Truck, User } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, useUsuario } from "@/store/selectors";
-import { MODULOS } from "@/config/modulos";
+import { MODULOS, puedeVerPagina } from "@/config/modulos";
 import { puede } from "@/domain/permisos";
 import { formatMoney } from "@/lib/format";
 
@@ -59,7 +59,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <Command.Group heading="Páginas" className={grupoCls}>
                 {MODULOS.flatMap((m) =>
                   m.paginas
-                    .filter((p) => puede(usuario, p.permiso))
+                    .filter((p) => puedeVerPagina(usuario, p))
                     .map((p) => (
                       <Command.Item key={m.id + p.id} value={`pagina ${p.nombre} ${m.nombre}`} onSelect={() => ir(p.href, m.id)} className={itemCls}>
                         <m.icono />

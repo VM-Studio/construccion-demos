@@ -7,7 +7,6 @@ import "server-only";
  */
 import { del, get } from "@vercel/blob";
 import type { PutBlobResult } from "@vercel/blob";
-import { revalidatePath } from "next/cache";
 import { puede, type Permiso } from "@/domain/permisos";
 import type { Adjunto, EntidadAdjunto, EstadoInicial, Usuario } from "@/domain/types";
 import { analizarPathname, esClaveValida, esIdValido, esMimePermitido, idAdjuntoDe, ENTIDADES_ADJUNTO, type DatosSubida } from "@/app/api/adjuntos/ruta-blob";
@@ -16,7 +15,6 @@ import { leerColeccion } from "../datos/mapeo";
 import { obtenerEstado } from "../estado";
 import { estadoPara } from "../lectura";
 import type { Contexto, ResultadoServidor } from "../motor";
-import { REGISTRO } from "./registro";
 import { eliminarAdjuntoMeta, registrarAdjunto } from "./remitos";
 import { ErrorPermiso } from "./base";
 
@@ -150,8 +148,7 @@ export async function completarSubida(blob: PutBlobResult, tokenPayload: string 
       { actor },
       { id: d.adjuntoId, entidadTipo: d.entidadTipo, entidadId: d.entidadId, categoria: d.categoria, nombre: d.nombre, tamanoBytes: d.tamanoBytes, tipoMime: d.tipoMime, blobKey: blob.pathname, url: blob.url },
     );
-    if (r.ok) for (const ruta of REGISTRO.registrarAdjunto.rutas) revalidatePath(ruta, "layout");
-    else if (!(await existeAdjunto(d.adjuntoId, blob.pathname))) console.warn("[adjuntos] webhook: no se pudo registrar", r.error);
+    if (!r.ok && !(await existeAdjunto(d.adjuntoId, blob.pathname))) console.warn("[adjuntos] webhook: no se pudo registrar", r.error);
   } catch (e) {
     console.warn("[adjuntos] webhook: no se pudo registrar", e);
   }
@@ -207,7 +204,6 @@ export async function borrarAdjunto(ctx: Contexto, id: string): Promise<Resultad
   }
   if (!r.ok) return r;
   if (a.blobKey) await del(a.blobKey).catch((e: unknown) => console.warn("[adjuntos] no se pudo borrar el blob", a.blobKey, e));
-  for (const ruta of REGISTRO.eliminarAdjuntoMeta.rutas) revalidatePath(ruta, "layout");
   return r;
 }
 

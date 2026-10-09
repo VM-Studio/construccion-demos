@@ -5,6 +5,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { obtenerActorLigero } from "@/server/auth/actor";
+import { COLECCIONES_CLIENTE, estadoPara, seleccionar, type ColeccionCliente } from "@/server/lectura";
+import { coleccionesDe } from "@/lib/sincronizacion/dependencias";
+import type { Usuario } from "@/domain/types";
+
+const DEL_CLIENTE = new Set<string>([...COLECCIONES_CLIENTE, "config", "numeradores"]);
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +25,16 @@ export async function GET(req: Request) {
     FROM (SELECT MAX("id") AS m FROM "Cambio") u
     LEFT JOIN LATERAL (SELECT * FROM "Cambio" WHERE "id" > ${desde} ORDER BY "id" LIMIT 200) c ON true`;
   const ultimo = String(filas[0]?.m ?? 0);
+  const cambios = filas.filter((f) => f.id !== null).map((f) => ({ id: String(f.id), tipos: f.tipos ?? [], entidadIds: f.entidadIds ?? [], usuarioId: f.usuarioId, resumen: f.resumen, href: f.href }));
+  // Con ?datos=1 y cambios nuevos, se mandan en la misma respuesta las colecciones afectadas (ya
+  // filtradas por rol): el navegador se actualiza en un solo viaje en lugar de dos.
+  let datos: Record<string, unknown> | undefined;
+  if (desde > BigInt(0) && cambios.length && new URL(req.url).searchParams.get("datos") === "1") {
+    const cols = coleccionesDe(cambios.flatMap((c) => c.tipos)).filter((c) => DEL_CLIENTE.has(c)) as ColeccionCliente[];
+    if (cols.length) datos = seleccionar((await estadoPara(actor as Usuario)).db, cols);
+  }
   return NextResponse.json(
-    { ultimo, cambios: filas.filter((f) => f.id !== null).map((f) => ({ id: String(f.id), tipos: f.tipos ?? [], entidadIds: f.entidadIds ?? [], usuarioId: f.usuarioId, resumen: f.resumen, href: f.href })) },
+    { ultimo, cambios, ...(datos ? { datos } : {}) },
     { headers: { "Cache-Control": "no-store", "Server-Timing": `db;dur=${(performance.now() - t0).toFixed(1)}` } },
   );
 }

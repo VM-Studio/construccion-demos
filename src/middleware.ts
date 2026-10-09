@@ -6,7 +6,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
-import { permisosDeRuta } from "@/config/modulos";
+import { ademasDeRuta, permisosDeRuta } from "@/config/modulos";
 import { puede } from "@/domain/permisos";
 
 export const config = {
@@ -54,7 +54,17 @@ export default auth((req) => {
 
   if (!api) {
     const permisos = permisosDeRuta(pathname);
-    if (permisos.length && !permisos.some((p) => puede({ rol: u.rol, activo: true }, p))) return NextResponse.rewrite(new URL("/acceso-denegado", req.url), { status: 403 });
+    const quien = { rol: u.rol, activo: true };
+    const sinPermiso = (permisos.length && !permisos.some((p) => puede(quien, p))) || ademasDeRuta(pathname).some((p) => !puede(quien, p));
+    if (sinPermiso) {
+      // Precargas de links (prefetch) a páginas sin permiso: sin contenido, sin error en la consola.
+      // Pedidos internos del router (precargas de links): Next le quita al middleware los headers
+      // RSC y el parámetro _rsc, pero deja `next-url` y no es una carga de documento. Se responde
+      // vacío (sin error en consola); si el usuario hace clic, el router navega completo y ve el 403.
+      const esPrecarga = !!req.headers.get("next-url") && req.headers.get("sec-fetch-dest") !== "document";
+      if (esPrecarga) return new NextResponse(null, { status: 204 });
+      return NextResponse.rewrite(new URL("/acceso-denegado", req.url), { status: 403 });
+    }
   }
   return NextResponse.next();
 });

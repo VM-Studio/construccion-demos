@@ -1,5 +1,5 @@
 import { BarChart3, Boxes, Factory, FileText, LayoutDashboard, PackagePlus, Settings, ShoppingCart, Truck, Users, type LucideIcon } from "lucide-react";
-import type { Permiso } from "@/domain/permisos";
+import { puede, type Permiso } from "@/domain/permisos";
 import { REPORTES } from "@/components/modulos/reportes/catalogo";
 
 export interface PaginaModulo {
@@ -7,6 +7,8 @@ export interface PaginaModulo {
   nombre: string;
   href: string;
   permiso: Permiso;
+  /** Permiso que además hace falta (ej. los reportes piden "ver reportes" y el suyo propio). */
+  ademas?: Permiso;
 }
 
 export interface Modulo {
@@ -17,7 +19,12 @@ export interface Modulo {
   paginas: PaginaModulo[];
 }
 
-const p = (id: string, nombre: string, href: string, permiso: Permiso): PaginaModulo => ({ id, nombre, href, permiso });
+const p = (id: string, nombre: string, href: string, permiso: Permiso, ademas?: Permiso): PaginaModulo => ({ id, nombre, href, permiso, ...(ademas ? { ademas } : {}) });
+
+/** ¿El usuario puede ver la página? (su permiso y, si lo tiene, el adicional). */
+export function puedeVerPagina(usuario: Parameters<typeof puede>[0], pag: Pick<PaginaModulo, "permiso" | "ademas">): boolean {
+  return puede(usuario, pag.permiso) && (!pag.ademas || puede(usuario, pag.ademas));
+}
 
 /** Definición única de módulos y sus páginas (launcher de /inicio, barra lateral, buscador y breadcrumb). */
 export const MODULOS: Modulo[] = [
@@ -125,7 +132,7 @@ export const MODULOS: Modulo[] = [
     nombre: "Reportes",
     icono: BarChart3,
     descripcion: "Ventas, rentabilidad, acopios, stock y más",
-    paginas: [p("todos-reportes", "Todos los reportes", "/reportes", "reportes.ver"), ...REPORTES.map((r) => p(`rep-${r.slug}`, r.titulo, `/reportes/${r.slug}`, r.permiso))],
+    paginas: [p("todos-reportes", "Todos los reportes", "/reportes", "reportes.ver"), ...REPORTES.map((r) => p(`rep-${r.slug}`, r.titulo, `/reportes/${r.slug}`, r.permiso, "reportes.ver"))],
   },
   {
     id: "configuracion",
@@ -214,4 +221,20 @@ export function permisosDeRuta(pathname: string): Permiso[] {
       } else if (path.length === largo && !permisos.includes(pag.permiso)) permisos.push(pag.permiso);
     }
   return permisos;
+}
+
+/** Permisos adicionales que exige la ruta (todos obligatorios), según la misma página de MODULOS. */
+export function ademasDeRuta(pathname: string): Permiso[] {
+  let largo = -1;
+  let ademas: Permiso[] = [];
+  for (const m of MODULOS)
+    for (const pag of m.paginas) {
+      const path = pag.href.split("?")[0];
+      if (pathname !== path && !pathname.startsWith(`${path}/`)) continue;
+      if (path.length > largo) {
+        largo = path.length;
+        ademas = pag.ademas ? [pag.ademas] : [];
+      }
+    }
+  return ademas;
 }

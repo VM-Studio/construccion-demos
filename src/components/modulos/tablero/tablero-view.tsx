@@ -442,6 +442,7 @@ function ComprasPendientes() {
 }
 
 function StockPorRubro() {
+  const verStock = usePuede("stock.ver");
   const db = useDb();
   const posiciones = usePosiciones();
   // ARS/USD: solo presentación, al dólar vigente.
@@ -507,7 +508,7 @@ function StockPorRubro() {
                 </td>
                 <td className="px-4 text-right">
                   {f.bajo ? (
-                    <Link href="/stock?filtro=bajo-minimo"><Badge variant="danger"><PackageX className="size-3" />{f.bajo}</Badge></Link>
+                    <Link href={verStock ? "/stock?filtro=bajo-minimo" : "/productos?filtro=bajo-minimo"}><Badge variant="danger"><PackageX className="size-3" />{f.bajo}</Badge></Link>
                   ) : (
                     <span className="text-disabled">—</span>
                   )}

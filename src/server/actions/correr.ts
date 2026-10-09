@@ -22,14 +22,16 @@ export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[
       console.warn(`[accion] ${nombre}: entrada inválida`, entrada.error.issues.slice(0, 3));
       return { ok: false, error: "Los datos enviados no son válidos.", codigo: "ENTRADA" };
     }
+    const tActor = Date.now();
     const actor = await exigirActor();
+    const msActor = Date.now() - tActor;
     usuarioEnSentry(actor.id);
     const req = await datosRequest();
     let fn = servicios.get(nombre);
     if (!fn) servicios.set(nombre, (fn = servicio(nombre) as ReturnType<typeof servicio>));
     const t0 = Date.now();
     const r = await (fn as (...a: unknown[]) => ReturnType<ReturnType<typeof servicio>>)({ actor, ...req }, ...(entrada.data as unknown[]));
-    registrarDuracion(nombre, Date.now() - t0);
+    registrarDuracion(nombre, Date.now() - t0, msActor);
     // Sin revalidatePath: el navegador refresca solo lo que cambió (resultado propio + sincronización)
     // y así la respuesta de la acción no re-renderiza toda la página con el estado completo.
     return r as never;

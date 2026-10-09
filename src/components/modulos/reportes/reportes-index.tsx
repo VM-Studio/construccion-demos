@@ -14,7 +14,7 @@ import { REPORTES } from "./catalogo";
 export function ReportesIndex() {
   const usuario = useUsuario();
   const db = useDb();
-  const visibles = REPORTES.filter((r) => puede(usuario, r.permiso));
+  const visibles = REPORTES.filter((r) => puede(usuario, r.permiso) && puede(usuario, "reportes.ver"));
   return (
     <>
       <PageHeader titulo="Reportes" descripcion="Todos calculados en vivo con los datos del sistema. Cada uno se exporta a CSV y se imprime o guarda como PDF." />

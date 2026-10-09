@@ -3,14 +3,13 @@ import * as React from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useStore } from "@/store";
 import { useUsuario } from "@/store/selectors";
-import { MODULOS, moduloDeRuta, paginaActiva, type Modulo, type PaginaModulo } from "@/config/modulos";
-import { puede } from "@/domain/permisos";
+import { MODULOS, moduloDeRuta, paginaActiva, puedeVerPagina, type Modulo, type PaginaModulo } from "@/config/modulos";
 
 /** Módulos visibles para el usuario (con sus páginas filtradas por permiso). */
 export function useModulosVisibles(): Modulo[] {
   const usuario = useUsuario();
   return React.useMemo(
-    () => MODULOS.map((m) => ({ ...m, paginas: m.paginas.filter((p) => puede(usuario, p.permiso)) })).filter((m) => m.paginas.length > 0),
+    () => MODULOS.map((m) => ({ ...m, paginas: m.paginas.filter((p) => puedeVerPagina(usuario, p)) })).filter((m) => m.paginas.length > 0),
     [usuario],
   );
 }

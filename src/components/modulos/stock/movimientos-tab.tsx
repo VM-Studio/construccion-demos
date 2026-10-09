@@ -14,7 +14,7 @@ import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatMoney, formatNumber, unidadCorta } from "@/lib/format";
-import { periodoDesdePreset, enPeriodo, type Periodo } from "@/lib/periodos";
+import { periodoDesdePreset, type Periodo } from "@/lib/periodos";
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { aCSV, cn, descargarArchivo } from "@/lib/utils";
 

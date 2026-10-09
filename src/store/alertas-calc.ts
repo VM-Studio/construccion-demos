@@ -5,7 +5,7 @@ import type { EstadoInicial, Usuario } from "@/domain/types";
 import { estaBajoMinimo, lineasPendientes } from "@/domain/stock";
 import { estaVencido, saldoCliente } from "@/domain/cuentasCorrientes";
 import { puede } from "@/domain/permisos";
-import { memo, hoyKey, acopiosResumenDe } from "./calculos";
+import { memo, acopiosResumenDe } from "./calculos";
 
 export interface Alerta {
   id: string;

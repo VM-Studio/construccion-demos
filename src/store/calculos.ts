@@ -8,8 +8,6 @@ import { diasParaVencer, estadoDerivado, montoPendienteEntrega, pagadoAcopio, re
 import { deudaConProveedor, pendienteRetirar, retiradoAcopioProveedor, saldoDisponible as saldoACP } from "@/domain/acopiosProveedor";
 import { estaVencido, esComprobanteDeuda } from "@/domain/cuentasCorrientes";
 import { estadoStock, lineasPendientes, reservadoPorLinea, type EstadoStock } from "@/domain/stock";
-import { puede, type Permiso } from "@/domain/permisos";
-import { BRAND } from "@/config/brand";
 
 // ───────────────────────── Memoización ─────────────────────────
 

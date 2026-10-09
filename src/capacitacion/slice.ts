@@ -2,7 +2,6 @@
  * Estado del modo capacitación dentro del store. Vive en su propia clave (`capacitacion`)
  * para poder quitarlo sin tocar el resto: el historial NO se persiste.
  */
-import { BRAND } from "@/config/brand";
 import { puede } from "@/domain/permisos";
 import type { Usuario } from "@/domain/types";
 
@@ -75,7 +74,8 @@ export interface EstadoCapacitacion {
 }
 
 export const CAPACITACION_INICIAL: EstadoCapacitacion = {
-  modo: BRAND.esDemo,
+  // Activo por defecto (los dueños lo apagan desde Configuración); poner `false` para ocultarlo en todo el sistema.
+  modo: true,
   avisado: false,
   colapsados: {},
   bannersCerrados: {},

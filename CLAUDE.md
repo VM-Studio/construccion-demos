@@ -1,6 +1,6 @@
 # construccion-demos · Aceros RNF
 
-Sistema de gestión a medida para **Aceros RNF** (dueño: **Felipe**). DEMO comercial de VM Studio: debe verse como producto terminado.
+Sistema de gestión a medida para **Aceros RNF** (dueños: **Felipe** y socios). Sistema REAL de VM Studio: varios usuarios trabajando sobre la misma base, en vivo. Plan de la versión real: `docs/plan-version-real.md`.
 
 ## Negocio
 - Dos **unidades de negocio**: **Corralón** (materiales de construcción: áridos, hierros, ladrillos, viguetas, cementos, impermeabilización, construcción en seco) y **Ferretería** (herramientas, fijaciones, pinturas, electricidad, sanitarios, seguridad). `Producto` y `Rubro` llevan `unidadNegocioId`; el header tiene un selector global de unidad (Todas / Ferretería / Corralón).
@@ -27,17 +27,23 @@ Espejo del de clientes: Aceros RNF acopia con proveedores por monto o por cantid
 - Rentabilidad = Σ (precio − costo snapshot de la línea) × cantidad. El costo snapshot nunca se recalcula.
 
 ### Adjuntos
-Los **blobs viven en IndexedDB** (`idb-keyval`, helper `src/lib/adjuntos.ts`: `guardarAdjunto`, `obtenerUrl`, `eliminarAdjunto`); en el store (localStorage) solo la metadata `Adjunto`. El remito firmado (categoría REMITO_FIRMADO) setea `firmadoAdjuntoId`. Los 3 remitos firmados de ejemplo del seed se generan en runtime con jsPDF.
+Los archivos viven en **Vercel Blob privado** (`aceros-rnf/{entidadTipo}/{entidadId}/{clave}-{nombre}`); la metadata `Adjunto` en la base. Helper `src/lib/adjuntos.ts` (`guardarAdjunto`, `obtenerUrl`, `descargarAdjunto`, `eliminarAdjunto`). El remito firmado (categoría REMITO_FIRMADO) setea `firmadoAdjuntoId`.
 
 ## Navegación
 Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas de módulos y sus páginas; dentro de una página, barra lateral con las páginas del módulo y "← Módulos". Definición única en `src/config/modulos.ts`.
 
 ## Stack y reglas
-- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Zustand con persist (clave `cd-demo-v2`), Recharts, Lucide, pnpm. jsPDF + autotable y exceljs para descargas (dynamic import).
-- SIN base de datos. `src/store/*` con transacciones (`Tx`, `ejecutar`); `src/data/repositories/*` lista para Prisma. Las pantallas nunca tocan localStorage directo.
-- Toda regla de negocio vive en `src/domain/` como funciones puras. Los componentes solo renderizan y llaman acciones del store.
-- `pnpm seed:check` (base vacía + datos de ejemplo: kardex, saldos, acopios, Ramos = $ 844,85) y `pnpm flujos:check` (flujos completos sobre el store, incluido el recorrido desde el sistema vacío).
-
+- Next.js 15 App Router, TS strict, Tailwind v4 (tokens en globals.css), Recharts, Lucide, pnpm. jsPDF + autotable y exceljs para descargas (dynamic import).
+- **Base real**: PostgreSQL en Neon (us-east-1, misma región que las funciones) con Prisma 6 + `@prisma/adapter-neon`. Esquema en `prisma/schema.prisma` con los MISMOS nombres de campo que `src/domain/types.ts`; el mapeo dominio ↔ base es genérico (`src/server/datos/mapeo.ts`, por DMMF). Ramas de Neon: `main` = producción (solo estructura, sin datos de ejemplo), `desarrollo` = `.env.local` / Vercel Development.
+- **Decimal en la base, number solo en presentación** (`src/lib/decimal.ts`). Dinero 14,2; cantidades 14,3; costos unitarios 14,4. Nunca Float.
+- **Nada de lógica de negocio en el cliente.** Toda regla vive en `src/domain/` (funciones puras) y las acciones de escritura en `src/store/negocio.ts` (slices), que corren SOLO en el servidor: `src/server/actions/*` ("use server", zod en `src/server/esquemas/*`, actor de `src/server/auth/actor.ts`) → `src/server/servicios/*` (permiso, bloqueos) → `src/server/motor.ts` (estado leído de la base, acción en memoria, transacción Serializable con lock global, verificación de versión, FOR UPDATE de stock/acopio, persistencia de solo lo que cambió, numeración optimista en `Contador`, Auditoria con efectos y fila `Cambio`; reintentos 50/150/400 ms).
+- **Nada de Prisma fuera de `src/server` y `src/data`.** Los componentes leen con `useDb()` / `obtenerDb()` (`src/lib/datos/almacen.ts`, espejo de solo lectura de `/api/datos`, ya filtrado por rol en `src/server/lectura.ts`) y escriben con `await useStore.getState().<accion>(…)` (proxy a la server action). Kardex y auditoría se leen paginados (`useMovimientos`, `useAuditoria`).
+- **Toda escritura publica un Cambio.** `useSincronizacion()` (`src/lib/datos/proveedor.tsx`) consulta `/api/cambios` cada 3 s (2 s en Despachos, 15 s en segundo plano) y refresca solo las colecciones afectadas (`src/lib/sincronizacion/dependencias.ts`); avisa lo que hicieron otros usuarios. El servidor cachea el estado por versión (= MAX(Cambio.id)) y lo actualiza incrementalmente (`src/server/estado.ts`).
+- **Todo dólar sale de `obtenerVigente()`** (`src/server/servicios/tipoCambio.ts`: BNA divisa vendedor, respaldo dolarapi, crons en `vercel.json`). El motor inyecta `config.tipoCambioVigente`; los documentos guardan importes en pesos y el snapshot `tipoCambioAplicado`.
+- Zustand (`src/store/index.ts`) es SOLO interfaz (sesión visible, sucursal/unidad activas, sidebar, favoritos, modo capacitación); persiste preferencias, nunca datos de negocio.
+- Adjuntos en Vercel Blob privado (`src/lib/adjuntos.ts`, `src/app/api/adjuntos/**`): subida directa con token firmado, ver/borrar con sesión y permiso.
+- Sesión: STUB con cookie `actor-demo` hasta R2 (Auth.js). Ninguna acción acepta rol ni usuarioId del cliente.
+- Scripts: `pnpm db:migrate`, `db:seed` (estructura, idempotente), `db:seed:ejemplo` (solo rama desarrollo), `db:check` (consistencia de la base; `-- --historicos` con datos de ejemplo), `db:test:mapeo`, `db:test:concurrencia`, `db:studio`; `pnpm seed:check` y `pnpm flujos:check` (reglas del dominio en memoria). `vercel-build` = migrate deploy + seed + build.
 - Dinero en ARS con `formatMoney`. Fechas con date-fns y `formatDate`. Nunca `toLocaleString` suelto.
 - UI: primitivas de `src/components/ui`. Solo tokens de color, un acento ámbar. Densidad alta. Nada de colores llamativos.
 - Español rioplatense en toda la UI. Sin anglicismos innecesarios. Textos de empresa desde `BRAND` / configuración.
@@ -46,7 +52,7 @@ Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas d
 - Commits en español, imperativo, cortos.
 
 ## Sistema vacío y carga inicial
-- El store arranca con `seedBase()` (solo estructura: empresa, 2 sucursales/depósitos con posiciones, unidades de negocio y rubros, 3 listas sin precios — Mayorista 22 %, Corralón 28 %, Público 45 % —, motivos de ajuste, 4 usuarios, numeración en 0). `seedEjemplo()` (todo el ejemplo, Ramos incluido) se construye encima y se carga a pedido con `cargarDatosEjemplo()` desde Configuración → Datos del demo. `resetearDemo()` vuelve a la base.
+- La base de producción arranca con la estructura de `seedBase()` (empresa, 2 sucursales/depósitos con posiciones, unidades de negocio y rubros, 3 listas sin precios — Mayorista 22 %, Corralón 28 %, Público 45 % —, motivos de ajuste, configuración, numeración en 0) SIN usuarios: el primero que entra se registra como dueño. `seedEjemplo()` (todo el ejemplo, Ramos incluido) solo se carga en la rama de desarrollo con `pnpm db:seed:ejemplo`.
 - Prerrequisitos por pantalla en `src/domain/prerequisitos.ts` (`prerequisitos(pagina, db)`); textos de estados vacíos en `src/config/vacios.ts` (`<VacioGuiado pagina>`); guía de carga en `src/domain/cargaInicial.ts`.
 - Importación CSV (papaparse) en `src/domain/importacion.ts` + `ImportarCsvDialog`; plantillas y ejemplos en `public/plantillas/`.
 - Alta rápida: `SelectorCliente/Proveedor/Vehiculo/Chofer` (`src/components/shared/alta-rapida.tsx`) y "Crear artículo nuevo…" en `ProductoPicker`.
@@ -56,5 +62,5 @@ Por **módulos** estilo launcher (se implementa en M2): `/inicio` con tarjetas d
 - Todo vive en esa carpeta y detrás de un solo interruptor (`capacitacion.modo` en el store, persistido; default `true` en demo; solo DUENO y ADMINISTRACION lo cambian desde el ícono `GraduationCap` del header o Configuración → Datos del demo).
 - `impactos.ts` es el ÚNICO lugar con textos: `IMPACTOS` (qué cambia con cada acción), `CAMPOS` (una línea por valor de campo) y `PAGINAS` (de qué se alimenta cada pantalla y a qué alimenta).
 - Fuera de la carpeta solo se usan, desde `@/capacitacion`: `<Impacto accion>` (debajo del botón primario o arriba del footer del dialog), `<ImpactoCampo campo>`, `<BannerPagina>` (ya está en `PageHeader`), los interruptores y `medir(accionId, contexto, fn)` alrededor de cada acción que escribe en el store. Con el modo apagado los componentes devuelven `null` y `medir()` solo ejecuta `fn()`.
-- `medir.ts` es genérico: foto de métricas antes/después (stock por artículo × depósito, costos, cuentas de clientes y proveedores, acopios, KPIs del tablero, documentos y altas) y muestra el aviso "Listo · Esto cambió:" (`AvisoCambios.tsx`). El historial de la sesión (máx. 50, no persistido) se ve en el panel "¿Qué pasó?" (`PanelQuePaso.tsx`).
+- Los efectos reales se miden en el SERVIDOR dentro de cada transacción (`efectos.ts`: foto de métricas antes/después — stock por artículo × depósito, costos, cuentas, acopios, KPIs, documentos y altas) y se guardan en `Auditoria.efectos`; `medir.ts` en el cliente solo muestra el aviso "Listo · Esto cambió:" (`AvisoCambios.tsx`). El panel "¿Qué pasó?" (`PanelQuePaso.tsx`) lee la auditoría del servidor y muestra lo que hicieron todos los usuarios.
 - **Para quitar el modo capacitación:** poner default `false` en `CAPACITACION_INICIAL.modo` (`src/capacitacion/slice.ts`) y se oculta todo; o borrar `src/capacitacion/`, los `<Impacto>`/`<ImpactoCampo>`/`<BannerPagina>`/interruptores que quedan vacíos, reemplazar cada `await medir(id, ctx, fn)` por `fn()` y sacar la clave `capacitacion` del store (`src/store/index.ts`, `src/store/types.ts`).

@@ -5,7 +5,6 @@ import { Command } from "cmdk";
 import { Plus, Search } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { useStore } from "@/store";
 import { useDb, usePosiciones, posicionEn, usePuede, useUnidadNegocio } from "@/store/selectors";
 import { AltaRapidaSheet } from "./alta-rapida";
 import { obtenerPrecio } from "@/domain/precios";

@@ -23,7 +23,10 @@ async function main() {
   const lucas = db.usuarios.find((u) => u.rol === "VENTAS")!;
   const hoy = new Date().toISOString();
   const pid = "prod_50104";
-  const pos = posicionesDe(db).get(pid)!.porDeposito["dep_central"];
+  // La prueba se autoabastece: repone stock para tener disponible sobre el cual competir.
+  const aj = await ejecutarAccion({ actor: felipe }, "crearAjuste", [{ depositoId: "dep_central", items: [{ productoId: pid, cantidad: 60, signo: 1, motivo: "SOBRANTE" }], observacion: "Prueba de concurrencia" }], { bloqueos: { stock: { productoIds: [pid], depositoIds: ["dep_central"] } } });
+  check("Reposición para la prueba", aj.ok, aj.ok ? "+60 bolsas" : aj.error);
+  const pos = posicionesDe((await obtenerEstado()).db).get(pid)!.porDeposito["dep_central"];
   console.log(`Holcim en Casa Central: físico ${pos.fisico}, pendiente ${pos.pendiente}, reservado ${pos.reservado}, disponible ${pos.disponible}`);
 
   // 1) Dos NP simultáneas con 1 bolsa cada una

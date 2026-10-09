@@ -3,12 +3,7 @@
 import * as React from "react";
 import { useStore } from "./index";
 import { useDb } from "@/lib/datos/almacen";
-import type { Acopio, AcopioProveedor, Comprobante, EstadoInicial, NotaPedido, Producto } from "@/domain/types";
-import { calcularRentabilidadPedido, type Rentabilidad } from "@/domain/ventas";
-import { diasParaVencer, estadoDerivado, montoPendienteEntrega, pagadoAcopio, retiradoAcopio, saldoDisponible } from "@/domain/acopios";
-import { deudaConProveedor, pendienteRetirar, retiradoAcopioProveedor, saldoDisponible as saldoACP } from "@/domain/acopiosProveedor";
-import { estaVencido, esComprobanteDeuda } from "@/domain/cuentasCorrientes";
-import { estadoStock, lineasPendientes, reservadoPorLinea, type EstadoStock } from "@/domain/stock";
+import type { EstadoInicial } from "@/domain/types";
 import { puede, type Permiso } from "@/domain/permisos";
 import { BRAND } from "@/config/brand";
 import { acopiosProveedorResumenDe, acopiosResumenDe, hoyKey, indice, posicionesDe, selectPendientes, selectRentabilidadNP, selectSaldosClientes, selectSaldosProveedores } from "./calculos";

@@ -1,4 +1,4 @@
-import type { Configuracion, DatosEmpresa, EstadoInicial, Sucursal, UnidadNegocio, Usuario } from "@/domain/types";
+import type { Configuracion, DatosEmpresa, Sucursal, UnidadNegocio, Usuario } from "@/domain/types";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
 import type { GetFn, SetFn } from "../types";

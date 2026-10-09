@@ -4,7 +4,8 @@ export const BRAND = {
   agencia: "VM Studio",
   moneda: "ARS",
   locale: "es-AR",
-  esDemo: true,
+  /** El sistema real no muestra el banner de demostración. */
+  esDemo: false,
   razonSocial: "Aceros RNF S.A.",
   cuit: "30-71589346-2",
   direccion: "Av. Gral. San Martín 4520, Florida Oeste, Buenos Aires",

@@ -622,8 +622,8 @@ function DatosDemo() {
           <InterruptorCapacitacionConfig />
           <div className="border-t border-border pt-3">
             <span className="block font-medium text-ink">Exportar respaldo</span>
-            <span className="mb-2 block text-[12px] text-muted">Descarga un JSON con todos los datos de negocio (incluidos movimientos y auditoría).</span>
-            <Button variant="secondary" size="sm" disabled={!esDueno} onClick={() => { window.location.href = "/api/respaldo"; }}><Download /> Exportar respaldo (JSON)</Button>
+            <span className="mb-2 block text-[12px] text-muted">Descarga un ZIP con una planilla CSV por tabla y un JSON con todos los datos (incluidos movimientos y auditoría). Queda registrado en la auditoría.</span>
+            <Button variant="secondary" size="sm" disabled={!esDueno} onClick={() => { window.location.href = "/api/respaldo"; }}><Download /> Exportar respaldo (ZIP)</Button>
           </div>
         </CardContent>
       </Card>

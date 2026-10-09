@@ -55,6 +55,8 @@ pg_restore --no-owner --no-privileges --clean --if-exists --single-transaction \
 
 ## Pruebas de restauración
 
+Se corren con el workflow **"Prueba de restauración"** (GitHub → Actions → Run workflow): baja el último backup de R2, lo restaura en el branch `test` y compara las filas de cada tabla con el dump. Hacerlo **cada 3 meses** y anotarlo acá.
+
 | Fecha | Backup | Destino | Resultado |
 |---|---|---|---|
-| _pendiente: primera prueba al configurar R2_ | | branch `test` | |
+| 9/10/2026 | `aceros-rnf-2026-10-09.dump.gz` (27 KB, base recién entregada: solo estructura) | branch `test` | ✔ 60 tablas, 0 diferencias de filas contra el dump |

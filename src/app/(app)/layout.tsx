@@ -16,7 +16,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const actor = await obtenerActor();
   if (!actor) redirect("/login");
   let inicial: DatosIniciales | null = null;
-  if ((await headers()).get("rsc") !== "1") {
+  const h = await headers();
+  // Solo en la carga completa: ni en navegaciones internas (RSC) ni en respuestas de server actions.
+  if (h.get("rsc") !== "1" && !h.get("next-action")) {
     const { version, db } = await estadoPara(actor);
     inicial = { version: String(version), actorId: actor.id, datos: seleccionar(db, [...COLECCIONES_CLIENTE, "config", "numeradores"]) };
   }

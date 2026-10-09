@@ -1,12 +1,11 @@
 import "server-only";
 /**
  * Ejecutor común de las server actions: valida la entrada con zod, obtiene el actor de la
- * sesión, llama al servicio y revalida las rutas afectadas. Nunca devuelve mensajes internos.
+ * sesión y llama al servicio. Nunca devuelve mensajes internos.
  */
-import { revalidatePath } from "next/cache";
 import type { AccionesNegocio } from "@/store/negocio";
 import { ESQUEMAS } from "../esquemas";
-import { REGISTRO, type NombreExpuesto } from "../servicios/registro";
+import type { NombreExpuesto } from "../servicios/registro";
 import { ErrorPermiso, servicio } from "../servicios/base";
 import { datosRequest, ErrorSesion, exigirActor } from "../auth/actor";
 import type { Diferencia } from "@/capacitacion/slice";
@@ -31,7 +30,8 @@ export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[
     const t0 = Date.now();
     const r = await (fn as (...a: unknown[]) => ReturnType<ReturnType<typeof servicio>>)({ actor, ...req }, ...(entrada.data as unknown[]));
     registrarDuracion(nombre, Date.now() - t0);
-    if (r.ok) for (const ruta of REGISTRO[nombre].rutas) revalidatePath(ruta, "layout");
+    // Sin revalidatePath: el navegador refresca solo lo que cambió (resultado propio + sincronización)
+    // y así la respuesta de la acción no re-renderiza toda la página con el estado completo.
     return r as never;
   } catch (e) {
     if (e instanceof ErrorPermiso || e instanceof ErrorSesion) return { ok: false, error: e.message, codigo: e.codigo };

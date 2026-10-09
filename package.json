@@ -20,7 +20,10 @@
     "db:test:concurrencia": "tsx --env-file-if-exists=.env.local scripts/concurrencia-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integracion": "vitest run --config vitest.integracion.config.ts"
+    "test:integracion": "vitest run --config vitest.integracion.config.ts",
+    "db:seed:carga": "tsx scripts/seed-carga.ts",
+    "db:rendimiento": "tsx scripts/rendimiento.ts",
+    "db:rendimiento:estado": "tsx scripts/rendimiento-estado.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

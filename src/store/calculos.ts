@@ -229,17 +229,29 @@ export interface AcopioResumen {
 export const selectAcopiosResumen = memo(
   (acopios: Acopio[], notas: NotaPedido[], devoluciones: EstadoInicial["devoluciones"], ajustes: EstadoInicial["ajustesAcopio"], comprobantes: Comprobante[], hoyK: string): AcopioResumen[] => {
     const hoy = new Date(hoyK);
+    // Índices por acopio: cada acopio trabaja solo con sus documentos (lineal, no acopios × NP).
+    const agrupar = <T extends { acopioId?: string | null }>(xs: T[]) => {
+      const m = new Map<string, T[]>();
+      for (const x of xs) if (x.acopioId) (m.get(x.acopioId) ?? m.set(x.acopioId, []).get(x.acopioId)!).push(x);
+      return m;
+    };
+    const npPor = agrupar(notas);
+    const dpPor = agrupar(devoluciones);
+    const acdPor = agrupar(ajustes);
+    const compPorId = new Map(comprobantes.map((c) => [c.id, c]));
     return acopios.map((a) => {
-      const saldo = saldoDisponible(a, notas, devoluciones, ajustes);
-      const retirado = retiradoAcopio(a.id, notas, devoluciones);
-      const pagado = pagadoAcopio(a, comprobantes);
+      const np = npPor.get(a.id) ?? [];
+      const dp = dpPor.get(a.id) ?? [];
+      const saldo = saldoDisponible(a, np, dp, acdPor.get(a.id) ?? []);
+      const retirado = retiradoAcopio(a.id, np, dp);
+      const pagado = pagadoAcopio(a, a.comprobanteIds.map((id) => compPorId.get(id)).filter((c): c is Comprobante => !!c));
       const total = a.importeConIIBB || a.importe;
       return {
         acopio: a,
         estado: estadoDerivado(a, hoy, saldo),
         saldo,
         retirado,
-        pendienteEntrega: montoPendienteEntrega(a.id, notas),
+        pendienteEntrega: montoPendienteEntrega(a.id, np),
         pagado,
         retiradoPct: a.importe ? Math.min(1, Math.max(0, retirado / a.importe)) : 0,
         pagadoPct: total ? Math.min(1, pagado / total) : 0,

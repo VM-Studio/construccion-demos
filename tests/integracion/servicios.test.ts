@@ -67,7 +67,7 @@ describe("Numeración concurrente", () => {
     const nums = nps.map((n) => Number(n.numero!.split("-").at(-1))).sort((a, b) => a - b);
     expect(new Set(nums).size).toBe(20);
     expect(nums.at(-1)! - nums[0]).toBe(19);
-  });
+  }, 300_000); // desde fuera de us-east cada transacción suma latencia
 });
 
 describe("Sobreventa concurrente", () => {
@@ -159,5 +159,34 @@ describe("Registro del primer dueño", () => {
       await prisma.usuario.createMany({ data: usuarios });
       invalidarCache();
     }
+  });
+});
+
+describe("Estado en memoria de cada instancia", () => {
+  it("la actualización incremental por filas da lo mismo que leer toda la base", async () => {
+    const g = globalThis as unknown as { __estadoAceros?: { version: bigint; db: unknown } };
+    const viejo = await obtenerEstado(); // "otra instancia" que quedó en esta versión
+    // Escrituras desde "esta" instancia: alta de cliente, venta (NP + stock) y remito hecho.
+    const { guardarCliente } = await import("@/server/servicios/clientes");
+    const sello = Date.now().toString(36);
+    const c = await guardarCliente(dueno, { codigo: "", razonSocial: `Incremental ${sello}`, tipo: "PARTICULAR", cuit: "", condicionIVA: "CF", circuitoHabitual: 1, email: "", telefono: "", direccion: "", localidad: "", listaPreciosId: "lst_pub", condicionPago: "CONTADO", limiteCredito: 0, sucursalPreferidaId: "suc_central", activo: true } as never);
+    expect(c.ok, c.ok ? "" : c.error).toBe(true);
+    await reponer(5);
+    const np = await crearNotaPedido(dueno, venta(2, { modalidadEntrega: "ENVIO" }));
+    expect(np.ok).toBe(true);
+    const rem = await generarRemito(dueno, idDe(np.ok && np.data), { estado: "PICKING" });
+    expect(rem.ok).toBe(true);
+    await marcarRemitoHecho(dueno, idDe(rem.ok && rem.data));
+    // La "otra instancia" se pone al día en forma incremental…
+    g.__estadoAceros = viejo;
+    const incremental = (await obtenerEstado()).db;
+    // …y tiene que coincidir con una lectura completa.
+    invalidarCache();
+    const completo = (await obtenerEstado()).db;
+    const ordenar = (xs: { id: string }[]) => [...xs].sort((a, b) => a.id.localeCompare(b.id));
+    for (const k of ["clientes", "notasPedido", "remitos", "stock", "ajustes", "despachos", "comprobantes"] as const) {
+      expect(ordenar(incremental[k] as { id: string }[]), k).toEqual(ordenar(completo[k] as { id: string }[]));
+    }
+    expect(incremental.numeradores).toEqual(completo.numeradores);
   });
 });

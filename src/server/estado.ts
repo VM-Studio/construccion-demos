@@ -19,21 +19,47 @@ export async function versionActual(db: Cliente = prisma): Promise<bigint> {
 const COLECCION_DE_MODELO = new Map(Object.entries(MODELOS).map(([c, m]) => [m as string, c as Coleccion]));
 
 /**
- * Actualización incremental: solo se releen las tablas que tocaron los cambios publicados
- * desde la versión en caché (en vez de toda la base).
+ * Actualización incremental: se releen solo las FILAS que tocaron los cambios publicados desde la
+ * versión en caché (cada Cambio guarda sus ids). Si un cambio tocó muchas filas (la lista de ids
+ * viene truncada a 100) o no trae ids, se relee la tabla entera de ese tipo, como antes.
  */
 async function refrescarIncremental(previo: Estado, v: bigint): Promise<Estado | null> {
-  const filas = await prisma.$queryRaw<{ tipos: string[] }[]>`SELECT "tipos" FROM "Cambio" WHERE "id" > ${previo.version} AND "id" <= ${v} ORDER BY "id" LIMIT 1000`;
+  const filas = await prisma.$queryRaw<{ tipos: string[]; entidadIds: string[] }[]>`SELECT "tipos", "entidadIds" FROM "Cambio" WHERE "id" > ${previo.version} AND "id" <= ${v} ORDER BY "id" LIMIT 1000`;
   if (filas.length >= 1000) return null;
   const tipos = new Set(filas.flatMap((f) => f.tipos));
   const cols = [...new Set([...tipos].map((t) => COLECCION_DE_MODELO.get(t)).filter((c): c is Coleccion => !!c && c !== "movimientos" && c !== "auditoria"))];
+  // Colecciones que hay que releer completas: algún cambio de ese tipo sin ids o con la lista truncada.
+  const completas = new Set<Coleccion>();
+  const ids = new Set<string>();
+  for (const f of filas) {
+    const sinIds = !f.entidadIds?.length || f.entidadIds.length >= 100;
+    for (const t of f.tipos) {
+      const c = COLECCION_DE_MODELO.get(t);
+      if (c && sinIds) completas.add(c);
+    }
+    for (const id of f.entidadIds ?? []) ids.add(id);
+  }
+  const lista = [...ids];
   const [valores, config, numeradores] = await Promise.all([
-    Promise.all(cols.map((c) => leerColeccion(prisma, c))),
+    Promise.all(cols.map((c) => (completas.has(c) ? leerColeccion(prisma, c) : leerColeccion(prisma, c, { where: { id: { in: lista } } })))),
     tipos.has("Configuracion") ? leerConfig(prisma) : Promise.resolve(previo.db.config),
     tipos.has("Contador") ? leerNumeradores(prisma) : Promise.resolve(previo.db.numeradores),
   ]);
   const db = { ...previo.db, config, numeradores } as EstadoInicial;
-  cols.forEach((c, i) => ((db as unknown as Record<string, unknown>)[c] = valores[i]));
+  const tabla = db as unknown as Record<string, { id: string }[]>;
+  cols.forEach((c, i) => {
+    const nuevas = valores[i] as { id: string }[];
+    if (completas.has(c)) {
+      tabla[c] = nuevas;
+      return;
+    }
+    // Reemplaza las que cambiaron, agrega las nuevas y saca las que ya no existen (borradas).
+    const porId = new Map(nuevas.map((x) => [x.id, x]));
+    const antes = tabla[c] ?? [];
+    const quedan = antes.filter((x) => !ids.has(x.id) || porId.has(x.id)).map((x) => porId.get(x.id) ?? x);
+    const existentes = new Set(antes.map((x) => x.id));
+    tabla[c] = [...quedan, ...nuevas.filter((x) => !existentes.has(x.id))];
+  });
   if ((await versionActual()) !== v) return null;
   return { version: v, db };
 }

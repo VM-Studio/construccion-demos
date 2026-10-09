@@ -29,6 +29,7 @@ import { NumberInput, Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
 import { formatDate, formatMoney, formatPercent, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { aDolares, formatUSD, textoTipoCambioAplicado } from "@/lib/tipo-cambio";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento } from "@/components/modulos/cuentas/documentos";
 import { ProgramarEntregaDialog, useFilasPendientes } from "./pendientes-tabla";
@@ -267,6 +268,16 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                 {np.descuentoPct > 0 && (<><dt className="text-muted">Descuento {np.descuentoPct} %</dt><dd className="text-right tnum">− {formatMoney(np.monto * np.descuentoPct / 100)}</dd></>)}
                 {np.iva > 0 && (<><dt className="text-muted">IVA</dt><dd className="text-right tnum">{formatMoney(np.iva)}</dd></>)}
                 <dt className="border-t border-border pt-1.5 font-semibold">Total</dt><dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(np.total)}</dd>
+                {np.moneda === "USD" && (
+                  np.tipoCambioAplicado ? (
+                    <>
+                      <dt className="text-muted">Total en USD</dt><dd className="text-right font-medium tnum">{formatUSD(aDolares(np.total, np.tipoCambioAplicado))}</dd>
+                      <dt className="col-span-2 text-[11px] text-muted">{textoTipoCambioAplicado(np.tipoCambioAplicado, np.tipoCambioFecha)}</dt>
+                    </>
+                  ) : (
+                    <dt className="col-span-2 text-[11px] text-muted">Precios en USD · Tipo de cambio: se fija al confirmar</dt>
+                  )
+                )}
               </dl>
               <div>
                 <div className="mb-1 flex justify-between text-[12px] text-muted"><span>Entregado</span><span className="tnum">{Math.round(porcentajeEntregado(np) * 100)} %</span></div>
@@ -397,6 +408,10 @@ export function NotaPedidoDocumento({ np }: { np: NotaPedido }) {
   const c = db.clientes.find((x) => x.id === np.clienteId);
   const saldos = saldosDeNP(np, db);
   const obras = [...new Set(np.items.map((i) => db.obras.find((o) => o.id === i.obraId)?.nombre).filter(Boolean))].join(" · ");
+  // NP en USD: importes guardados en pesos, impresos en dólares al tipo de cambio aplicado.
+  const tc = np.tipoCambioAplicado;
+  const usd = np.moneda === "USD" && !!tc;
+  const m = (pesos: number) => (usd ? formatUSD(aDolares(pesos, tc)) : formatMoney(pesos));
   return (
     <PrintLayout
       titulo="Nota de pedido"
@@ -415,10 +430,16 @@ export function NotaPedidoDocumento({ np }: { np: NotaPedido }) {
         head={["Código", "Artículo", "Obra", "Cantidad", "Precio", "Subtotal"]}
         rows={np.items.map((i) => {
           const p = db.productos.find((x) => x.id === i.productoId);
-          return [p?.codigo, p?.nombre, db.obras.find((o) => o.id === i.obraId)?.nombre ?? "", formatQty(i.cantidad, p?.unidad ?? "UN"), formatMoney(i.precioUnitario), formatMoney(i.subtotal)];
+          return [p?.codigo, p?.nombre, db.obras.find((o) => o.id === i.obraId)?.nombre ?? "", formatQty(i.cantidad, p?.unidad ?? "UN"), m(i.precioUnitario), m(i.subtotal)];
         })}
-        foot={["", "", "", "", "Total", formatMoney(np.total)]}
+        foot={["", "", "", "", "Total", m(np.total)]}
       />
+      {usd && (
+        <p className="mt-3 text-[11px]">
+          Equivalente en pesos: {formatMoney(np.total)} · {textoTipoCambioAplicado(tc!, np.tipoCambioFecha)}
+        </p>
+      )}
+      {np.moneda === "USD" && !tc && <p className="mt-3 text-[11px]">Precios en USD · Tipo de cambio: se fija al confirmar</p>}
       {saldos && (
         <div className="ml-auto mt-4 w-72 space-y-1 border border-border p-3 text-[12px]">
           <div className="flex justify-between"><span>Saldo anterior del acopio</span><span className="tnum">{formatMoney(saldos.antes)}</span></div>

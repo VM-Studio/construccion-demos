@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import Link from "next/link";
 import { Download, History } from "lucide-react";
@@ -13,7 +14,7 @@ import { VacioGuiado } from "@/components/shared/vacio-guiado";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatMoney, formatNumber, unidadCorta } from "@/lib/format";
-import { periodoDesdePreset, enPeriodo, type Periodo } from "@/lib/periodos";
+import { periodoDesdePreset, type Periodo } from "@/lib/periodos";
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { aCSV, cn, descargarArchivo } from "@/lib/utils";
 
@@ -32,13 +33,9 @@ export function MovimientosTab({ conTotalesPorTipo }: { conTotalesPorTipo?: bool
   const [producto, setProducto] = React.useState("");
 
   const prod = React.useMemo(() => new Map(db.productos.map((p) => [p.id, p])), [db.productos]);
-  const filas = React.useMemo(
-    () =>
-      db.movimientos
-        .filter((m) => enPeriodo(m.fecha, periodo) && (!dep || m.depositoId === dep) && (!tipo || m.tipo === tipo) && (!producto || m.productoId === producto))
-        .sort((a, b) => b.fecha.localeCompare(a.fecha)),
-    [db.movimientos, periodo, dep, tipo, producto],
-  );
+  // Filtrado y orden en el servidor (kardex paginado).
+  const { movimientos: filas } = useMovimientos({ desde: periodo.desde, hasta: periodo.hasta, depositoId: dep || null, tipo: tipo || null, productoId: producto || null });
+  const { total: totalKardex } = useMovimientos({ tamano: 1 });
 
   const columnas: Column<MovimientoStock>[] = [
     { key: "fecha", header: "Fecha y hora", sortable: true, sortValue: (m) => m.fecha, cell: (m) => <span className="whitespace-nowrap text-muted">{formatDateTime(m.fecha)}</span> },
@@ -128,7 +125,7 @@ export function MovimientosTab({ conTotalesPorTipo }: { conTotalesPorTipo?: bool
         searchPlaceholder="Producto o referencia"
         initialSort={{ key: "fecha", dir: "desc" }}
         pageSize={50}
-        empty={db.movimientos.length ? { icono: History, titulo: "Sin movimientos para el período o el filtro" } : <VacioGuiado pagina="movimientos" icono={History} puedeAccion={puedeAjustar} />}
+        empty={totalKardex ? { icono: History, titulo: "Sin movimientos para el período o el filtro" } : <VacioGuiado pagina="movimientos" icono={History} puedeAccion={puedeAjustar} />}
         filters={
           <>
             <DateRangePicker value={periodo} onChange={setPeriodo} presets={[{ value: "HOY", label: "Hoy" }, { value: "7D", label: "7 días" }, { value: "30D", label: "30 días" }, { value: "90D", label: "90 días" }]} />

@@ -1,77 +1,36 @@
-import type { Entidad, EstadoInicial } from "@/domain/types";
-import { useStore } from "@/store";
-import { newId } from "@/lib/utils";
-
-/** Filtro simple por igualdad de campos o predicado. */
-export type Filtro<T> = Partial<T> | ((item: T) => boolean);
-
 /**
- * Contrato de acceso a datos. Las pantallas y el store dependen de esta interfaz,
- * no del almacenamiento concreto.
+ * Repositorios de LECTURA sobre Prisma (servidor). La escritura no pasa por acá: toda
+ * escritura es una acción de negocio en src/server/servicios (transacción, auditoría y Cambio).
  */
-export interface Repositorio<T extends Entidad> {
-  listar(filtro?: Filtro<T>): T[];
-  obtener(id: string): T | undefined;
-  crear(data: Omit<T, "id" | "creadoEn" | "actualizadoEn">): T;
-  actualizar(id: string, patch: Partial<Omit<T, "id" | "creadoEn">>): T;
-  eliminar(id: string): void;
+import type { Entidad } from "@/domain/types";
+import { prisma } from "@/server/db-base";
+import { leerColeccion, contarColeccion, type Coleccion } from "@/server/datos/mapeo";
+
+export interface ConsultaRepo {
+  where?: Record<string, unknown>;
+  orderBy?: Record<string, "asc" | "desc"> | Record<string, "asc" | "desc">[];
+  skip?: number;
+  take?: number;
 }
 
-type ColeccionDe<T> = {
-  [K in keyof EstadoInicial]: EstadoInicial[K] extends T[] ? K : never;
-}[keyof EstadoInicial];
+export interface Repositorio<T extends Entidad> {
+  listar(consulta?: ConsultaRepo): Promise<T[]>;
+  obtener(id: string): Promise<T | undefined>;
+  contar(where?: Record<string, unknown>): Promise<number>;
+}
 
-// Reemplazar por implementación Prisma en producción.
-/**
- * Implementación en memoria sobre el store de Zustand (persistido en localStorage).
- * Para operaciones de negocio (confirmar pedido, recibir mercadería…) usar las
- * acciones del store, que aplican reglas, movimientos de stock y auditoría.
- */
-export class RepositorioMemoria<T extends Entidad> implements Repositorio<T> {
-  constructor(
-    private readonly coleccion: ColeccionDe<T>,
-    private readonly prefijo: string,
-  ) {}
+export class RepositorioPrisma<T extends Entidad> implements Repositorio<T> {
+  constructor(private readonly coleccion: Coleccion) {}
 
-  private items(): T[] {
-    return useStore.getState().db[this.coleccion] as unknown as T[];
+  async listar(consulta: ConsultaRepo = {}): Promise<T[]> {
+    return (await leerColeccion(prisma, this.coleccion, consulta)) as unknown as T[];
   }
 
-  private escribir(items: T[]) {
-    useStore.setState((s) => ({ db: { ...s.db, [this.coleccion]: items } }));
+  async obtener(id: string): Promise<T | undefined> {
+    return (await this.listar({ where: { id }, take: 1 }))[0];
   }
 
-  listar(filtro?: Filtro<T>): T[] {
-    const items = this.items();
-    if (!filtro) return items;
-    if (typeof filtro === "function") return items.filter(filtro);
-    const entries = Object.entries(filtro) as [keyof T, unknown][];
-    return items.filter((i) => entries.every(([k, v]) => i[k] === v));
-  }
-
-  obtener(id: string): T | undefined {
-    return this.items().find((i) => i.id === id);
-  }
-
-  crear(data: Omit<T, "id" | "creadoEn" | "actualizadoEn">): T {
-    const ahora = new Date().toISOString();
-    const nuevo = { ...data, id: newId(this.prefijo), creadoEn: ahora, actualizadoEn: ahora } as T;
-    this.escribir([...this.items(), nuevo]);
-    return nuevo;
-  }
-
-  actualizar(id: string, patch: Partial<Omit<T, "id" | "creadoEn">>): T {
-    const items = this.items();
-    const i = items.findIndex((x) => x.id === id);
-    if (i < 0) throw new Error(`No existe ${String(this.coleccion)} ${id}`);
-    const actualizado = { ...items[i], ...patch, actualizadoEn: new Date().toISOString() } as T;
-    const copia = [...items];
-    copia[i] = actualizado;
-    this.escribir(copia);
-    return actualizado;
-  }
-
-  eliminar(id: string): void {
-    this.escribir(this.items().filter((i) => i.id !== id));
+  contar(where?: Record<string, unknown>): Promise<number> {
+    return contarColeccion(prisma, this.coleccion, where);
   }
 }

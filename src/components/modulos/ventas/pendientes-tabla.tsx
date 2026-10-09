@@ -123,13 +123,15 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
     const r = await medir(
       "retiroEnMostrador",
       { clienteId: fs[0]?.clienteId, productoIds: fs.map((f) => f.productoId), depositoIds: [...new Set(fs.map((f) => f.depositoId))], notaPedidoId: fs[0]?.notaPedidoId },
-      (): { ok: true } | { ok: false; error: string } => {
+      async (): Promise<{ ok: true; efectos: unknown[] } | { ok: false; error: string }> => {
+        const efectos: unknown[] = [];
         for (const [npId, ls] of porNP) {
-          const x = useStore.getState().retiroEnMostrador(npId, ls.map((l) => ({ itemId: l.itemId, cantidad: l.pendiente })));
+          const x = await useStore.getState().retiroEnMostrador(npId, ls.map((l) => ({ itemId: l.itemId, cantidad: l.pendiente })));
           if (!x.ok) return { ok: false, error: x.error };
           nums.push(x.data.numero);
+          efectos.push(...x.efectos);
         }
-        return { ok: true };
+        return { ok: true, efectos };
       },
     );
     if (!r.ok) return toast.error(r.error);

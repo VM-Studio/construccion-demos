@@ -98,7 +98,8 @@ function EnTransitoSheet({ productoId, depositoId, onClose }: { productoId: stri
 }
 
 export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }) {
-  const db = useDb();
+  const dbBase = useDb();
+  const db = React.useMemo(() => ({ ...dbBase,  }), [dbBase, ]);
   const router = useRouter();
   const posiciones = usePosiciones();
   const depActivo = useDepositoActivo();

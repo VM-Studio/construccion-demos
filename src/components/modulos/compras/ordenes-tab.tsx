@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { totalesOCUSD } from "@/store/slices/compras";
+import { formatUSD } from "@/lib/tipo-cambio";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal, enPeriodo, periodoDesdePreset, type Periodo } from "@/lib/periodos";
 import { nombreUsuario } from "@/lib/referencias";
@@ -83,7 +85,12 @@ export function OrdenesTab({ filtroInicial }: { filtroInicial?: string | null })
     { key: "emision", header: "Emisión", sortable: true, sortValue: (o) => o.fechaEmision, cell: (o) => <span className="text-muted">{formatDate(o.fechaEmision)}</span> },
     { key: "entrega", header: "Entrega est.", sortable: true, sortValue: (o) => o.fechaEntregaEstimada, cell: (o) => <span className={cn("whitespace-nowrap", esAtrasada(o) ? "font-medium text-danger" : "text-muted")}>{formatDate(o.fechaEntregaEstimada)}</span> },
     { key: "estado", header: "Estado", sortable: true, sortValue: (o) => o.estado, cell: (o) => <StatusBadge tipo="OC" estado={o.estado} /> },
-    ...(verCostos ? [{ key: "total", header: "Total", align: "right" as const, sortable: true, sortValue: (o: OrdenCompra) => o.total, cell: (o: OrdenCompra) => <span className="tnum">{formatMoney(o.total, { decimals: false })}</span> }] : []),
+    ...(verCostos ? [{ key: "total", header: "Total", align: "right" as const, sortable: true, sortValue: (o: OrdenCompra) => o.total, cell: (o: OrdenCompra) => (
+            <span className="tnum">
+              {formatMoney(o.total, { decimals: false })}
+              {o.moneda === "USD" && <span className="block text-[11px] text-muted">{formatUSD(totalesOCUSD(o.items, o.circuito === 1 ? db.config.ivaPct : 0).total)}</span>}
+            </span>
+          ) }] : []),
     {
       key: "recibido",
       header: "% recibido",

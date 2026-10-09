@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, NumberInput, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 
@@ -136,6 +137,13 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
         <FormField label="Vendedor">
           <Select disabled={ro} value={f.vendedorId ?? ""} onValueChange={(v) => set("vendedorId", v || undefined)} options={[{ value: "", label: "Sin asignar" }, ...db.usuarios.filter((u) => u.rol === "VENTAS").map((u) => ({ value: u.id, label: u.nombre }))]} />
         </FormField>
+        <div className="sm:col-span-2">
+          <label className="flex items-center gap-2 text-[13px]">
+            <Checkbox disabled={ro} checked={!!f.facturaEnUSD} onCheckedChange={(v) => set("facturaEnUSD", v === true)} /> Factura en USD
+            <span className="text-[12px] text-muted">· habilita Precios en USD en cotizaciones y notas de pedido</span>
+          </label>
+          <ImpactoCampo campo="cliente.facturaEnUSD" />
+        </div>
       </div>
       {!compacto && (
         <FormField label="Notas" htmlFor="cl-notas">

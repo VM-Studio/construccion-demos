@@ -1,15 +1,12 @@
-import type { Configuracion, DatosEmpresa, EstadoInicial, Sucursal, UnidadNegocio, Usuario } from "@/domain/types";
-import { seedBase, seedEjemplo } from "@/data/seed";
-import { estaVacio } from "@/domain/prerequisitos";
+import type { Configuracion, DatosEmpresa, Sucursal, UnidadNegocio, Usuario } from "@/domain/types";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
-import type { GetFn, Resultado, SetFn } from "../types";
-import { puede } from "@/domain/permisos";
+import type { GetFn, SetFn } from "../types";
 
 /** Configuración, usuarios, sucursales y datos del demo. */
 export function crearSliceConfig(set: SetFn, get: GetFn) {
   return {
-    actualizarConfig: (patch: Partial<Omit<Configuracion, "empresa">>) =>
+    actualizarConfig: (patch: Partial<Omit<Configuracion, "empresa" | "tipoCambioVigente">>) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "config.ver");
         tx.setConfig(patch);
@@ -109,38 +106,5 @@ export function crearSliceConfig(set: SetFn, get: GetFn) {
         tx.auditar("Actualizó motivos de ajuste", "Configuracion", "motivos", `${motivos.length} motivos`);
       }),
 
-    /** Vacía todos los datos y deja solo la estructura (conserva la sesión si el usuario existe en la base). */
-    resetearDemo: () => {
-      const base = seedBase(new Date());
-      const usuarioId = get().ui.usuarioId;
-      set((s) => ({
-        db: base,
-        ui: { ...s.ui, usuarioId: usuarioId && base.usuarios.some((u) => u.id === usuarioId) ? usuarioId : null, sucursalActivaId: null },
-      }));
-      void import("@/lib/adjuntos").then((m) => m.limpiarBlobs()).catch(() => undefined);
-    },
-
-    /**
-     * Carga los datos de ejemplo completos (~110 artículos, 28 clientes, 12 proveedores, acopios, ventas…).
-     * Si ya hay datos, solo los reemplaza con `reemplazar: true` (la pantalla pide confirmación antes).
-     * Conserva los datos de la empresa y los parámetros de configuración.
-     */
-    cargarDatosEjemplo: (opts: { reemplazar?: boolean } = {}): Resultado<void> => {
-      const { db, ui } = get();
-      const u = db.usuarios.find((x) => x.id === ui.usuarioId);
-      if (!puede(u, "config.ver")) return { ok: false, error: "No tenés permiso para cargar datos de ejemplo.", codigo: "PERMISO" };
-      if (!estaVacio(db) && !opts.reemplazar) return { ok: false, error: "Ya hay datos cargados: confirmá que querés reemplazarlos.", codigo: "HAY_DATOS" };
-      const ejemplo = seedEjemplo(new Date());
-      set((s) => ({ db: { ...ejemplo, config: s.db.config } }));
-      void import("@/lib/adjuntos").then((m) => m.asegurarAdjuntosDemo()).catch(() => undefined);
-      return { ok: true, data: undefined };
-    },
-
-    importarRespaldo: (db: EstadoInicial) => {
-      const claves: (keyof EstadoInicial)[] = ["productos", "clientes", "notasPedido", "acopios", "remitos", "stock", "movimientos", "config", "numeradores"];
-      if (!db || typeof db !== "object" || claves.some((k) => !(k in db))) return { ok: false as const, error: "El archivo no es un respaldo válido de este sistema." };
-      set({ db });
-      return { ok: true as const, data: undefined };
-    },
   };
 }

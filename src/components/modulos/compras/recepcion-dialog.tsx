@@ -19,6 +19,7 @@ import { ActualizacionMasivaDialog } from "@/components/modulos/productos/actual
 import { formatMoney, formatPercent, formatQty, unidadCorta } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Impacto, medir } from "@/capacitacion";
+import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 
 interface Linea {
   itemOCId: string;
@@ -28,6 +29,8 @@ interface Linea {
   pendiente: number;
   cantidad: number;
   costo: number;
+  /** OC en USD: costo en dólares (el servidor lo pasa a pesos con el dólar del día). */
+  costoUSD?: number;
   diferencia: DiferenciaRecepcion;
 }
 
@@ -54,6 +57,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
   const [lineas, setLineas] = React.useState<Linea[]>([]);
   const [avisos, setAvisos] = React.useState<AvisoSubaCosto[] | null>(null);
   const [masiva, setMasiva] = React.useState(false);
+  const { valor: tcHoy } = useTipoCambio();
 
   React.useEffect(() => {
     if (!open || !oc) return;
@@ -75,6 +79,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
             pendiente,
             cantidad: pendiente,
             costo: Math.round(i.costoUnitario * (1 - i.descuentoPct / 100) * 100) / 100,
+            costoUSD: oc.moneda === "USD" ? Math.round((i.costoUSD ?? 0) * (1 - i.descuentoPct / 100) * 10000) / 10000 : undefined,
             diferencia: "OK" as DiferenciaRecepcion,
           };
         })
@@ -92,7 +97,12 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
   const prod = (id: string) => db.productos.find((p) => p.id === id);
   const up = (id: string, patch: Partial<Linea>) => setLineas((ls) => ls.map((l) => (l.itemOCId === id ? { ...l, ...patch } : l)));
   const todo = lineas.every((l) => l.cantidad === l.pendiente);
-  const neto = lineas.reduce((a, l) => a + l.cantidad * l.costo, 0);
+  const enUSD = oc.moneda === "USD";
+  // Vista previa: el costo en pesos lo calcula el servidor con su tipo de cambio del día.
+  const costoPesos = (l: Linea) => (enUSD ? Math.round((l.costoUSD ?? 0) * (tcHoy ?? 0) * 100) / 100 : l.costo);
+  const neto = lineas.reduce((a, l) => a + l.cantidad * costoPesos(l), 0);
+  const netoUSD = enUSD ? lineas.reduce((a, l) => a + l.cantidad * (l.costoUSD ?? 0), 0) : 0;
+  const diferenciaTC = enUSD && tcHoy && oc.tipoCambioAplicado ? netoUSD * (tcHoy - oc.tipoCambioAplicado) : null;
   const umbral = (db.config.umbralSubaCostoPct ?? 3) / 100;
 
   const accionId = oc.origen === "ACOPIO" ? "registrarRecepcionDeAcopio" : "registrarRecepcion";
@@ -108,10 +118,13 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
       fecha: f,
       depositoId: deposito,
       observaciones: obs || undefined,
-      items: lineas.map((l) => ({ itemOCId: l.itemOCId, cantidad: l.cantidad, costoUnitario: l.costo, diferencia: l.diferencia })),
+      items: lineas.map((l) => ({ itemOCId: l.itemOCId, cantidad: l.cantidad, costoUnitario: costoPesos(l), costoUSD: enUSD ? l.costoUSD ?? 0 : undefined, diferencia: l.diferencia })),
     }));
     if (!r.ok) return toast.error(r.error);
-    toast.success(`Recepción ${r.data.numero} registrada`, { description: r.data.completa ? "La orden quedó recibida completa." : "La orden quedó recibida parcial." });
+    const dif = r.data.diferenciaTipoCambio;
+    toast.success(`Recepción ${r.data.numero} registrada`, {
+      description: `${r.data.completa ? "La orden quedó recibida completa." : "La orden quedó recibida parcial."}${r.data.tipoCambio ? ` Dólar de la recepción: ${formatMoney(r.data.tipoCambio)}.` : ""}${dif !== undefined ? ` Diferencia por tipo de cambio contra la OC: ${formatMoney(dif)}.` : ""}`,
+    });
     for (const a of archivos) {
       void guardarAdjunto(a, { entidadTipo: "RECEPCION", entidadId: r.data.recepcionId, categoria: "FACTURA_PROVEEDOR" }).then((x) => !x.ok && toast.error(x.error));
     }
@@ -130,7 +143,7 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
           footer={
             <>
               <span className="mr-auto text-[13px] text-muted">
-                Ingresa <b className="text-ink tnum">{lineas.filter((l) => l.cantidad > 0).length}</b> productos{verCostos && <> · neto <b className="text-ink tnum">{formatMoney(neto)}</b></>}
+                Ingresa <b className="text-ink tnum">{lineas.filter((l) => l.cantidad > 0).length}</b> productos{verCostos && <> · neto {enUSD && <><b className="text-ink tnum">{formatUSD(netoUSD)}</b> ≈ </>}<b className="text-ink tnum">{formatMoney(neto)}</b></>}
               </span>
               <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
               <Button onClick={confirmar} disabled={!remito.trim() || !lineas.some((l) => l.cantidad > 0)}>
@@ -163,6 +176,18 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
                 <Input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setArchivos(Array.from(e.target.files ?? []))} />
               </FormField>
             </div>
+            {enUSD && verCostos && (
+              <div className="rounded-control border border-border bg-[#FAFAF8] p-3 text-[12px] text-muted">
+                OC en dólares: el costo se carga en USD y entra al stock en pesos al dólar del día de la recepción
+                {tcHoy ? <> (hoy <b className="text-ink tnum">{formatMoney(tcHoy)}</b>)</> : " (sin tipo de cambio disponible)"}.
+                {oc.tipoCambioAplicado ? <> Tipo de cambio de la OC: <b className="text-ink tnum">{formatMoney(oc.tipoCambioAplicado)}</b>.</> : null}
+                {diferenciaTC !== null && (
+                  <div className="mt-1">
+                    Diferencia por tipo de cambio contra la OC: <b className={cn("tnum", diferenciaTC > 0.005 ? "text-danger" : diferenciaTC < -0.005 ? "text-success" : "text-ink")}>{formatMoney(diferenciaTC)}</b>
+                  </div>
+                )}
+              </div>
+            )}
             <label className="flex w-fit items-center gap-2 text-[13px]">
               <Checkbox checked={todo} onCheckedChange={(v) => setLineas((ls) => ls.map((l) => ({ ...l, cantidad: v ? l.pendiente : 0 })))} />
               Recibir todo lo pendiente
@@ -176,14 +201,14 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
                     <th className="h-9 px-3 text-right font-medium">Ya recibido</th>
                     <th className="h-9 px-3 text-right font-medium">Pendiente</th>
                     <th className="h-9 w-[130px] px-3 text-right font-medium">A recibir</th>
-                    {verCostos && <th className="h-9 w-[140px] px-3 text-right font-medium">Costo unit.</th>}
+                    {verCostos && <th className="h-9 w-[140px] px-3 text-right font-medium">{enUSD ? "Costo USD" : "Costo unit."}</th>}
                     <th className="h-9 w-[150px] px-3 text-left font-medium">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lineas.map((l) => {
                     const p = prod(l.productoId)!;
-                    const suba = p.costoUltimo ? (l.costo - p.costoUltimo) / p.costoUltimo : 0;
+                    const suba = p.costoUltimo ? (costoPesos(l) - p.costoUltimo) / p.costoUltimo : 0;
                     return (
                       <tr key={l.itemOCId} className="border-t border-border align-top">
                         <td className="px-3 py-2">
@@ -198,7 +223,14 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
                         </td>
                         {verCostos && (
                           <td className="px-3 py-2">
-                            <NumberInput aria-label={`Costo de ${p.nombre}`} value={l.costo} min={0} className="h-8" onValueChange={(v) => up(l.itemOCId, { costo: v })} />
+                            {enUSD ? (
+                              <>
+                                <NumberInput aria-label={`Costo en USD de ${p.nombre}`} value={l.costoUSD ?? 0} min={0} className="h-8" onValueChange={(v) => up(l.itemOCId, { costoUSD: v })} />
+                                <div className="mt-0.5 text-right text-[11px] text-muted tnum">{tcHoy ? formatMoney(costoPesos(l)) : "—"}</div>
+                              </>
+                            ) : (
+                              <NumberInput aria-label={`Costo de ${p.nombre}`} value={l.costo} min={0} className="h-8" onValueChange={(v) => up(l.itemOCId, { costo: v })} />
+                            )}
                           </td>
                         )}
                         <td className="px-3 py-2">

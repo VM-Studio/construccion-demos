@@ -3,20 +3,18 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, DatabaseZap, Download, Eraser, ImagePlus, Plus, Save, ShieldCheck, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ImagePlus, Plus, RefreshCw, Save, ShieldCheck, XCircle } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
-import { verificarIntegridad, type ResultadoIntegridad } from "@/domain/integridad";
-import { estaVacio } from "@/domain/prerequisitos";
+import { type ResultadoIntegridad } from "@/domain/integridad";
 import { Impacto, InterruptorCapacitacionConfig, medir } from "@/capacitacion";
 import { filasNumeracion, formatearDoc } from "@/domain/numeracion";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { CodigoDoc } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
-import { useConfirm } from "@/components/shared/confirm-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +24,18 @@ import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FlotaTab } from "@/components/modulos/despachos/flota";
-import { formatDateTime } from "@/lib/format";
-import { cn, descargarArchivo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { BRAND } from "@/config/brand";
+import { formatDistanceToNowStrict } from "date-fns";
+import { es } from "date-fns/locale";
+import { ImpactoCampo } from "@/capacitacion";
+import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { actualizarTipoCambioAhora, diaYFecha, fuenteLabel, noEsDeHoy, refrescarTipoCambio, useTipoCambio } from "@/lib/tipo-cambio";
 
-const ok = (r: { ok: boolean; error?: string }, msg: string) => (r.ok ? toast.success(msg) : toast.error(r.error));
+const ok = <R extends { ok: boolean; error?: string }>(r: R | Promise<R>, msg: string) =>
+  void Promise.resolve(r).then((x) => (x.ok ? toast.success(msg) : toast.error(x.error)));
 
-const RESUMEN_EJEMPLO = "150 artículos de Corralón y Ferretería con precios y stock, 28 clientes con 38 obras, 12 proveedores, 10 acopios (incluido el de referencia que cierra en $ 844,85), 4 acopios con proveedores, 103 notas de pedido, 106 remitos, compras, cobranzas, cheques y despachos de los últimos meses.";
 
 const TITULOS: Record<string, [string, string]> = {
   empresa: ["Empresa", "Datos de la empresa que se usan en todas las impresiones."],
@@ -40,7 +44,7 @@ const TITULOS: Record<string, [string, string]> = {
   usuarios: ["Usuarios y roles", "Usuarios del sistema y matriz de permisos por rol."],
   parametros: ["Parámetros", "IVA, vencimiento de acopios, avisos y adjuntos."],
   numeracion: ["Numeración", "Último número usado por código de documento, circuito y punto de venta."],
-  demo: ["Datos del demo", "Vaciar, cargar datos de ejemplo, respaldos y verificación de integridad."],
+  demo: ["Datos", "Respaldo, verificación de integridad, guía de carga y modo capacitación."],
 };
 
 /** Configuración: cada página del módulo es una sección (`?tab=`), navegada desde la barra lateral. */
@@ -158,7 +162,7 @@ function SucursalDialog({ sucursal, onClose }: { sucursal?: Sucursal; onClose: (
   const [f, setF] = React.useState({ nombre: sucursal?.nombre ?? "", direccion: sucursal?.direccion ?? "", telefono: sucursal?.telefono ?? "", puntoVenta: sucursal?.puntoVenta ?? String(db.sucursales.length + 1).padStart(4, "0"), puntoVentaRemito: sucursal?.puntoVentaRemito ?? String(db.sucursales.length + 20).padStart(5, "0"), depositoNombre: dep?.nombre ?? "", depositoDireccion: dep?.direccion ?? "", posiciones: dep?.posiciones ?? ["Playa", "Mostrador"] });
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title={sucursal ? `Editar ${sucursal.nombre}` : "Nueva sucursal"} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarSucursal(f, sucursal?.id); ok(r, "Sucursal guardada"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}>
+      <DialogContent title={sucursal ? `Editar ${sucursal.nombre}` : "Nueva sucursal"} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarSucursal(f, sucursal?.id); ok(r, "Sucursal guardada"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Nombre" required htmlFor="s-n"><Input id="s-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
           <FormField label="Punto de venta fiscal" htmlFor="s-pv" hint="Numera facturas, notas de crédito y recibos"><Input id="s-pv" value={f.puntoVenta} onChange={(e) => setF({ ...f, puntoVenta: e.target.value.replace(/\D/g, "").slice(0, 4) })} /></FormField>
@@ -238,7 +242,7 @@ function UsuarioDialog({ usuario, onClose }: { usuario?: Usuario; onClose: () =>
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         title={usuario ? `Editar ${usuario.nombre}` : "Nuevo usuario"}
-        footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarUsuario({ nombre: f.nombre, email: f.email, rol: f.rol, sucursalId: f.rol === "DUENO" || f.rol === "ADMINISTRACION" ? undefined : f.sucursalId, activo: f.activo, avatarIniciales: iniciales || "US" }, usuario?.id); ok(r, "Usuario guardado"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}
+        footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarUsuario({ nombre: f.nombre, email: f.email, rol: f.rol, sucursalId: f.rol === "DUENO" || f.rol === "ADMINISTRACION" ? undefined : f.sucursalId, activo: f.activo, avatarIniciales: iniciales || "US" }, usuario?.id); ok(r, "Usuario guardado"); if (r.ok) onClose(); }}><Save /> Guardar</Button></>}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Nombre" required htmlFor="u-n"><Input id="u-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
@@ -270,7 +274,7 @@ function Listas() {
     <>
       <DataTable rows={db.listasPrecios} columns={columnas} getRowId={(l) => l.id} onRowClick={setEdit} actions={<Button size="sm" onClick={() => setEdit("nueva")}><Plus /> Nueva lista</Button>} />
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
-        <DialogContent title={edit === "nueva" ? "Nueva lista de precios" : "Editar lista"} description={edit === "nueva" ? "Se generan los precios de todos los productos con costo promedio + markup." : undefined} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarLista(f, edit === "nueva" ? undefined : (edit as ListaPrecios).id); ok(r, "Lista guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
+        <DialogContent title={edit === "nueva" ? "Nueva lista de precios" : "Editar lista"} description={edit === "nueva" ? "Se generan los precios de todos los productos con costo promedio + markup." : undefined} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarLista(f, edit === "nueva" ? undefined : (edit as ListaPrecios).id); ok(r, "Lista guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Nombre" required htmlFor="l-n"><Input id="l-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
             <FormField label="Markup por defecto (%)" htmlFor="l-m"><NumberInput id="l-m" value={f.markupPorDefecto} min={0} onValueChange={(v) => setF({ ...f, markupPorDefecto: v })} /></FormField>
@@ -286,10 +290,11 @@ function Listas() {
 function Parametros() {
   const db = useDb();
   const c = db.config;
-  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alicuotaIIBBPct: c.alicuotaIIBBPct, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0, tamanoMaxAdjuntoMB: c.tamanoMaxAdjuntoMB });
+  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alicuotaIIBBPct: c.alicuotaIIBBPct, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tamanoMaxAdjuntoMB: c.tamanoMaxAdjuntoMB });
   const [cats, setCats] = React.useState(c.categoriasAdjunto);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <TipoCambioCard />
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Parámetros generales</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -299,7 +304,6 @@ function Parametros() {
           <FormField label="Validez de cotizaciones (días)" htmlFor="p-val"><NumberInput id="p-val" value={f.validezPresupuestoDias} min={1} onValueChange={(v) => setF({ ...f, validezPresupuestoDias: Math.round(v) })} /></FormField>
           <FormField label="Aviso de suba de costo (%)" htmlFor="p-suba" hint="Al recibir mercadería más cara que el último costo"><NumberInput id="p-suba" value={f.umbralSubaCostoPct} min={0} onValueChange={(v) => setF({ ...f, umbralSubaCostoPct: v })} /></FormField>
           <FormField label="Tamaño máximo de adjunto (MB)" htmlFor="p-adj"><NumberInput id="p-adj" value={f.tamanoMaxAdjuntoMB} min={1} onValueChange={(v) => setF({ ...f, tamanoMaxAdjuntoMB: Math.max(1, Math.round(v)) })} /></FormField>
-          <FormField label="Tipo de cambio USD de referencia" htmlFor="p-usd"><NumberInput id="p-usd" value={f.tipoCambioUSD} min={0} onValueChange={(v) => setF({ ...f, tipoCambioUSD: v })} /></FormField>
           <label className="flex items-center gap-3 self-end pb-2 text-[13px]"><Switch checked={f.alertaStockMinimo} onCheckedChange={(v) => setF({ ...f, alertaStockMinimo: v })} /> Alertar stock bajo mínimo</label>
           <div className="flex justify-end sm:col-span-2 lg:col-span-3"><Button onClick={() => ok(useStore.getState().actualizarConfig(f), "Parámetros guardados")}><Save /> Guardar</Button></div>
         </CardContent>
@@ -332,6 +336,121 @@ function Parametros() {
   );
 }
 
+/** Tipo de cambio USD: dólar divisa vendedor del BNA (automático) o valor manual. */
+function TipoCambioCard() {
+  const { tc, cargando } = useTipoCambio();
+  const config = useDb().config;
+  const rol = useUsuario()?.rol;
+  const puedeEditar = rol === "DUENO" || rol === "ADMINISTRACION";
+  const manual = config.tipoCambioModo === "MANUAL";
+  const [valorManual, setValorManual] = React.useState(config.tipoCambioManual ?? tc?.valor ?? 0);
+  const [actualizando, setActualizando] = React.useState(false);
+  const [guardando, setGuardando] = React.useState(false);
+  React.useEffect(() => {
+    if (config.tipoCambioManual) setValorManual(config.tipoCambioManual);
+  }, [config.tipoCambioManual]);
+
+  const actualizar = async () => {
+    setActualizando(true);
+    const r = await actualizarTipoCambioAhora();
+    setActualizando(false);
+    if (r.ok) toast.success(`Tipo de cambio actualizado: ${formatMoney(r.data?.valor ?? 0)} (${fuenteLabel(r.data?.fuente)})`);
+    else toast.error(r.error);
+  };
+  const guardarModo = async (modo: "AUTO" | "MANUAL", valor?: number) => {
+    if (modo === "MANUAL" && !(valor && valor > 0)) return toast.error("Ingresá un tipo de cambio mayor a cero.");
+    setGuardando(true);
+    const r = await useStore.getState().actualizarConfig(modo === "MANUAL" ? { tipoCambioModo: "MANUAL", tipoCambioManual: valor } : { tipoCambioModo: "AUTO" });
+    setGuardando(false);
+    if (!r.ok) return toast.error(r.error);
+    await refrescarTipoCambio();
+    toast.success(modo === "MANUAL" ? "Tipo de cambio manual guardado" : "Tipo de cambio automático activado");
+  };
+
+  const obtenido = tc?.obtenidoEn ? formatDistanceToNowStrict(new Date(tc.obtenidoEn), { locale: es, addSuffix: true }) : null;
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardTitle>Tipo de cambio USD</CardTitle>
+        {puedeEditar && !manual && (
+          <Button size="sm" variant="secondary" onClick={actualizar} disabled={actualizando}>
+            <RefreshCw className={cn(actualizando && "animate-spin")} /> {actualizando ? "Actualizando…" : "Actualizar ahora"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="space-y-3">
+          <div>
+            <div className="text-[32px] font-semibold leading-none tracking-tight tnum">{tc?.valor ? formatMoney(tc.valor) : cargando ? "…" : "Sin cotización"}</div>
+            <div className="mt-1.5 text-[13px] text-muted">{manual ? "Valor manual cargado en Configuración" : `Dólar divisa vendedor · ${tc?.fuente === "DOLARAPI_MAYORISTA" ? "Dólar mayorista (respaldo)" : "Banco Nación"}`}</div>
+            {!manual && tc?.fecha && (
+              <div className="mt-0.5 text-[12px] text-muted">
+                Cotización del {formatDate(`${tc.fecha}T12:00:00`, "dd/MM")}
+                {obtenido && ` · actualizado ${obtenido}`}
+                {tc.compra ? ` · compra ${formatMoney(tc.compra)}` : ""}
+              </div>
+            )}
+          </div>
+          {!manual && tc?.desactualizado && (
+            <Badge variant="danger" className="h-auto whitespace-normal py-1 leading-snug">
+              <AlertTriangle className="size-3.5 shrink-0" /> Sin conexión con el Banco Nación, usando la última cotización conocida del {tc.fecha ? formatDate(`${tc.fecha}T12:00:00`, "dd/MM") : "—"}
+            </Badge>
+          )}
+          {!manual && !tc?.desactualizado && tc?.fuente === "DOLARAPI_MAYORISTA" && (
+            <Badge variant="warning" className="h-auto whitespace-normal py-1 leading-snug">El Banco Nación no respondió: se usa el dólar mayorista (dolarapi.com) como respaldo.</Badge>
+          )}
+          {!manual && noEsDeHoy(tc) && !tc?.desactualizado && <p className="text-[12px] text-muted">Última cotización disponible: {diaYFecha(tc?.fecha)}</p>}
+          {puedeEditar && (
+            <div className="space-y-2 rounded-control border border-border p-3">
+              <label className="flex items-center gap-3 text-[13px] font-medium">
+                <Switch checked={manual} disabled={guardando} onCheckedChange={(v) => void guardarModo(v ? "MANUAL" : "AUTO", v ? valorManual || tc?.valor || 0 : undefined)} /> Cargar manualmente
+              </label>
+              {manual && (
+                <>
+                  <div className="flex items-end gap-2">
+                    <FormField label="Tipo de cambio manual ($ por USD)" htmlFor="tc-manual" className="flex-1">
+                      <NumberInput id="tc-manual" value={valorManual} min={0} onValueChange={setValorManual} />
+                    </FormField>
+                    <Button size="sm" onClick={() => void guardarModo("MANUAL", valorManual)} disabled={guardando || valorManual === config.tipoCambioManual}><Save /> Guardar</Button>
+                  </div>
+                  <p className="flex items-start gap-1.5 rounded-control bg-accent-soft px-2.5 py-2 text-[12px] leading-snug text-accent">
+                    <AlertTriangle className="mt-px size-3.5 shrink-0" /> Estás usando un valor manual; el sistema no lo actualiza hasta que lo desactives.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          <ImpactoCampo campo="parametros.tipoCambio" />
+        </div>
+        <div className="min-w-0">
+          <div className="mb-1.5 text-[12px] font-medium text-muted">Últimos 30 días</div>
+          {tc?.historial.length ? (
+            <div className="max-h-64 overflow-auto rounded-control border border-border">
+              <Table>
+                <THead>
+                  <TR><TH>Fecha</TH><TH className="text-right">Compra</TH><TH className="text-right">Venta</TH><TH>Fuente</TH></TR>
+                </THead>
+                <TBody>
+                  {tc.historial.map((h) => (
+                    <TR key={h.fecha}>
+                      <TD className="capitalize">{formatDate(`${h.fecha}T12:00:00`, "EEE dd/MM")}</TD>
+                      <TD className="text-right tnum">{formatMoney(h.compra)}</TD>
+                      <TD className="text-right font-medium tnum">{formatMoney(h.venta)}</TD>
+                      <TD className="text-muted">{h.fuente === "BNA" ? "BNA" : "Mayorista"}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted">{cargando ? "Cargando…" : "Todavía no hay cotizaciones guardadas."}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function UnidadesNegocio() {
   const db = useDb();
   const [edit, setEdit] = React.useState<{ id?: string; nombre: string; codigo: "FER" | "COR"; rubroIds: string[] } | null>(null);
@@ -357,7 +476,7 @@ function UnidadesNegocio() {
       <Tablas />
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
         {edit && (
-          <DialogContent size="md" title={edit.id ? `Editar ${edit.nombre}` : "Nueva unidad de negocio"} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarUnidadNegocio({ nombre: edit.nombre, codigo: edit.codigo, rubroIds: edit.rubroIds }, edit.id); ok(r, "Unidad de negocio guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
+          <DialogContent size="md" title={edit.id ? `Editar ${edit.nombre}` : "Nueva unidad de negocio"} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarUnidadNegocio({ nombre: edit.nombre, codigo: edit.codigo, rubroIds: edit.rubroIds }, edit.id); ok(r, "Unidad de negocio guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
             <div className="space-y-3">
               <FormField label="Nombre" htmlFor="un-n"><Input id="un-n" value={edit.nombre} onChange={(e) => setEdit({ ...edit, nombre: e.target.value })} /></FormField>
               <FormField label="Rubros asociados">
@@ -421,7 +540,7 @@ function Tablas() {
         </CardContent>
       </Card>
       <Dialog open={!!rubro} onOpenChange={(v) => !v && setRubro(null)}>
-        <DialogContent size="sm" title={rubro === "nuevo" ? "Nuevo rubro" : "Editar rubro"} footer={<><Button variant="secondary" onClick={() => setRubro(null)}>Cancelar</Button><Button onClick={() => { const r = useStore.getState().guardarRubro(fr, rubro === "nuevo" ? undefined : (rubro as Rubro).id); ok(r, "Rubro guardado"); if (r.ok) setRubro(null); }}><Save /> Guardar</Button></>}>
+        <DialogContent size="sm" title={rubro === "nuevo" ? "Nuevo rubro" : "Editar rubro"} footer={<><Button variant="secondary" onClick={() => setRubro(null)}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarRubro(fr, rubro === "nuevo" ? undefined : (rubro as Rubro).id); ok(r, "Rubro guardado"); if (r.ok) setRubro(null); }}><Save /> Guardar</Button></>}>
           <div className="space-y-3">
             <FormField label="Nombre" htmlFor="r-n"><Input id="r-n" value={fr.nombre} onChange={(e) => setFr({ ...fr, nombre: e.target.value })} /></FormField>
             <FormField label="Prefijo de código (2 o 3 dígitos)" htmlFor="r-p"><Input id="r-p" value={fr.prefijo} maxLength={3} onChange={(e) => setFr({ ...fr, prefijo: e.target.value.replace(/\D/g, "") })} /></FormField>
@@ -507,153 +626,46 @@ function Numeracion() {
 }
 
 function DatosDemo() {
-  const db = useDb();
   const usuario = useUsuario();
-  const { confirmar, dialog } = useConfirm();
   const [res, setRes] = React.useState<ResultadoIntegridad | null>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [verificando, setVerificando] = React.useState(false);
   const esDueno = puede(usuario, "config.usuarios");
-  const vacio = estaVacio(db);
   const guiaOculta = useStore((s) => !!s.ui.guiaOculta[s.ui.usuarioId ?? ""]);
+  const verificar = async () => {
+    setVerificando(true);
+    try {
+      const r = await fetch("/api/integridad", { cache: "no-store" });
+      if (!r.ok) throw new Error();
+      setRes((await r.json()) as ResultadoIntegridad);
+    } catch {
+      toast.error("No se pudo verificar la integridad.");
+    } finally {
+      setVerificando(false);
+    }
+  };
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Datos del demo</CardTitle>
-          <Badge variant={vacio ? "neutral" : "accent"}>{vacio ? "Solo estructura" : `${db.productos.length} artículos · ${db.clientes.length} clientes · ${db.proveedores.length} proveedores`}</Badge>
-        </CardHeader>
-        <CardContent className="space-y-4 text-[13px]">
-          <p className="text-muted">Los datos viven en este navegador. El sistema arranca vacío (solo la estructura de la empresa) para cargar todo en vivo; los datos de ejemplo se cargan a pedido.</p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
-              <span className="font-medium text-ink">Vaciar todo</span>
-              <span className="flex-1 text-[12px] text-muted">Deja solo la estructura: empresa, sucursales y depósitos, unidades de negocio y rubros, listas de precios sin precios, usuarios y parámetros. Numeración en 0.</span>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={!esDueno}
-                onClick={() =>
-                  confirmar({
-                    titulo: "Vaciar todo (dejar solo estructura)",
-                    descripcion: "Se borran artículos, clientes, proveedores, stock, ventas, acopios, compras, remitos, comprobantes, adjuntos y auditoría. Quedan la empresa, las sucursales, los rubros, las listas de precios y los usuarios.",
-                    confirmLabel: "Vaciar todo",
-                    variant: "danger",
-                    onConfirm: async () => {
-                      await medir("vaciarDatos", {}, () => useStore.getState().resetearDemo());
-                      toast.success("Datos vaciados: quedó solo la estructura");
-                      setRes(null);
-                    },
-                  })
-                }
-              >
-                <Eraser /> Vaciar todo (dejar solo estructura)
-              </Button>
-              <Impacto accion="vaciarDatos" />
-            </div>
-            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
-              <span className="font-medium text-ink">Cargar datos de ejemplo</span>
-              <span className="flex-1 text-[12px] text-muted">{RESUMEN_EJEMPLO}</span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!esDueno}
-                onClick={() =>
-                  confirmar({
-                    titulo: vacio ? "Cargar datos de ejemplo" : "Reemplazar por los datos de ejemplo",
-                    descripcion: (
-                      <>
-                        <span className="block">Se cargan {RESUMEN_EJEMPLO.charAt(0).toLowerCase() + RESUMEN_EJEMPLO.slice(1)}</span>
-                        {!vacio && <span className="mt-2 block font-medium text-danger">Ya hay datos cargados: se van a reemplazar. Se conservan los datos de la empresa y los parámetros.</span>}
-                      </>
-                    ),
-                    confirmLabel: vacio ? "Cargar datos de ejemplo" : "Reemplazar",
-                    variant: vacio ? "default" : "danger",
-                    onConfirm: async () => {
-                      const r = await medir("cargarDatosEjemplo", {}, () => useStore.getState().cargarDatosEjemplo({ reemplazar: !vacio }));
-                      ok(r, "Datos de ejemplo cargados");
-                      setRes(null);
-                    },
-                  })
-                }
-              >
-                <DatabaseZap /> Cargar datos de ejemplo
-              </Button>
-              <Impacto accion="cargarDatosEjemplo" />
-            </div>
-            <div className="flex flex-col gap-2 rounded-card border border-border p-3">
-              <span className="font-medium text-ink">Verificar integridad</span>
-              <span className="flex-1 text-[12px] text-muted">Kardex contra stock físico, entregados y pendientes contra remitos, saldos de acopios y comprobantes, y numeración sin repetidos.</span>
-              <Button variant="secondary" size="sm" onClick={() => setRes(verificarIntegridad(useStore.getState().db))}><ShieldCheck /> Verificar integridad</Button>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-            <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
-            <InterruptorCapacitacionConfig />
-          </div>
-        </CardContent>
-      </Card>
       <Card>
-        <CardHeader><CardTitle>Respaldos</CardTitle></CardHeader>
-        <CardContent className="space-y-3 text-[13px]">
-          <p className="text-muted">Guardá un respaldo antes de una reunión y restauralo después.</p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => { descargarArchivo(`respaldo-aceros-rnf-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(db), "application/json"); toast.success("Respaldo descargado", { description: `Incluye la metadata de ${db.adjuntos.length} adjuntos.` }); }}><Download /> Exportar respaldo (JSON)</Button>
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                const t = toast.loading("Armando ZIP de adjuntos…");
-                try {
-                  const [{ default: JSZip }, { obtenerBlob, asegurarAdjuntosDemo }, { saveAs }] = await Promise.all([import("jszip"), import("@/lib/adjuntos"), import("file-saver")]);
-                  await asegurarAdjuntosDemo();
-                  const zip = new JSZip();
-                  let n = 0;
-                  for (const a of db.adjuntos) {
-                    if (!a.blobKey) continue;
-                    const b = await obtenerBlob(a.blobKey);
-                    if (b) {
-                      zip.file(`${a.entidadTipo.toLowerCase()}/${a.id}-${a.nombre}`, b);
-                      n++;
-                    }
-                  }
-                  saveAs(await zip.generateAsync({ type: "blob" }), `adjuntos-aceros-rnf-${new Date().toISOString().slice(0, 10)}.zip`);
-                  toast.success(`ZIP con ${n} archivos descargado`, { id: t });
-                } catch {
-                  toast.error("No se pudo armar el ZIP", { id: t });
-                }
-              }}
-            >
-              <Download /> Exportar adjuntos (ZIP)
-            </Button>
-            <Button variant="secondary" disabled={!esDueno} onClick={() => inputRef.current?.click()}><Upload /> Importar respaldo</Button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/json"
-              className="sr-only"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  const texto = (await file.text()).replace(/^﻿/, "");
-                  const r = useStore.getState().importarRespaldo(JSON.parse(texto));
-                  ok(r, "Respaldo importado");
-                } catch {
-                  toast.error("No se pudo leer el archivo.");
-                }
-                e.target.value = "";
-              }}
-            />
+        <CardHeader><CardTitle>Datos y ayudas</CardTitle></CardHeader>
+        <CardContent className="space-y-4 text-[13px]">
+          <p className="text-muted">Los datos viven en la base de {BRAND.empresa} (PostgreSQL) y todos los usuarios trabajan sobre los mismos datos, en vivo.</p>
+          <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
+          <InterruptorCapacitacionConfig />
+          <div className="border-t border-border pt-3">
+            <span className="block font-medium text-ink">Exportar respaldo</span>
+            <span className="mb-2 block text-[12px] text-muted">Descarga un JSON con todos los datos de negocio (incluidos movimientos y auditoría).</span>
+            <Button variant="secondary" size="sm" disabled={!esDueno} onClick={() => { window.location.href = "/api/respaldo"; }}><Download /> Exportar respaldo (JSON)</Button>
           </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
           <CardTitle>Verificación de integridad</CardTitle>
-          <Button size="sm" variant="secondary" onClick={() => setRes(verificarIntegridad(useStore.getState().db))}><ShieldCheck /> Verificar ahora</Button>
+          <Button size="sm" variant="secondary" loading={verificando} onClick={verificar}><ShieldCheck /> Verificar integridad</Button>
         </CardHeader>
         <CardContent className="text-[13px]">
           {!res ? (
-            <p className="text-muted">Comprueba que el kardex cierre con el stock físico, que entregados y pendientes coincidan con los remitos, que el saldo de cada acopio sea importe − NP + DP + ACD, que los saldos de comprobantes cierren y que la numeración no se repita.</p>
+            <p className="text-muted">Comprueba en la base que el kardex cierre con el stock físico, que entregados y pendientes coincidan con los remitos, que el saldo de cada acopio sea importe − NP + DP + ACD, que los saldos de comprobantes cierren y que la numeración no se repita.</p>
           ) : (
             <ul className="space-y-2">
               <li className={cn("font-medium", res.ok ? "text-success" : "text-danger")}>{res.ok ? "Todo consistente" : "Se encontraron inconsistencias"} · {formatDateTime(new Date())}</li>
@@ -671,7 +683,6 @@ function DatosDemo() {
           )}
         </CardContent>
       </Card>
-      {dialog}
     </div>
   );
 }

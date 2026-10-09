@@ -67,6 +67,13 @@ export type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "ECHEQ" | "TAR
 export type CondicionIVA = "RI" | "MONOTRIBUTO" | "EXENTO" | "CF";
 
 export type FormaPagoAcopio = "ANTICIPO" | "CUENTA_CORRIENTE";
+export type Moneda = "ARS" | "USD";
+/** Snapshot del dólar en documentos en USD. */
+export interface ConTipoCambio {
+  moneda?: Moneda;
+  tipoCambioAplicado?: number;
+  tipoCambioFecha?: string;
+}
 export type FormaPagoVenta = "CONTADO" | "CUENTA_CORRIENTE" | "ACOPIO";
 export type OrigenVenta = "NUEVA" | "ACOPIO";
 export type ModalidadEntrega = "ENVIO" | "RETIRA";
@@ -179,6 +186,9 @@ export interface Producto extends Entidad {
   activo: boolean;
   codigoBarras?: string;
   pesoKg?: number;
+  /** Moneda del costo: en USD el costo en pesos sale del tipo de cambio vigente. */
+  monedaCosto?: Moneda;
+  costoUSD?: number;
 }
 
 export interface ListaPrecios extends Entidad {
@@ -274,6 +284,8 @@ export interface Cliente extends Entidad {
   limiteCredito: number;
   vendedorId?: string;
   sucursalPreferidaId: string;
+  /** Habilita precios en USD en cotizaciones y notas de pedido. */
+  facturaEnUSD?: boolean;
   activo: boolean;
   notas?: string;
 }
@@ -335,7 +347,7 @@ export interface ItemNP {
 }
 
 /** Nota de pedido: retiro de acopio o venta nueva. Es la fuente de verdad de las ventas. */
-export interface NotaPedido extends Entidad {
+export interface NotaPedido extends Entidad, ConTipoCambio {
   numero: string;
   circuito: Circuito;
   tipo: "RETIRO_ACOPIO" | "VENTA";
@@ -426,7 +438,7 @@ export interface ItemVenta {
   descuentoPct: number;
 }
 
-export interface Cotizacion extends Entidad {
+export interface Cotizacion extends Entidad, ConTipoCambio {
   numero: string;
   circuito: Circuito;
   clienteId: string;
@@ -560,11 +572,14 @@ export interface ItemOC {
   productoId: string;
   cantidadPedida: number;
   cantidadRecibida: number;
+  /** Pesos (OC en USD: costoUSD × tipo de cambio de la OC). */
   costoUnitario: number;
+  /** OC en USD: costo cargado en dólares. */
+  costoUSD?: number;
   descuentoPct: number;
 }
 
-export interface OrdenCompra extends Entidad {
+export interface OrdenCompra extends Entidad, ConTipoCambio {
   numero: string;
   circuito: Circuito;
   origen: OrigenVenta;
@@ -588,7 +603,10 @@ export interface ItemRecepcion {
   itemOCId: string;
   productoId: string;
   cantidadRecibida: number;
+  /** Pesos: el costo que entra al stock. */
   costoUnitario: number;
+  /** OC en USD: costo en dólares de la recepción. */
+  costoUSD?: number;
   diferencia?: DiferenciaRecepcion;
   observacion?: string;
 }
@@ -603,6 +621,9 @@ export interface RecepcionMercaderia extends Entidad {
   usuarioId: string;
   observaciones?: string;
   comprobanteId?: string;
+  /** OC en USD: tipo de cambio del día de la recepción. */
+  tipoCambioAplicado?: number;
+  tipoCambioFecha?: string;
 }
 
 export interface CostoCongelado {
@@ -610,7 +631,7 @@ export interface CostoCongelado {
   costo: number;
 }
 
-export interface AcopioProveedor extends Entidad {
+export interface AcopioProveedor extends Entidad, ConTipoCambio {
   numero: string;
   circuito: Circuito;
   proveedorId: string;
@@ -726,6 +747,11 @@ export interface Auditoria extends Entidad {
   entidad: string;
   entidadId: string;
   detalle: string;
+  /** Cambios reales medidos por la acción (modo capacitación). */
+  efectos?: unknown;
+  accionId?: string;
+  ip?: string;
+  userAgent?: string;
 }
 
 export interface DatosEmpresa {
@@ -745,10 +771,25 @@ export interface Configuracion {
   alertaStockMinimo: boolean;
   umbralSubaCostoPct: number;
   tipoCambioUSD?: number;
+  tipoCambioModo?: "AUTO" | "MANUAL";
+  tipoCambioManual?: number;
+  /**
+   * Tipo de cambio vigente (obtenerVigente() del servidor). NO se guarda en la base: el motor lo
+   * inyecta antes de correr cada acción para que las reglas del dominio lo lean de `tx.config`.
+   */
+  tipoCambioVigente?: TipoCambioVigente;
   tamanoMaxAdjuntoMB: number;
   categoriasAdjunto: { codigo: CategoriaAdjunto; nombre: string }[];
   empresa: DatosEmpresa;
   motivosAjuste: { codigo: string; nombre: string; activo: boolean }[];
+}
+
+export interface TipoCambioVigente {
+  /** Dólar divisa vendedor (o el valor manual). */
+  valor: number;
+  /** Fecha de la cotización (ISO). */
+  fecha: string;
+  fuente: string;
 }
 
 /** Último número usado por clave `${codigo}|${circuito}|${puntoVenta}`. */

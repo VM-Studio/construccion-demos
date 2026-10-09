@@ -1,0 +1,1365 @@
+// Aceros RNF · esquema de la base real (PostgreSQL en Neon).
+// Traducción uno a uno de src/domain/types.ts: mismos nombres de campo que el dominio
+// (el mapeo dominio ↔ base es genérico, ver src/server/datos/mapeo.ts).
+// - Dinero Decimal(14,2), cantidades Decimal(14,3), costos unitarios Decimal(14,4). Nunca Float.
+// - Las referencias entre entidades son ids indexados (sin FK, igual que el dominio);
+//   los ítems embebidos son tablas hijas con FK y onDelete: Cascade.
+// - MovimientoStock es insert-only.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Rol {
+  DUENO
+  ADMINISTRACION
+  VENTAS
+  DEPOSITO
+}
+
+enum Unidad {
+  UN
+  BOLSA
+  M3
+  M2
+  ML
+  KG
+  LT
+  PALLET
+  CAJA
+  ROLLO
+  PLACA
+  TN
+}
+
+enum CodigoUnidadNegocio {
+  FER
+  COR
+}
+
+enum EstadoOC {
+  BORRADOR
+  ENVIADA
+  CONFIRMADA
+  RECIBIDA_PARCIAL
+  RECIBIDA
+  CANCELADA
+}
+
+enum EstadoCotizacion {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  VENCIDA
+}
+
+enum EstadoNP {
+  BORRADOR
+  PENDIENTE
+  ENTREGADA_PARCIAL
+  ENTREGADA
+  ANULADA
+}
+
+enum EstadoAcopio {
+  VIGENTE
+  VENCIDO
+  AGOTADO
+  CANCELADO
+}
+
+enum EstadoRemito {
+  INICIAL
+  PICKING
+  HECHO
+  ANULADO
+}
+
+enum TipoRemito {
+  VENTA
+  DESACOPIO
+  DEVOLUCION
+  TRANSFERENCIA
+}
+
+enum EstadoDespacho {
+  ESPERA
+  PREPARACION
+  FINALIZADO
+  EN_VIAJE
+  ENTREGADO
+  CANCELADO
+}
+
+enum TipoMovimientoStock {
+  INGRESO_COMPRA
+  EGRESO_VENTA
+  EGRESO_ACOPIO
+  TRANSFERENCIA_SALIDA
+  TRANSFERENCIA_ENTRADA
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  DEVOLUCION_CLIENTE
+  DEVOLUCION_PROVEEDOR
+}
+
+enum TipoComprobante {
+  FACTURA
+  NOTA_CREDITO
+  NOTA_DEBITO
+  SALDO_A_FAVOR
+  SALDO_INICIAL
+}
+
+enum LetraComprobante {
+  A
+  B
+}
+
+enum TipoCliente {
+  CONSTRUCTORA
+  CORRALON
+  FERRETERIA
+  PARTICULAR
+  ARQUITECTO
+}
+
+enum TipoProveedor {
+  FABRICANTE
+  DISTRIBUIDOR
+  TRANSPORTISTA
+  SERVICIOS
+}
+
+enum CondicionPagoTipo {
+  CONTADO
+  CTA_CTE_15
+  CTA_CTE_30
+  CTA_CTE_60
+  ANTICIPO
+}
+
+enum MedioPago {
+  EFECTIVO
+  TRANSFERENCIA
+  CHEQUE
+  ECHEQ
+  TARJETA
+  MERCADOPAGO
+}
+
+enum CondicionIVA {
+  RI
+  MONOTRIBUTO
+  EXENTO
+  CF
+}
+
+enum FormaPagoAcopio {
+  ANTICIPO
+  CUENTA_CORRIENTE
+}
+
+enum FormaPagoVenta {
+  CONTADO
+  CUENTA_CORRIENTE
+  ACOPIO
+}
+
+enum OrigenVenta {
+  NUEVA
+  ACOPIO
+}
+
+enum ModalidadEntrega {
+  ENVIO
+  RETIRA
+}
+
+enum EstadoTransferencia {
+  PENDIENTE
+  EN_TRANSITO
+  RECIBIDA
+  CANCELADA
+}
+
+enum EstadoComprobante {
+  PENDIENTE
+  PARCIAL
+  PAGADO
+  ANULADO
+}
+
+enum EstadoHojaRuta {
+  PLANIFICADA
+  EN_CURSO
+  CERRADA
+}
+
+enum EstadoCheque {
+  EN_CARTERA
+  DEPOSITADO
+  ENTREGADO
+  RECHAZADO
+}
+
+enum TipoCheque {
+  CHEQUE
+  ECHEQ
+}
+
+enum ReferenciaTipo {
+  OC
+  REMITO
+  TRANSFERENCIA
+  AJUSTE
+}
+
+enum DiferenciaRecepcion {
+  OK
+  FALTANTE
+  ROTURA
+  EXTRA
+}
+
+enum CategoriaAdjunto {
+  REMITO_FIRMADO
+  FACTURA_PROVEEDOR
+  OTRO
+}
+
+enum EntidadAdjunto {
+  REMITO
+  ACOPIO
+  ACOPIO_PROVEEDOR
+  NOTA_PEDIDO
+  ORDEN_COMPRA
+  RECEPCION
+  CLIENTE
+  PROVEEDOR
+  COMPROBANTE
+}
+
+enum TipoNotaPedido {
+  RETIRO_ACOPIO
+  VENTA
+}
+
+enum TipoAjusteAcopio {
+  TRASPASO_ENTRADA
+  TRASPASO_SALIDA
+  AJUSTE
+}
+
+enum ModalidadAcopioProveedor {
+  MONTO
+  CANTIDAD
+}
+
+enum Moneda {
+  ARS
+  USD
+}
+
+enum TipoCambioModo {
+  AUTO
+  MANUAL
+}
+
+// ───────────────────────── Organización ─────────────────────────
+
+model Sucursal {
+  id               String   @id @default(cuid())
+  nombre           String
+  direccion        String
+  telefono         String
+  depositoId       String
+  puntoVenta       String
+  puntoVentaRemito String
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
+}
+
+model Deposito {
+  id            String          @id @default(cuid())
+  nombre        String
+  sucursalId    String
+  direccion     String
+  posiciones    PosicionCarga[]
+  creadoEn      DateTime        @default(now())
+  actualizadoEn DateTime        @updatedAt
+
+  @@index([sucursalId])
+}
+
+/// Posición / zona de carga de un depósito ("Playa 1", "Galpón", "Mostrador").
+model PosicionCarga {
+  id            String   @id @default(cuid())
+  depositoId    String
+  deposito      Deposito @relation(fields: [depositoId], references: [id], onDelete: Cascade)
+  nombre        String
+  orden         Int
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([depositoId])
+}
+
+model Usuario {
+  id              String   @id @default(cuid())
+  nombre          String
+  apellido        String?
+  email           String   @unique
+  rol             Rol
+  sucursalId      String?
+  activo          Boolean  @default(true)
+  avatarIniciales String
+  creadoEn        DateTime @default(now())
+  actualizadoEn   DateTime @updatedAt
+
+  @@index([sucursalId])
+}
+
+model UnidadNegocio {
+  id            String              @id @default(cuid())
+  nombre        String
+  codigo        CodigoUnidadNegocio @unique
+  orden         Int
+  creadoEn      DateTime            @default(now())
+  actualizadoEn DateTime            @updatedAt
+}
+
+// ───────────────────────── Catálogo ─────────────────────────
+
+model Rubro {
+  id              String   @id @default(cuid())
+  nombre          String
+  orden           Int
+  prefijo         String
+  unidadNegocioId String
+  creadoEn        DateTime @default(now())
+  actualizadoEn   DateTime @updatedAt
+
+  @@index([unidadNegocioId])
+}
+
+model Proveedor {
+  id               String            @id @default(cuid())
+  codigo           String            @unique
+  razonSocial      String
+  tipo             TipoProveedor
+  cuit             String
+  condicionIVA     CondicionIVA
+  circuitoHabitual Int
+  email            String
+  telefono         String
+  direccion        String
+  contacto         String
+  plazoEntregaDias Int
+  condicionPago    CondicionPagoTipo
+  unidadNegocioIds String[]
+  activo           Boolean           @default(true)
+  notas            String?
+  creadoEn         DateTime          @default(now())
+  actualizadoEn    DateTime          @updatedAt
+}
+
+model Producto {
+  id                  String   @id @default(cuid())
+  codigo              String   @unique
+  nombre              String
+  descripcion         String?
+  rubroId             String
+  unidadNegocioId     String
+  marca               String?
+  unidad              Unidad
+  unidadesPorPallet   Decimal? @db.Decimal(14, 3)
+  proveedorHabitualId String?
+  costoUltimo         Decimal  @db.Decimal(14, 4)
+  costoPromedio       Decimal  @db.Decimal(14, 4)
+  fechaUltimoCosto    DateTime
+  /// Moneda del costo de reposición: si es USD, el costo en pesos sale del tipo de cambio vigente.
+  monedaCosto         Moneda   @default(ARS)
+  costoUSD            Decimal? @db.Decimal(14, 4)
+  stockMinimo         Decimal  @db.Decimal(14, 3)
+  activo              Boolean  @default(true)
+  codigoBarras        String?
+  pesoKg              Decimal? @db.Decimal(14, 3)
+  creadoEn            DateTime @default(now())
+  actualizadoEn       DateTime @updatedAt
+
+  @@index([rubroId])
+  @@index([unidadNegocioId])
+  @@index([proveedorHabitualId])
+}
+
+model ListaPrecios {
+  id               String   @id @default(cuid())
+  nombre           String
+  descripcion      String
+  markupPorDefecto Decimal  @db.Decimal(7, 2)
+  activa           Boolean  @default(true)
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
+}
+
+model PrecioProducto {
+  id             String   @id @default(cuid())
+  productoId     String
+  listaPreciosId String
+  precio         Decimal  @db.Decimal(14, 2)
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+
+  @@unique([productoId, listaPreciosId])
+  @@index([listaPreciosId])
+}
+
+// ───────────────────────── Stock ─────────────────────────
+
+model StockDeposito {
+  id             String   @id @default(cuid())
+  productoId     String
+  depositoId     String
+  cantidadFisica Decimal  @db.Decimal(14, 3)
+  creadoEn       DateTime @default(now())
+  actualizadoEn  DateTime @updatedAt
+
+  @@unique([productoId, depositoId])
+  @@index([depositoId])
+}
+
+/// INMUTABLE: nunca se edita ni se borra (ningún repositorio expone update ni delete).
+model MovimientoStock {
+  id             String              @id @default(cuid())
+  productoId     String
+  depositoId     String
+  tipo           TipoMovimientoStock
+  cantidad       Decimal             @db.Decimal(14, 3)
+  signo          Int
+  costoUnitario  Decimal             @db.Decimal(14, 4)
+  referenciaTipo ReferenciaTipo
+  referenciaId   String
+  usuarioId      String
+  observacion    String?
+  fecha          DateTime
+  creadoEn       DateTime            @default(now())
+  actualizadoEn  DateTime            @updatedAt
+
+  @@index([productoId, depositoId])
+  @@index([fecha])
+  @@index([referenciaId])
+}
+
+model TransferenciaStock {
+  id                String              @id @default(cuid())
+  numero            String              @unique
+  depositoOrigenId  String
+  depositoDestinoId String
+  items             ItemTransferencia[]
+  estado            EstadoTransferencia
+  usuarioId         String
+  fecha             DateTime
+  fechaDespacho     DateTime?
+  fechaRecepcion    DateTime?
+  observacion       String?
+  creadoEn          DateTime            @default(now())
+  actualizadoEn     DateTime            @updatedAt
+
+  @@index([estado])
+  @@index([fecha])
+}
+
+model ItemTransferencia {
+  id              String             @id @default(cuid())
+  transferenciaId String
+  transferencia   TransferenciaStock @relation(fields: [transferenciaId], references: [id], onDelete: Cascade)
+  orden           Int
+  productoId      String
+  cantidad        Decimal            @db.Decimal(14, 3)
+
+  @@index([transferenciaId])
+}
+
+model AjusteStock {
+  id            String       @id @default(cuid())
+  numero        String       @unique
+  depositoId    String
+  items         ItemAjuste[]
+  usuarioId     String
+  fecha         DateTime
+  observacion   String?
+  forzado       Boolean?
+  creadoEn      DateTime     @default(now())
+  actualizadoEn DateTime     @updatedAt
+
+  @@index([fecha])
+}
+
+model ItemAjuste {
+  id            String      @id @default(cuid())
+  ajusteId      String
+  ajuste        AjusteStock @relation(fields: [ajusteId], references: [id], onDelete: Cascade)
+  orden         Int
+  productoId    String
+  cantidad      Decimal     @db.Decimal(14, 3)
+  signo         Int
+  motivo        String
+  costoUnitario Decimal?    @db.Decimal(14, 4)
+
+  @@index([ajusteId])
+}
+
+model MotivoAjuste {
+  id            String   @id @default(cuid())
+  codigo        String   @unique
+  nombre        String
+  activo        Boolean  @default(true)
+  orden         Int
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+// ───────────────────────── Clientes y obras ─────────────────────────
+
+model Cliente {
+  id                  String            @id @default(cuid())
+  codigo              String            @unique
+  razonSocial         String
+  nombreFantasia      String?
+  tipo                TipoCliente
+  cuit                String
+  condicionIVA        CondicionIVA
+  circuitoHabitual    Int
+  email               String
+  telefono            String
+  contacto            String?
+  direccion           String
+  localidad           String
+  listaPreciosId      String
+  condicionPago       CondicionPagoTipo
+  limiteCredito       Decimal           @db.Decimal(14, 2)
+  vendedorId          String?
+  sucursalPreferidaId String
+  /// Habilita precios en USD en cotizaciones y notas de pedido.
+  facturaEnUSD        Boolean           @default(false)
+  activo              Boolean           @default(true)
+  notas               String?
+  creadoEn            DateTime          @default(now())
+  actualizadoEn       DateTime          @updatedAt
+
+  @@index([sucursalPreferidaId])
+}
+
+model Obra {
+  id            String   @id @default(cuid())
+  clienteId     String
+  nombre        String
+  direccion     String?
+  localidad     String?
+  contacto      String?
+  activa        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([clienteId])
+}
+
+/// Condiciones de pago de referencia (tabla de consulta; los documentos guardan el código).
+model CondicionPago {
+  id            String            @id @default(cuid())
+  codigo        CondicionPagoTipo @unique
+  nombre        String
+  dias          Int
+  orden         Int
+  creadoEn      DateTime          @default(now())
+  actualizadoEn DateTime          @updatedAt
+}
+
+// ───────────────────────── Acopios de clientes ─────────────────────────
+
+model Acopio {
+  id                 String            @id @default(cuid())
+  numero             String            @unique
+  circuito           Int
+  clienteId          String
+  sucursalId         String
+  depositoId         String
+  vendedorId         String
+  obraIds            String[]
+  fechaCreacion      DateTime
+  fechaVencimiento   DateTime
+  importe            Decimal           @db.Decimal(14, 2)
+  alicuotaIIBBPct    Decimal           @db.Decimal(7, 3)
+  importeConIIBB     Decimal           @db.Decimal(14, 2)
+  formaPago          FormaPagoAcopio
+  listaPreciosBaseId String
+  unidadNegocioId    String
+  preciosCongelados  PrecioCongelado[]
+  comprobanteIds     String[]
+  reciboIds          String[]
+  estado             EstadoAcopio
+  observaciones      String?
+  creadoEn           DateTime          @default(now())
+  actualizadoEn      DateTime          @updatedAt
+
+  @@index([clienteId])
+  @@index([estado])
+  @@index([sucursalId])
+  @@index([unidadNegocioId])
+}
+
+model PrecioCongelado {
+  id            String  @id @default(cuid())
+  acopioId      String
+  acopio        Acopio  @relation(fields: [acopioId], references: [id], onDelete: Cascade)
+  orden         Int
+  productoId    String
+  precio        Decimal @db.Decimal(14, 2)
+  costoSnapshot Decimal @db.Decimal(14, 4)
+
+  @@index([acopioId])
+}
+
+model AjusteAcopio {
+  id                  String           @id @default(cuid())
+  numero              String           @unique
+  circuito            Int
+  acopioId            String
+  fecha               DateTime
+  tipo                TipoAjusteAcopio
+  acopioRelacionadoId String?
+  monto               Decimal          @db.Decimal(14, 2)
+  descripcion         String
+  usuarioId           String
+  creadoEn            DateTime         @default(now())
+  actualizadoEn       DateTime         @updatedAt
+
+  @@index([acopioId])
+  @@index([fecha])
+}
+
+// ───────────────────────── Ventas ─────────────────────────
+
+model Cotizacion {
+  id                 String           @id @default(cuid())
+  numero             String           @unique
+  circuito           Int
+  clienteId          String
+  obraId             String?
+  sucursalId         String
+  vendedorId         String
+  estado             EstadoCotizacion
+  fecha              DateTime
+  validezDias        Int
+  items              ItemCotizacion[]
+  subtotal           Decimal          @db.Decimal(14, 2)
+  descuentoPct       Decimal          @db.Decimal(7, 3)
+  iva                Decimal          @db.Decimal(14, 2)
+  total              Decimal          @db.Decimal(14, 2)
+  observaciones      String?
+  notaPedidoId       String?
+  /// Precios en USD (cliente facturaEnUSD): snapshot del tipo de cambio aplicado.
+  moneda             Moneda           @default(ARS)
+  tipoCambioAplicado Decimal?         @db.Decimal(14, 4)
+  tipoCambioFecha    DateTime?
+  creadoEn           DateTime         @default(now())
+  actualizadoEn      DateTime         @updatedAt
+
+  @@index([clienteId])
+  @@index([estado])
+  @@index([fecha])
+  @@index([sucursalId])
+}
+
+model ItemCotizacion {
+  id                    String     @id @default(cuid())
+  cotizacionId          String
+  cotizacion            Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  orden                 Int
+  productoId            String
+  obraId                String?
+  cantidad              Decimal    @db.Decimal(14, 3)
+  precioUnitario        Decimal    @db.Decimal(14, 2)
+  costoUnitarioSnapshot Decimal    @db.Decimal(14, 4)
+  descuentoPct          Decimal    @db.Decimal(7, 3)
+
+  @@index([cotizacionId])
+}
+
+/// Nota de pedido: retiro de acopio o venta nueva. Fuente de verdad de las ventas.
+model NotaPedido {
+  id                      String            @id @default(cuid())
+  /// Null mientras es borrador.
+  numero                  String?           @unique
+  circuito                Int
+  tipo                    TipoNotaPedido
+  origen                  OrigenVenta
+  acopioId                String?
+  cotizacionId            String?
+  clienteId               String
+  sucursalId              String
+  depositoId              String
+  vendedorId              String
+  fecha                   DateTime
+  fechaConfirmacion       DateTime?
+  items                   ItemNP[]
+  monto                   Decimal           @db.Decimal(14, 2)
+  descuentoPct            Decimal           @db.Decimal(7, 3)
+  iva                     Decimal           @db.Decimal(14, 2)
+  total                   Decimal           @db.Decimal(14, 2)
+  estado                  EstadoNP
+  formaPago               FormaPagoVenta
+  condicionPago           CondicionPagoTipo
+  pendienteEntrega        Boolean
+  modalidadEntrega        ModalidadEntrega
+  direccionEntrega        String?
+  fechaEntregaProgramada  DateTime?
+  remitoIds               String[]
+  comprobanteIds          String[]
+  observaciones           String?
+  forzadoSinDisponible    Boolean?
+  autorizadoSaldoNegativo Boolean?
+  excepcionCredito        Boolean?
+  moneda                  Moneda            @default(ARS)
+  tipoCambioAplicado      Decimal?          @db.Decimal(14, 4)
+  tipoCambioFecha         DateTime?
+  creadoEn                DateTime          @default(now())
+  actualizadoEn           DateTime          @updatedAt
+
+  @@index([clienteId])
+  @@index([acopioId])
+  @@index([estado])
+  @@index([fecha])
+  @@index([sucursalId])
+  @@index([depositoId])
+}
+
+model ItemNP {
+  id                    String     @id @default(cuid())
+  notaPedidoId          String
+  notaPedido            NotaPedido @relation(fields: [notaPedidoId], references: [id], onDelete: Cascade)
+  orden                 Int
+  productoId            String
+  obraId                String?
+  cantidad              Decimal    @db.Decimal(14, 3)
+  entregados            Decimal    @db.Decimal(14, 3)
+  devueltos             Decimal?   @db.Decimal(14, 3)
+  precioUnitario        Decimal    @db.Decimal(14, 2)
+  costoUnitarioSnapshot Decimal    @db.Decimal(14, 4)
+  descuentoPct          Decimal?   @db.Decimal(7, 3)
+  subtotal              Decimal    @db.Decimal(14, 2)
+
+  @@index([notaPedidoId])
+  @@index([productoId])
+}
+
+model DevolucionNP {
+  id                 String   @id @default(cuid())
+  numero             String   @unique
+  circuito           Int
+  notaPedidoId       String
+  acopioId           String?
+  clienteId          String
+  fecha              DateTime
+  items              ItemDP[]
+  monto              Decimal  @db.Decimal(14, 2)
+  remitoDevolucionId String?
+  notaCreditoId      String?
+  remitosRef         String[]
+  notasCreditoRef    String[]
+  motivo             String
+  usuarioId          String
+  creadoEn           DateTime @default(now())
+  actualizadoEn      DateTime @updatedAt
+
+  @@index([notaPedidoId])
+  @@index([acopioId])
+  @@index([clienteId])
+  @@index([fecha])
+}
+
+model ItemDP {
+  id             String       @id @default(cuid())
+  devolucionId   String
+  devolucion     DevolucionNP @relation(fields: [devolucionId], references: [id], onDelete: Cascade)
+  orden          Int
+  itemNPId       String
+  productoId     String
+  obraId         String?
+  cantidad       Decimal      @db.Decimal(14, 3)
+  precioUnitario Decimal      @db.Decimal(14, 2)
+  subtotal       Decimal?     @db.Decimal(14, 2)
+
+  @@index([devolucionId])
+}
+
+// ───────────────────────── Remitos, despachos y adjuntos ─────────────────────────
+
+model Remito {
+  id               String       @id @default(cuid())
+  numero           String       @unique
+  circuito         Int
+  tipo             TipoRemito
+  notaPedidoId     String?
+  acopioId         String?
+  devolucionId     String?
+  transferenciaId  String?
+  clienteId        String?
+  proveedorId      String?
+  obraId           String?
+  sucursalId       String
+  depositoId       String
+  fecha            DateTime
+  fechaEntrega     DateTime?
+  direccionEntrega String?
+  items            ItemRemito[]
+  cantidadTotal    Decimal      @db.Decimal(14, 3)
+  pesoTotalKg      Decimal      @db.Decimal(14, 3)
+  valorDeclarado   Decimal      @db.Decimal(14, 2)
+  estado           EstadoRemito
+  facturado        Boolean
+  facturasRef      String[]
+  despachoId       String?
+  firmadoAdjuntoId String?
+  comentario       String?
+  stockAplicado    Boolean?
+  creadoEn         DateTime     @default(now())
+  actualizadoEn    DateTime     @updatedAt
+
+  @@index([notaPedidoId])
+  @@index([acopioId])
+  @@index([clienteId])
+  @@index([estado])
+  @@index([fecha])
+  @@index([sucursalId])
+}
+
+model ItemRemito {
+  id         String   @id @default(cuid())
+  remitoId   String
+  remito     Remito   @relation(fields: [remitoId], references: [id], onDelete: Cascade)
+  orden      Int
+  productoId String
+  cantidad   Decimal  @db.Decimal(14, 3)
+  itemNPId   String?
+  obraId     String?
+  nroSerie   String[]
+
+  @@index([remitoId])
+  @@index([productoId])
+}
+
+model Adjunto {
+  id            String           @id @default(cuid())
+  entidadTipo   EntidadAdjunto
+  entidadId     String
+  nombre        String
+  tamanoBytes   Int
+  tipoMime      String
+  categoria     CategoriaAdjunto
+  subidoPor     String
+  subidoEn      DateTime
+  /// Pathname del blob en Vercel Blob (vacío para enlaces web).
+  blobKey       String
+  url           String?
+  creadoEn      DateTime         @default(now())
+  actualizadoEn DateTime         @updatedAt
+
+  @@index([entidadTipo, entidadId])
+}
+
+model Vehiculo {
+  id            String   @id @default(cuid())
+  patente       String
+  descripcion   String
+  capacidadKg   Decimal  @db.Decimal(14, 3)
+  choferId      String?
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+model Chofer {
+  id            String   @id @default(cuid())
+  nombre        String
+  telefono      String
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+model Despacho {
+  id                     String           @id @default(cuid())
+  numero                 String           @unique
+  sucursalId             String
+  depositoId             String
+  clienteId              String
+  notaPedidoId           String?
+  remitoId               String?
+  modalidad              ModalidadEntrega
+  estado                 EstadoDespacho
+  posicion               String
+  fechaProgramada        DateTime
+  fechaEspera            DateTime
+  fechaInicioPreparacion DateTime?
+  fechaFin               DateTime?
+  fechaEntrega           DateTime?
+  vehiculoId             String?
+  choferId               String?
+  operarioId             String?
+  direccionEntrega       String
+  obraId                 String?
+  items                  ItemDespacho[]
+  observaciones          String?
+  reprogramaciones       Int?
+  creadoEn               DateTime         @default(now())
+  actualizadoEn          DateTime         @updatedAt
+
+  @@index([clienteId])
+  @@index([notaPedidoId])
+  @@index([estado])
+  @@index([fechaProgramada])
+  @@index([sucursalId])
+}
+
+model ItemDespacho {
+  id         String   @id @default(cuid())
+  despachoId String
+  despacho   Despacho @relation(fields: [despachoId], references: [id], onDelete: Cascade)
+  orden      Int
+  productoId String
+  cantidad   Decimal  @db.Decimal(14, 3)
+  itemNPId   String?
+
+  @@index([despachoId])
+}
+
+model HojaRuta {
+  id            String         @id @default(cuid())
+  fecha         DateTime
+  vehiculoId    String
+  choferId      String
+  despachoIds   String[]
+  estado        EstadoHojaRuta
+  creadoEn      DateTime       @default(now())
+  actualizadoEn DateTime       @updatedAt
+
+  @@index([fecha])
+  @@index([estado])
+}
+
+// ───────────────────────── Compras y acopios con proveedores ─────────────────────────
+
+model OrdenCompra {
+  id                   String      @id @default(cuid())
+  numero               String      @unique
+  circuito             Int
+  origen               OrigenVenta
+  acopioProveedorId    String?
+  proveedorId          String
+  depositoDestinoId    String
+  sucursalId           String
+  estado               EstadoOC
+  fechaEmision         DateTime
+  fechaEntregaEstimada DateTime
+  items                ItemOC[]
+  subtotal             Decimal     @db.Decimal(14, 2)
+  iva                  Decimal     @db.Decimal(14, 2)
+  total                Decimal     @db.Decimal(14, 2)
+  observaciones        String?
+  usuarioId            String
+  reclamos             String[]
+  /// Compras en dólares: ítems en USD y snapshot del tipo de cambio al confirmar.
+  moneda               Moneda      @default(ARS)
+  tipoCambioAplicado   Decimal?    @db.Decimal(14, 4)
+  tipoCambioFecha      DateTime?
+  creadoEn             DateTime    @default(now())
+  actualizadoEn        DateTime    @updatedAt
+
+  @@index([proveedorId])
+  @@index([acopioProveedorId])
+  @@index([estado])
+  @@index([fechaEmision])
+  @@index([sucursalId])
+}
+
+model ItemOC {
+  id               String      @id @default(cuid())
+  ordenCompraId    String
+  ordenCompra      OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  orden            Int
+  productoId       String
+  cantidadPedida   Decimal     @db.Decimal(14, 3)
+  cantidadRecibida Decimal     @db.Decimal(14, 3)
+  costoUnitario    Decimal     @db.Decimal(14, 4)
+  /// OC en USD: costo cargado en dólares (costoUnitario queda en pesos al tipo de cambio de la OC).
+  costoUSD         Decimal?    @db.Decimal(14, 4)
+  descuentoPct     Decimal     @db.Decimal(7, 3)
+
+  @@index([ordenCompraId])
+  @@index([productoId])
+}
+
+model RecepcionMercaderia {
+  id              String          @id @default(cuid())
+  numero          String          @unique
+  ordenCompraId   String
+  depositoId      String
+  remitoProveedor String
+  fecha           DateTime
+  items           ItemRecepcion[]
+  usuarioId       String
+  observaciones   String?
+  comprobanteId   String?
+  /// OC en USD: tipo de cambio del día de la recepción (el costo que entra al stock en pesos).
+  tipoCambioAplicado Decimal?     @db.Decimal(14, 4)
+  tipoCambioFecha    DateTime?
+  creadoEn        DateTime        @default(now())
+  actualizadoEn   DateTime        @updatedAt
+
+  @@index([ordenCompraId])
+  @@index([fecha])
+}
+
+model ItemRecepcion {
+  id               String               @id @default(cuid())
+  recepcionId      String
+  recepcion        RecepcionMercaderia  @relation(fields: [recepcionId], references: [id], onDelete: Cascade)
+  orden            Int
+  itemOCId         String
+  productoId       String
+  cantidadRecibida Decimal              @db.Decimal(14, 3)
+  costoUnitario    Decimal              @db.Decimal(14, 4)
+  costoUSD         Decimal?             @db.Decimal(14, 4)
+  diferencia       DiferenciaRecepcion?
+  observacion      String?
+
+  @@index([recepcionId])
+}
+
+model AcopioProveedor {
+  id                   String                   @id @default(cuid())
+  numero               String                   @unique
+  circuito             Int
+  proveedorId          String
+  sucursalId           String
+  depositoDestinoId    String
+  fechaCreacion        DateTime
+  fechaVencimiento     DateTime
+  modalidad            ModalidadAcopioProveedor
+  importe              Decimal                  @db.Decimal(14, 2)
+  formaPago            FormaPagoAcopio
+  preciosCongelados    CostoCongelado[]
+  items                ItemAcopioProveedor[]
+  pagado               Decimal                  @db.Decimal(14, 2)
+  comprobanteCompraIds String[]
+  ordenPagoIds         String[]
+  estado               EstadoAcopio
+  observaciones        String?
+  moneda               Moneda                   @default(ARS)
+  tipoCambioAplicado   Decimal?                 @db.Decimal(14, 4)
+  tipoCambioFecha      DateTime?
+  creadoEn             DateTime                 @default(now())
+  actualizadoEn        DateTime                 @updatedAt
+
+  @@index([proveedorId])
+  @@index([estado])
+  @@index([sucursalId])
+}
+
+model CostoCongelado {
+  id                String          @id @default(cuid())
+  acopioProveedorId String
+  acopioProveedor   AcopioProveedor @relation(fields: [acopioProveedorId], references: [id], onDelete: Cascade)
+  orden             Int
+  productoId        String
+  costo             Decimal         @db.Decimal(14, 4)
+
+  @@index([acopioProveedorId])
+}
+
+model ItemAcopioProveedor {
+  id                String          @id @default(cuid())
+  acopioProveedorId String
+  acopioProveedor   AcopioProveedor @relation(fields: [acopioProveedorId], references: [id], onDelete: Cascade)
+  orden             Int
+  productoId        String
+  cantidadPactada   Decimal         @db.Decimal(14, 3)
+
+  @@index([acopioProveedorId])
+}
+
+// ───────────────────────── Finanzas ─────────────────────────
+
+model Comprobante {
+  id                  String                  @id @default(cuid())
+  tipo                TipoComprobante
+  letra               LetraComprobante?
+  circuito            Int
+  numero              String                  @unique
+  clienteId           String?
+  proveedorId         String?
+  notaPedidoId        String?
+  acopioId            String?
+  acopioProveedorId   String?
+  recepcionId         String?
+  devolucionId        String?
+  comprobanteOrigenId String?
+  aplicadoA           ImputacionComprobante[]
+  sucursalId          String?
+  fecha               DateTime
+  vencimiento         DateTime?
+  subtotal            Decimal                 @db.Decimal(14, 2)
+  iva                 Decimal                 @db.Decimal(14, 2)
+  total               Decimal                 @db.Decimal(14, 2)
+  saldoPendiente      Decimal                 @db.Decimal(14, 2)
+  estado              EstadoComprobante
+  items               ItemComprobante[]
+  observaciones       String?
+  creadoEn            DateTime                @default(now())
+  actualizadoEn       DateTime                @updatedAt
+
+  @@index([clienteId])
+  @@index([proveedorId])
+  @@index([notaPedidoId])
+  @@index([acopioId])
+  @@index([estado])
+  @@index([fecha])
+  @@index([sucursalId])
+}
+
+model ItemComprobante {
+  id                    String      @id @default(cuid())
+  comprobanteId         String
+  comprobante           Comprobante @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+  orden                 Int
+  productoId            String
+  obraId                String?
+  cantidad              Decimal     @db.Decimal(14, 3)
+  precioUnitario        Decimal     @db.Decimal(14, 2)
+  costoUnitarioSnapshot Decimal     @db.Decimal(14, 4)
+  descuentoPct          Decimal     @db.Decimal(7, 3)
+
+  @@index([comprobanteId])
+}
+
+/// Notas de crédito aplicadas a comprobantes (Comprobante.aplicadoA).
+model ImputacionComprobante {
+  id            String      @id @default(cuid())
+  origenId      String
+  origen        Comprobante @relation(fields: [origenId], references: [id], onDelete: Cascade)
+  orden         Int
+  /// Comprobante al que se aplica.
+  comprobanteId String
+  importe       Decimal     @db.Decimal(14, 2)
+
+  @@index([origenId])
+  @@index([comprobanteId])
+}
+
+/// Recibo (entrada de fondos). En el dominio: Cobranza.
+model Recibo {
+  id            String             @id @default(cuid())
+  numero        String             @unique
+  circuito      Int
+  clienteId     String
+  sucursalId    String?
+  fecha         DateTime
+  medios        MedioRecibo[]
+  imputaciones  ImputacionRecibo[]
+  total         Decimal            @db.Decimal(14, 2)
+  saldoAFavor   Decimal?           @db.Decimal(14, 2)
+  usuarioId     String
+  observaciones String?
+  creadoEn      DateTime           @default(now())
+  actualizadoEn DateTime           @updatedAt
+
+  @@index([clienteId])
+  @@index([fecha])
+  @@index([sucursalId])
+}
+
+model MedioRecibo {
+  id           String    @id @default(cuid())
+  reciboId     String
+  recibo       Recibo    @relation(fields: [reciboId], references: [id], onDelete: Cascade)
+  orden        Int
+  medio        MedioPago
+  importe      Decimal   @db.Decimal(14, 2)
+  referencia   String?
+  banco        String?
+  numeroCheque String?
+  fechaCobro   DateTime?
+  chequeId     String?
+
+  @@index([reciboId])
+}
+
+model ImputacionRecibo {
+  id            String  @id @default(cuid())
+  reciboId      String
+  recibo        Recibo  @relation(fields: [reciboId], references: [id], onDelete: Cascade)
+  orden         Int
+  comprobanteId String
+  importe       Decimal @db.Decimal(14, 2)
+
+  @@index([reciboId])
+  @@index([comprobanteId])
+}
+
+/// Orden de pago (salida de fondos). En el dominio: PagoProveedor.
+model OrdenPago {
+  id            String                @id @default(cuid())
+  numero        String                @unique
+  circuito      Int
+  proveedorId   String
+  fecha         DateTime
+  medios        MedioOrdenPago[]
+  imputaciones  ImputacionOrdenPago[]
+  total         Decimal               @db.Decimal(14, 2)
+  usuarioId     String
+  observaciones String?
+  creadoEn      DateTime              @default(now())
+  actualizadoEn DateTime              @updatedAt
+
+  @@index([proveedorId])
+  @@index([fecha])
+}
+
+model MedioOrdenPago {
+  id           String    @id @default(cuid())
+  ordenPagoId  String
+  ordenPago    OrdenPago @relation(fields: [ordenPagoId], references: [id], onDelete: Cascade)
+  orden        Int
+  medio        MedioPago
+  importe      Decimal   @db.Decimal(14, 2)
+  referencia   String?
+  banco        String?
+  numeroCheque String?
+  fechaCobro   DateTime?
+  chequeId     String?
+
+  @@index([ordenPagoId])
+}
+
+model ImputacionOrdenPago {
+  id            String    @id @default(cuid())
+  ordenPagoId   String
+  ordenPago     OrdenPago @relation(fields: [ordenPagoId], references: [id], onDelete: Cascade)
+  orden         Int
+  comprobanteId String
+  importe       Decimal   @db.Decimal(14, 2)
+
+  @@index([ordenPagoId])
+  @@index([comprobanteId])
+}
+
+model Cheque {
+  id              String       @id @default(cuid())
+  tipo            TipoCheque
+  banco           String
+  numero          String
+  importe         Decimal      @db.Decimal(14, 2)
+  fechaCobro      DateTime
+  clienteId       String
+  cobranzaId      String
+  estado          EstadoCheque
+  proveedorId     String?
+  pagoProveedorId String?
+  creadoEn        DateTime     @default(now())
+  actualizadoEn   DateTime     @updatedAt
+
+  @@index([clienteId])
+  @@index([proveedorId])
+  @@index([estado])
+}
+
+// ───────────────────────── Sistema ─────────────────────────
+
+/// Fila única (id "config").
+model Configuracion {
+  id                     String         @id @default("config")
+  ivaPct                 Decimal        @db.Decimal(7, 2)
+  validezPresupuestoDias Int
+  diasVencimientoAcopio  Int
+  alicuotaIIBBPct        Decimal        @db.Decimal(7, 3)
+  alertaStockMinimo      Boolean
+  umbralSubaCostoPct     Decimal        @db.Decimal(7, 2)
+  tipoCambioUSD          Decimal?       @db.Decimal(14, 4)
+  tipoCambioModo         TipoCambioModo @default(AUTO)
+  tipoCambioManual       Decimal?       @db.Decimal(14, 4)
+  tamanoMaxAdjuntoMB     Int
+  /// [{ codigo, nombre }]
+  categoriasAdjunto      Json
+  /// { empresa, razonSocial, cuit, direccion, telefono, email }
+  empresa                Json
+  creadoEn               DateTime       @default(now())
+  actualizadoEn          DateTime       @updatedAt
+}
+
+/// Último número usado por clave `${codigo}|${circuito}|${puntoVenta}`.
+model Contador {
+  id            String   @id @default(cuid())
+  tipo          String   @unique
+  ultimo        Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+model CotizacionUSD {
+  id            String   @id @default(cuid())
+  fecha         DateTime @unique @db.Date
+  divisaCompra  Decimal  @db.Decimal(14, 4)
+  divisaVenta   Decimal  @db.Decimal(14, 4)
+  billeteCompra Decimal? @db.Decimal(14, 4)
+  billeteVenta  Decimal? @db.Decimal(14, 4)
+  fuente        String
+  obtenidoEn    DateTime
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+/// Una fila por acción de escritura: es lo que lee /api/cambios para la sincronización en vivo.
+model Cambio {
+  id         BigInt   @id @default(autoincrement())
+  tipos      String[]
+  entidadIds String[]
+  usuarioId  String?
+  /// Texto corto para el aviso a los demás usuarios ("confirmó la NP2 0001-00000012").
+  resumen    String?
+  href       String?
+  creadoEn   DateTime @default(now())
+}
+
+model Auditoria {
+  id            String   @id @default(cuid())
+  fecha         DateTime
+  usuarioId     String
+  accion        String
+  entidad       String
+  entidadId     String
+  detalle       String
+  /// Cambios reales medidos (modo capacitación): [{ grupo, titulo, cambios, href }].
+  efectos       Json?
+  /// Id de la acción de negocio (clave del diccionario de impactos).
+  accionId      String?
+  ip            String?
+  userAgent     String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([fecha])
+  @@index([entidadId])
+  @@index([usuarioId])
+}

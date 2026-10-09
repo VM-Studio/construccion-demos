@@ -25,6 +25,7 @@ import { periodoAnterior, periodoDesdePreset, variacion, diaLocal, type Periodo 
 import { margenPeriodo, rankingProductos, serieVentasMargen, ventasFacturadas, type Agrupacion, type FiltroMetricas } from "@/domain/metricas";
 import { formatMoney, formatPercent, formatQty, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { aDolares, formatUSD, fuenteLabel, useTipoCambio } from "@/lib/tipo-cambio";
 
 const ETIQUETA_PERIODO: Record<string, string> = { HOY: "ayer", "7D": "7 días previos", MES: "mes pasado", MES_ANTERIOR: "mes previo", PERSONALIZADO: "período anterior" };
 
@@ -443,6 +444,11 @@ function ComprasPendientes() {
 function StockPorRubro() {
   const db = useDb();
   const posiciones = usePosiciones();
+  // ARS/USD: solo presentación, al dólar vigente.
+  const [moneda, setMoneda] = React.useState<"ARS" | "USD">("ARS");
+  const { tc } = useTipoCambio();
+  const usd = moneda === "USD" && (tc?.valor ?? 0) > 0;
+  const m = (n: number, o: { decimals?: boolean } = {}) => (usd ? formatUSD(aDolares(n, tc?.valor), o) : formatMoney(n, o));
   const filas = db.rubros
     .slice()
     .sort((a, b) => a.orden - b.orden)
@@ -467,7 +473,10 @@ function StockPorRubro() {
           <Warehouse className="size-4 text-muted" />
           <CardTitle>Stock por rubro y depósito · valorizado a costo promedio</CardTitle>
         </div>
-        <Link href="/reportes/valorizacion" className="text-[12px] font-medium text-muted hover:text-ink">Ver valorización</Link>
+        <div className="flex items-center gap-3">
+          <Segmented value={moneda} onChange={setMoneda} options={[{ value: "ARS", label: "ARS" }, { value: "USD", label: "USD" }]} />
+          <Link href="/reportes/valorizacion" className="text-[12px] font-medium text-muted hover:text-ink">Ver valorización</Link>
+        </div>
       </CardHeader>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-table">
@@ -485,9 +494,9 @@ function StockPorRubro() {
             {filas.map((f) => (
               <tr key={f.id} className="h-10 border-t border-border hover:bg-[#FAFAF8]">
                 <td className="px-4">{f.nombre}</td>
-                <td className="px-3 text-right tnum">{formatMoney(f.norte, { decimals: false })}</td>
-                <td className="px-3 text-right tnum">{formatMoney(f.sur, { decimals: false })}</td>
-                <td className="px-3 text-right font-medium tnum">{formatMoney(f.total, { decimals: false })}</td>
+                <td className="px-3 text-right tnum">{m(f.norte, { decimals: false })}</td>
+                <td className="px-3 text-right tnum">{m(f.sur, { decimals: false })}</td>
+                <td className="px-3 text-right font-medium tnum">{m(f.total, { decimals: false })}</td>
                 <td className="px-3 text-right text-muted tnum">
                   <div className="flex items-center justify-end gap-2">
                     <div className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-subtle sm:block">
@@ -509,15 +518,20 @@ function StockPorRubro() {
           <tfoot>
             <tr className="h-10 border-t border-border-strong bg-[#FAFAF8] font-semibold">
               <td className="px-4">Total</td>
-              <td className="px-3 text-right tnum">{formatMoney(tN, { decimals: false })}</td>
-              <td className="px-3 text-right tnum">{formatMoney(tS, { decimals: false })}</td>
-              <td className="px-3 text-right text-accent tnum">{formatMoney(total, { decimals: false })}</td>
+              <td className="px-3 text-right tnum">{m(tN, { decimals: false })}</td>
+              <td className="px-3 text-right tnum">{m(tS, { decimals: false })}</td>
+              <td className="px-3 text-right text-accent tnum">{m(total, { decimals: false })}</td>
               <td className="px-3 text-right tnum">100 %</td>
               <td className="px-4 text-right tnum">{tB}</td>
             </tr>
           </tfoot>
         </table>
       </div>
+      {moneda === "USD" && (
+        <p className="border-t border-border px-4 py-2 text-[12px] text-muted">
+          {tc?.valor ? `Valor usado: ${formatMoney(tc.valor)} (${fuenteLabel(tc.fuente)}, ${formatDate(tc.fecha ? `${tc.fecha}T12:00:00` : null, "dd/MM")})` : "Sin tipo de cambio disponible: los valores se muestran en pesos."}
+        </p>
+      )}
     </Card>
   );
 }

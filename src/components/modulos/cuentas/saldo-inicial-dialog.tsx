@@ -14,6 +14,7 @@ import { FormField } from "@/components/ui/form-field";
 import { formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { obtenerDb } from "@/lib/datos/almacen";
 
 const aIso = (v: string) => {
   const [y, m, d] = v.split("-").map(Number);
@@ -37,7 +38,7 @@ export function SaldoInicialDialog({ tipo, open, onOpenChange, entidadId }: { ti
   const [obs, setObs] = React.useState("");
 
   const circuitoDe = (x: string): Circuito => {
-    const db = useStore.getState().db;
+    const db = obtenerDb();
     const c = (esCliente ? db.clientes.find((k) => k.id === x) : db.proveedores.find((k) => k.id === x))?.circuitoHabitual ?? 1;
     return c === 2 && !veC2 ? 1 : c;
   };

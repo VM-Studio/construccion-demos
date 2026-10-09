@@ -2,13 +2,12 @@
  * Ejercita los flujos de negocio de Aceros RNF sobre el store y verifica la integridad
  * al final: `pnpm flujos:check`.
  */
-import "./shim-storage";
-import { useStore } from "../src/store";
+import { crearMotorMemoria } from "./motor-memoria";
 import { crearSeed } from "../src/data/seed";
 import { verificarIntegridad } from "../src/domain/integridad";
 import { saldoDisponible } from "../src/domain/acopios";
 import { pendienteRetirar } from "../src/domain/acopiosProveedor";
-import { posicionesDe, acopiosResumenDe } from "../src/store/selectors";
+import { posicionesDe, acopiosResumenDe } from "../src/store/calculos";
 import { minutosPreparacion } from "../src/domain/despachos";
 import { readFileSync } from "node:fs";
 import Papa from "papaparse";
@@ -19,7 +18,8 @@ import { calcularActualizacionMasiva } from "../src/domain/precios";
 import { pasosCargaInicial } from "../src/domain/cargaInicial";
 import { prerequisitos } from "../src/domain/prerequisitos";
 
-const s = () => useStore.getState();
+const motor = crearMotorMemoria(crearSeed(new Date()));
+const s = () => motor;
 let fallas = 0;
 function paso<T>(nombre: string, r: { ok: true; data: T } | { ok: false; error: string; codigo?: string }, esperaError?: string): T {
   if (esperaError) {
@@ -41,7 +41,6 @@ function check(nombre: string, cond: boolean, detalle = "") {
   console.log(`  ${cond ? "✔" : "✘"} ${nombre}${detalle ? ` — ${detalle}` : ""}`);
 }
 
-useStore.setState({ db: crearSeed(new Date()), hidratado: true });
 s().login("usr_felipe");
 const hoy = new Date().toISOString();
 const pos = (pid: string, dep: string) => posicionesDe(s().db).get(pid)!.porDeposito[dep];
@@ -184,7 +183,7 @@ console.log("\n9) Integridad final");
 
 console.log("\n10) Desde el sistema vacío: importar → precios → proveedor → OC → ingreso → cliente y obra → acopio → retiro → remito → hecho → cobro");
 {
-  useStore.setState({ db: seedBase(new Date()) });
+  motor.setDb(seedBase(new Date()));
   s().login("usr_felipe");
   check("Arranca vacío y NP pide cliente y artículo con precio", prerequisitos("notasPedido", s().db).length === 2);
   const csv = (f: string) => Papa.parse<Record<string, unknown>>(readFileSync(`public/plantillas/${f}`, "utf8").replace(/^\uFEFF/, ""), { header: true, skipEmptyLines: true });
@@ -230,11 +229,7 @@ console.log("\n10) Desde el sistema vacío: importar → precios → proveedor �
   check("Guía de carga inicial completa", pasosCargaInicial(s().db).every((x) => x.hecho), pasosCargaInicial(s().db).filter((x) => !x.hecho).map((x) => x.titulo).join(", "));
   const res = verificarIntegridad(s().db);
   check("Integridad desde vacío", res.ok, res.chequeos.filter((c) => !c.ok).map((c) => c.errores[0]).join(" | "));
-  paso("Cargar datos de ejemplo con datos: pide confirmación", s().cargarDatosEjemplo(), "HAY_DATOS");
-  paso("Reemplazar por datos de ejemplo", s().cargarDatosEjemplo({ reemplazar: true }));
-  check("Ejemplo cargado", s().db.productos.length > 100);
-  s().resetearDemo();
-  check("Vaciar deja solo estructura", !s().db.productos.length && !s().db.clientes.length && s().db.usuarios.length === 4 && s().ui.usuarioId === "usr_felipe");
+  // (Vaciar y cargar datos de ejemplo no existen en el sistema real.)
 }
 
 if (fallas) {

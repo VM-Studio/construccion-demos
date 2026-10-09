@@ -1,8 +1,8 @@
 import type { AjusteStock, EstadoInicial, PrecioProducto, Producto } from "@/domain/types";
+import { configInicial } from "./config";
 import { calcularPendienteEntrega, calcularReservado } from "@/domain/stock";
 import { calcularPrecioDesdeMarkup } from "@/domain/precios";
 import { formatearDoc, numeradoresDesde } from "@/domain/numeracion";
-import { BRAND } from "@/config/brand";
 import { crearCalendario, crearRandom } from "./util";
 import { seedOrganizacionBase, seedOrganizacionEjemplo } from "./organizacion";
 import { PRODUCTOS, UN_DE_RUBRO, seedListas, seedProveedores, seedRubros, type ProductoSpec } from "./catalogo";
@@ -269,37 +269,4 @@ export function seedEjemplo(hoyParam: Date = new Date()): EstadoInicial {
 /** @deprecated usar `seedEjemplo` (datos completos) o `seedBase` (solo estructura). */
 export const crearSeed = seedEjemplo;
 
-export function configInicial(): EstadoInicial["config"] {
-  return {
-    ivaPct: 21,
-    validezPresupuestoDias: 7,
-    diasVencimientoAcopio: 180,
-    alicuotaIIBBPct: 0,
-    alertaStockMinimo: true,
-    umbralSubaCostoPct: 3,
-    tipoCambioUSD: 1450,
-    tamanoMaxAdjuntoMB: 10,
-    categoriasAdjunto: [
-      { codigo: "REMITO_FIRMADO", nombre: "Remito firmado" },
-      { codigo: "FACTURA_PROVEEDOR", nombre: "Factura de proveedor" },
-      { codigo: "OTRO", nombre: "Otro" },
-    ],
-    motivosAjuste: [
-      { codigo: "INVENTARIO_INICIAL", nombre: "Inventario inicial", activo: true },
-      { codigo: "ROTURA", nombre: "Rotura", activo: true },
-      { codigo: "FALTANTE", nombre: "Faltante en inventario", activo: true },
-      { codigo: "SOBRANTE", nombre: "Sobrante en inventario", activo: true },
-      { codigo: "VENCIMIENTO", nombre: "Vencimiento", activo: true },
-      { codigo: "MUESTRA", nombre: "Muestra", activo: true },
-      { codigo: "OTRO", nombre: "Otro", activo: true },
-    ],
-    empresa: {
-      empresa: BRAND.empresa,
-      razonSocial: BRAND.razonSocial,
-      cuit: BRAND.cuit,
-      direccion: BRAND.direccion,
-      telefono: BRAND.telefono,
-      email: BRAND.email,
-    },
-  };
-}
+export { configInicial } from "./config";

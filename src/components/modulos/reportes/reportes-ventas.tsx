@@ -1,5 +1,6 @@
 "use client";
 
+import { useMovimientos } from "@/lib/datos/hooks";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
@@ -227,7 +228,9 @@ export function ReporteRentabilidadPedidos() {
 // ───────────────────────── 3. Rentabilidad por producto ─────────────────────────
 
 export function ReporteRentabilidadProductos() {
-  const db = useDb();
+  const dbBase = useDb();
+  const { movimientos } = useMovimientos(); // kardex leído del servidor
+  const db = React.useMemo(() => ({ ...dbBase, movimientos }), [dbBase, movimientos]);
   const router = useRouter();
   const suc = useFiltroMetricas();
   const [periodo, setPeriodo] = usePeriodoReporte();

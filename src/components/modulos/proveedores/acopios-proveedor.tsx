@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Ban, Boxes, CalendarClock, Download, Factory, Lightbulb, PackageOpen, Plus, ShoppingCart, Wallet } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosProveedorResumen, useDb, usePosiciones, usePuede, type AcopioProveedorResumen } from "@/store/selectors";
-import type { AcopioProveedor, Circuito, FormaPagoAcopio } from "@/domain/types";
+import type { AcopioProveedor, Circuito, FormaPagoAcopio, Moneda, Producto } from "@/domain/types";
 import { pendienteRetirar, resumenArticulos } from "@/domain/acopiosProveedor";
 import { MEDIO_PAGO_LABEL } from "@/domain/estados";
 import { documentoAcopioProveedor } from "@/lib/desacopio/datos";
@@ -37,6 +37,12 @@ import { diaLocal } from "@/lib/periodos";
 import { aCSV, cn, descargarArchivo } from "@/lib/utils";
 import { PagoDialog } from "@/components/modulos/cuentas/pago-dialog";
 import { DescargarDocumento } from "@/components/modulos/acopios/descargar-desacopio";
+import { obtenerDb } from "@/lib/datos/almacen";
+import { aDolares, formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
+
+/** "USD 12.400,00 (al $ 1.450,00 del 08/10/2026)" para un acopio con proveedor en dólares. */
+const textoUSD = (a: AcopioProveedor, pesos: number) =>
+  a.moneda === "USD" && a.tipoCambioAplicado ? `${formatUSD(aDolares(pesos, a.tipoCambioAplicado))} (al ${formatMoney(a.tipoCambioAplicado)} del ${formatDate(a.tipoCambioFecha)})` : null;
 
 const aIso = (v: string, h = 11) => {
   const [y, m, d] = v.split("-").map(Number);
@@ -57,7 +63,12 @@ export function AcopiosProveedorTabla({ filtro, vacio }: { filtro?: (a: AcopioPr
     { key: "f", header: "Fecha", cell: (a) => <span className="text-muted">{formatDate(a.acopio.fechaCreacion)}</span> },
     { key: "v", header: "Vencimiento", sortable: true, sortValue: (a) => a.acopio.fechaVencimiento, cell: (a) => <span className={cn("whitespace-nowrap", a.estado === "VIGENTE" && a.diasParaVencer <= 30 ? "font-medium text-warning" : "text-muted")}>{formatDate(a.acopio.fechaVencimiento)}</span> },
     { key: "m", header: "Modalidad", cell: (a) => <span className="whitespace-nowrap text-muted">{a.acopio.modalidad === "CANTIDAD" ? "Por cantidad" : "Por monto"}</span> },
-    { key: "i", header: "Importe", align: "right", footer: <span className="tnum">{formatMoney(t.i, { decimals: false })}</span>, cell: (a) => <span className="tnum">{formatMoney(a.acopio.importe, { decimals: false })}</span> },
+    { key: "i", header: "Importe", align: "right", footer: <span className="tnum">{formatMoney(t.i, { decimals: false })}</span>, cell: (a) => (
+        <span className="tnum">
+          {formatMoney(a.acopio.importe, { decimals: false })}
+          {a.acopio.moneda === "USD" && a.acopio.tipoCambioAplicado ? <span className="block text-[11px] text-muted">{formatUSD(aDolares(a.acopio.importe, a.acopio.tipoCambioAplicado))}</span> : null}
+        </span>
+      ) },
     { key: "r", header: "Retirado", align: "right", footer: <span className="tnum">{formatMoney(t.r, { decimals: false })}</span>, cell: (a) => <span className="tnum">{formatMoney(a.retirado, { decimals: false })}</span> },
     { key: "s", header: "Saldo disponible", align: "right", footer: <span className="tnum">{formatMoney(t.s, { decimals: false })}</span>, cell: (a) => <span className="font-medium tnum">{formatMoney(a.saldo, { decimals: false })}</span> },
     { key: "pr", header: "Pendiente de retirar", align: "right", sortable: true, sortValue: (a) => a.pendientePesos, footer: <span className="tnum text-accent">{formatMoney(t.p, { decimals: false })}</span>, cell: (a) => <span className="whitespace-nowrap tnum">{a.acopio.modalidad === "CANTIDAD" ? `${a.pendienteUnidades} u. · ` : ""}{formatMoney(a.pendientePesos, { decimals: false })}</span> },
@@ -102,6 +113,19 @@ export function AcopioProveedorNuevo() {
   const [importe, setImporte] = React.useState(0);
   const [forma, setForma] = React.useState<FormaPagoAcopio>("ANTICIPO");
   const [costos, setCostos] = React.useState<Record<string, number>>({});
+  // USD: importe y costos se cargan en dólares; el servidor los pasa a pesos con su tipo de cambio.
+  const [moneda, setMoneda] = React.useState<Moneda>("ARS");
+  const { tc, valor: tcHoy } = useTipoCambio();
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const costoInicial = (p: Producto, m: Moneda = moneda) => (m === "USD" ? (p.monedaCosto === "USD" && p.costoUSD ? p.costoUSD : tcHoy ? r2(p.costoUltimo / tcHoy) : 0) : p.costoUltimo);
+  const cambiarMoneda = (m: Moneda) => {
+    if (m === moneda) return;
+    setMoneda(m);
+    const conv = (v: number) => (!tcHoy ? v : m === "USD" ? r2(v / tcHoy) : r2(v * tcHoy));
+    setCostos((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, conv(v)])));
+    setImporte((i) => conv(i));
+  };
+  const fmt = (n: number) => (moneda === "USD" ? formatUSD(n) : formatMoney(n));
   const [cantidades, setCantidades] = React.useState<Record<string, number>>({});
   const [obs, setObs] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
@@ -114,7 +138,7 @@ export function AcopioProveedorNuevo() {
     setCostos((c) => ({ ...c, [id]: c[id] ?? costo }));
   };
   React.useEffect(() => {
-    setCostos(Object.fromEntries(productos.map((p) => [p.id, p.costoUltimo])));
+    setCostos(Object.fromEntries(productos.map((p) => [p.id, costoInicial(p)])));
     setCantidades({});
     setAgregados([]);
     if (prov) setCircuito(prov.circuitoHabitual);
@@ -135,8 +159,9 @@ export function AcopioProveedorNuevo() {
       importe: modalidad === "MONTO" ? importe : undefined,
       items: modalidad === "CANTIDAD" ? Object.entries(cantidades).filter(([, q]) => q > 0).map(([productoId, cantidadPactada]) => ({ productoId, cantidadPactada })) : undefined,
       formaPago: forma,
-      costos,
+      costos: Object.fromEntries(productos.map((p) => [p.id, costos[p.id] ?? costoInicial(p)])),
       observaciones: obs || undefined,
+      moneda,
     }));
     if (!r.ok) return toast.error(r.error);
     if (archivo) {
@@ -167,7 +192,11 @@ export function AcopioProveedorNuevo() {
                 <Segmented value={modalidad} onChange={setModalidad} options={[{ value: "MONTO", label: "Por monto" }, { value: "CANTIDAD", label: "Por cantidades" }]} />
                 <ImpactoCampo campo={`acopioProveedor.modalidad.${modalidad}`} />
               </FormField>
-              {modalidad === "MONTO" && <FormField label="Importe" required htmlFor="acp-i"><NumberInput id="acp-i" value={importe} min={0} onValueChange={setImporte} /></FormField>}
+              <FormField label="Moneda" hint={moneda === "USD" ? (tcHoy ? `Dólar de hoy ${formatMoney(tcHoy)}; queda el del alta` : "Sin tipo de cambio disponible") : undefined}>
+                <Segmented value={moneda} onChange={cambiarMoneda} options={[{ value: "ARS", label: "Pesos" }, { value: "USD", label: "Dólares" }]} />
+                <ImpactoCampo campo={`moneda.${moneda}`} />
+              </FormField>
+              {modalidad === "MONTO" && <FormField label={moneda === "USD" ? "Importe USD" : "Importe"} required htmlFor="acp-i" hint={moneda === "USD" && tcHoy && importe ? `≈ ${formatMoney(importe * tcHoy)}` : undefined}><NumberInput id="acp-i" value={importe} min={0} onValueChange={setImporte} /></FormField>}
               <FormField label="Forma de pago" hint={forma === "ANTICIPO" ? "Genera la orden de pago ahora" : "Queda como deuda y se paga en cuotas"}>
                 <Segmented value={forma} onChange={setForma} options={[{ value: "ANTICIPO", label: "Anticipo" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
                 <ImpactoCampo campo={`acopio.formaPago.${forma}`} />
@@ -181,7 +210,7 @@ export function AcopioProveedorNuevo() {
               <CardTitle>Costos a congelar</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="hidden text-[12px] text-muted sm:inline">Snapshot del costo actual, editable antes de congelar</span>
-                {proveedorId && <ProductoPicker label="Agregar artículo" mostrarCosto proveedorId={proveedorId} excluir={new Set(productos.map((p) => p.id))} onSelect={(p) => agregar(p.id, p.costoUltimo)} />}
+                {proveedorId && <ProductoPicker label="Agregar artículo" mostrarCosto proveedorId={proveedorId} excluir={new Set(productos.map((p) => p.id))} onSelect={(p) => agregar(p.id, costoInicial(p))} />}
               </div>
             </CardHeader>
             {!productos.length ? (
@@ -194,14 +223,14 @@ export function AcopioProveedorNuevo() {
               <div className="max-h-[420px] overflow-auto">
                 <table className="w-full text-[12.5px]">
                   <thead className="sticky top-0 bg-[#F0EFEB] text-[11.5px] text-muted">
-                    <tr><th className="h-8 px-3 text-left font-medium">Artículo</th><th className="h-8 px-3 text-right font-medium">Costo actual</th><th className="h-8 w-[150px] px-3 text-right font-medium">Costo congelado</th>{modalidad === "CANTIDAD" && <th className="h-8 w-[130px] px-3 text-right font-medium">Cantidad pactada</th>}</tr>
+                    <tr><th className="h-8 px-3 text-left font-medium">Artículo</th><th className="h-8 px-3 text-right font-medium">Costo actual</th><th className="h-8 w-[150px] px-3 text-right font-medium">{moneda === "USD" ? "Costo congelado USD" : "Costo congelado"}</th>{modalidad === "CANTIDAD" && <th className="h-8 w-[130px] px-3 text-right font-medium">Cantidad pactada</th>}</tr>
                   </thead>
                   <tbody>
                     {productos.map((p) => (
                       <tr key={p.id} className="border-t border-border">
                         <td className="px-3 py-1"><span className="mr-1.5 font-mono text-[11px] text-muted">{p.codigo}</span>{p.nombre}</td>
                         <td className="px-3 py-1 text-right text-muted tnum">{formatMoney(p.costoUltimo)}</td>
-                        <td className="px-3 py-1"><NumberInput aria-label={`Costo congelado de ${p.nombre}`} value={costos[p.id] ?? p.costoUltimo} min={0} onValueChange={(v) => setCostos({ ...costos, [p.id]: v })} className="h-7" /></td>
+                        <td className="px-3 py-1"><NumberInput aria-label={`Costo congelado de ${p.nombre}`} value={costos[p.id] ?? costoInicial(p)} min={0} onValueChange={(v) => setCostos({ ...costos, [p.id]: v })} className="h-7" /></td>
                         {modalidad === "CANTIDAD" && <td className="px-3 py-1"><NumberInput aria-label={`Cantidad pactada de ${p.nombre}`} value={cantidades[p.id] ?? 0} min={0} onValueChange={(v) => setCantidades({ ...cantidades, [p.id]: v })} className="h-7" /></td>}
                       </tr>
                     ))}
@@ -219,8 +248,19 @@ export function AcopioProveedorNuevo() {
                 <dt className="text-muted">Proveedor</dt><dd className="max-w-[160px] truncate text-right">{prov?.razonSocial ?? "—"}</dd>
                 <dt className="text-muted">Modalidad</dt><dd className="text-right">{modalidad === "CANTIDAD" ? "Por cantidades" : "Por monto"}</dd>
                 <dt className="text-muted">Costos congelados</dt><dd className="text-right tnum">{productos.length}</dd>
-                <dt className="border-t border-border pt-1.5 font-semibold">Importe</dt><dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(total)}</dd>
+                <dt className="border-t border-border pt-1.5 font-semibold">Importe</dt><dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{fmt(total)}</dd>
+                {moneda === "USD" && (
+                  <>
+                    <dt className="text-muted">En pesos (hoy)</dt>
+                    <dd className="text-right tnum">{tcHoy ? formatMoney(total * tcHoy) : "—"}</dd>
+                  </>
+                )}
               </dl>
+              {moneda === "USD" && (
+                <p className="text-[12px] text-muted">
+                  {tcHoy ? `Al dólar de hoy (${formatMoney(tcHoy)}, ${formatDate(tc?.fecha ? `${tc.fecha}T12:00:00` : undefined)}). El acopio queda en pesos con el tipo de cambio del alta.` : "Sin tipo de cambio disponible: revisalo en Configuración → Parámetros."}
+                </p>
+              )}
               <Button className="w-full" disabled={!proveedorId || !(total > 0)} onClick={() => void crear()}><Factory /> Crear acopio con proveedor</Button>
               <Impacto accion="crearAcopioProveedor" />
             </CardContent>
@@ -266,13 +306,13 @@ export function AcopioProveedorDetalle({ id }: { id: string }) {
             {puede && res.estado !== "CANCELADO" && <Button onClick={() => router.push(`/compras/oc/nueva?acopio=${a.id}`)}><ShoppingCart /> Retirar (nueva OC)</Button>}
             {puedePagar && res.deuda > 0 && <Button variant="secondary" onClick={() => setDialogo("pago")}><Wallet /> Registrar pago</Button>}
             {puede && <Button variant="secondary" onClick={() => setDialogo("extender")}><CalendarClock /> Extender vencimiento</Button>}
-            <DescargarDocumento entidad="AcopioProveedor" entidadId={a.id} armar={() => documentoAcopioProveedor(useStore.getState().db, a.id)} />
+            <DescargarDocumento entidad="AcopioProveedor" entidadId={a.id} armar={() => documentoAcopioProveedor(obtenerDb(), a.id)} />
             {puede && res.estado !== "CANCELADO" && <Button variant="ghost" onClick={() => setDialogo("cancelar")}><Ban /> Cancelar</Button>}
           </>
         }
       />
       <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiCard label="Importe" valor={formatMoney(a.importe, { compact: a.importe >= 10_000_000 })} />
+        <KpiCard label="Importe" valor={formatMoney(a.importe, { compact: a.importe >= 10_000_000 })} subtexto={textoUSD(a, a.importe) ?? undefined} />
         <KpiCard label="Retirado" valor={formatMoney(res.retirado, { compact: res.retirado >= 10_000_000 })} />
         <KpiCard label="Saldo disponible" valor={formatMoney(res.saldo, { compact: res.saldo >= 10_000_000 })} subtexto="sin pedir en OC" />
         <KpiCard label="Pendiente de retirar" valor={formatMoney(res.pendientePesos, { compact: res.pendientePesos >= 10_000_000 })} acento subtexto={a.modalidad === "CANTIDAD" ? `${res.pendienteUnidades} unidades` : "a costo congelado"} />

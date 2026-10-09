@@ -797,6 +797,11 @@ export const IMPACTOS: Record<string, Impacto> = {
 
 /** Una línea por valor de campo: se muestra debajo del control cuando ese valor está elegido. */
 export const CAMPOS: Record<string, string> = {
+  "parametros.tipoCambio": "Dólar divisa vendedor del Banco Nación, actualizado solo de lunes a viernes. Lo usan los costos en USD de los artículos, las OC y acopios con proveedores en dólares, y los clientes con precios en USD. Cada documento guarda el tipo de cambio con el que se confirmó: cambiarlo acá no modifica documentos ya confirmados.",
+  "producto.monedaCosto": "Con costo en USD, el costo en pesos se recalcula con el dólar vigente al guardar y desde Actualización masiva → Recalcular desde costo USD.",
+  "moneda.USD": "En dólares: se carga en USD y el sistema lo pasa a pesos con el dólar vigente. Al confirmar, el documento guarda su propio tipo de cambio (los cambios posteriores del dólar no lo afectan).",
+  "moneda.ARS": "En pesos: no usa el tipo de cambio.",
+  "cliente.facturaEnUSD": "Habilita Precios en USD en cotizaciones y notas de pedido de este cliente. Los importes quedan en pesos para la cuenta corriente; el documento se muestra en dólares al tipo de cambio aplicado.",
   "origen.NUEVA": "Venta a precio de lista. Se cobra contado o en cuenta corriente y se factura.",
   "origen.ACOPIO": "Retiro de un acopio: precios congelados, descuenta del saldo del acopio, no se factura ni se cobra.",
   "formaPago.CONTADO": "Se registra el cobro al facturar. No queda deuda.",

@@ -4,7 +4,7 @@ import { validarCUIT } from "@/domain/cuit";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
 import type { GetFn, SetFn } from "../types";
-import type { ClienteInput, ProductoInput, ProveedorInput } from "./catalogo";
+import { normalizarCostoUSD, type ClienteInput, type ProductoInput, type ProveedorInput } from "./catalogo";
 
 export interface ResultadoImportacion {
   creados: number;
@@ -30,7 +30,8 @@ export function crearSliceImportacion(set: SetFn, get: GetFn) {
           codigos.add(codigo.toLowerCase());
           const rubro = tx.find("rubros", fila.rubroId);
           if (!rubro) throw new ErrorNegocio(`El rubro del artículo ${codigo} no existe.`);
-          const nuevo: Producto = { ...fila, codigo, unidadNegocioId: rubro.unidadNegocioId, id: newId("prod"), ...tx.meta() };
+          // Costo en USD: el costo en pesos sale del tipo de cambio vigente del servidor.
+          const nuevo: Producto = { ...normalizarCostoUSD(tx, fila), codigo, unidadNegocioId: rubro.unidadNegocioId, id: newId("prod"), ...tx.meta() };
           tx.insert("productos", nuevo);
           for (const d of tx.get("depositos"))
             tx.insert("stock", { id: newId("stk"), productoId: nuevo.id, depositoId: d.id, cantidadFisica: 0, ...tx.meta() });

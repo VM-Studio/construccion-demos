@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { FileText, HardHat, Plus, Printer, Receipt, Save, Send, ShoppingCart, ThumbsDown, Undo2, Wallet } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
-import type { Circuito, Cobranza, Comprobante, Cotizacion, DevolucionNP, ItemVenta, NotaPedido, Obra, Producto } from "@/domain/types";
+import type { Circuito, Cobranza, Comprobante, Cotizacion, DevolucionNP, ItemVenta, Moneda, NotaPedido, Obra, Producto } from "@/domain/types";
 import { MEDIO_PAGO_LABEL, TIPO_COMPROBANTE_LABEL } from "@/domain/estados";
 import { obtenerPrecio } from "@/domain/precios";
 import { PageHeader } from "@/components/shared/page-header";
@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatDate, formatMoney, formatQty } from "@/lib/format";
@@ -37,6 +38,8 @@ import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento, ReciboDocumento } from "@/components/modulos/cuentas/documentos";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { DevolucionDialog } from "./nota-pedido-detalle";
+import { obtenerDb } from "@/lib/datos/almacen";
+import { aDolares, formatUSD, textoTipoCambioAplicado, useTipoCambio } from "@/lib/tipo-cambio";
 
 const useCliente = () => {
   const db = useDb();
@@ -68,7 +71,19 @@ export function CotizacionesView() {
     { key: "c", header: "Cliente", cell: (c) => <span className="block min-w-[150px]">{cliente(c.clienteId)?.nombreFantasia ?? cliente(c.clienteId)?.razonSocial}</span> },
     { key: "o", header: "Obra", cell: (c) => <span className="text-[12px] text-muted">{db.obras.find((o) => o.id === c.obraId)?.nombre ?? "—"}</span> },
     { key: "ci", header: "Circuito", cell: (c) => <CircuitoBadge circuito={c.circuito} corto /> },
-    { key: "t", header: "Total", align: "right", sortable: true, sortValue: (c) => c.total, cell: (c) => <span className="tnum">{formatMoney(c.total, { decimals: false })}</span> },
+    {
+      key: "t",
+      header: "Total",
+      align: "right",
+      sortable: true,
+      sortValue: (c) => c.total,
+      cell: (c) => (
+        <span className="tnum">
+          {formatMoney(c.total, { decimals: false })}
+          {c.moneda === "USD" && c.tipoCambioAplicado ? <span className="block text-[11px] text-muted">{formatUSD(aDolares(c.total, c.tipoCambioAplicado))}</span> : null}
+        </span>
+      ),
+    },
     { key: "v", header: "Vence", cell: (c) => <span className={cn("whitespace-nowrap", vencida(c) ? "text-danger" : "text-muted")}>{formatDate(new Date(Date.parse(c.fecha) + c.validezDias * 86_400_000))}</span> },
     { key: "e", header: "Estado", cell: (c) => <StatusBadge tipo="COTIZACION" estado={vencida(c) ? "VENCIDA" : c.estado} /> },
     { key: "np", header: "Nota de pedido", cell: (c) => (c.notaPedidoId ? <Link onClick={(e) => e.stopPropagation()} href={`/ventas/notas-pedido/${c.notaPedidoId}`} className="font-mono text-[12px] hover:underline">{db.notasPedido.find((n) => n.id === c.notaPedidoId)?.numero}</Link> : <span className="text-disabled">—</span>) },
@@ -102,25 +117,26 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
   const [descuento, setDescuento] = React.useState(cot?.descuentoPct ?? 0);
   const [items, setItems] = React.useState<LineaCot[]>(cot?.items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct })) ?? []);
   const [imprimir, setImprimir] = React.useState(false);
+  const [moneda, setMoneda] = React.useState<Moneda>(cot?.moneda ?? "ARS");
+  const { valor: dolar } = useTipoCambio();
+  // Precios en USD (cliente facturaEnUSD): se guarda en pesos y el servidor fija el tipo de cambio al guardar.
+  const enUSD = !!cliente?.facturaEnUSD && moneda === "USD";
   const editable = !cot || cot.estado === "BORRADOR" || cot.estado === "ENVIADA";
   const lista = cliente?.listaPreciosId ?? "lst_gen";
-  const guardar = (): string | null => {
+  const guardar = async () => {
     const its: ItemVenta[] = items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId ?? (obraId || undefined), cantidad: i.cantidad, precioUnitario: i.precio ?? 0, costoUnitarioSnapshot: 0, descuentoPct: i.descuentoPct ?? 0 }));
-    const r = useStore.getState().guardarCotizacion({ clienteId, obraId: obraId || undefined, sucursalId: cliente?.sucursalPreferidaId ?? "suc_central", circuito, fecha: cot?.fecha ?? new Date().toISOString(), validezDias: validez, items: its, descuentoPct: descuento }, cot?.id);
-    if (!r.ok) {
-      toast.error(r.error);
-      return null;
-    }
-    return r.data;
+    const r = await useStore.getState().guardarCotizacion({ clienteId, obraId: obraId || undefined, sucursalId: cliente?.sucursalPreferidaId ?? "suc_central", circuito, fecha: cot?.fecha ?? new Date().toISOString(), validezDias: validez, items: its, descuentoPct: descuento, moneda: enUSD ? "USD" : "ARS" }, cot?.id);
+    if (!r.ok) toast.error(r.error);
+    return r;
   };
   /** Guarda midiendo el impacto (modo capacitación); devuelve el id o null. */
   const guardarMedido = async (accion: "crearCotizacion" | "convertirCotizacion", despues?: (id: string) => void): Promise<string | null> => {
-    const r = await medir(accion, { clienteId, productoIds: items.map((i) => i.productoId) }, () => {
-      const id = guardar();
-      if (id) despues?.(id);
-      return id ? ({ ok: true, id } as const) : ({ ok: false, error: "" } as const);
+    const r = await medir(accion, { clienteId, productoIds: items.map((i) => i.productoId) }, async () => {
+      const x = await guardar();
+      if (x.ok) despues?.(x.data);
+      return x;
     });
-    return r.ok ? r.id : null;
+    return r.ok ? r.data : null;
   };
   const estado = async (id: string, e: Cotizacion["estado"], msg: string) => {
     const r = await medir(e === "RECHAZADA" ? "rechazarCotizacion" : "crearCotizacion", {}, () => useStore.getState().cambiarEstadoCotizacion(id, e));
@@ -132,12 +148,12 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
   const elegirCliente = (v: string) => {
     setClienteId(v);
     // Del store en el momento: un cliente recién creado con el alta rápida todavía no está en `db`.
-    const c = useStore.getState().db.clientes.find((x) => x.id === v);
+    const c = obtenerDb().clientes.find((x) => x.id === v);
     setCircuito(c?.circuitoHabitual ?? 1);
     setObraId("");
     // Los precios cargados eran de la lista del cliente anterior.
     const listaNueva = c?.listaPreciosId ?? "lst_gen";
-    setItems((its) => its.map((i) => ({ ...i, precio: obtenerPrecio(i.productoId, listaNueva, useStore.getState().db.precios) })));
+    setItems((its) => its.map((i) => ({ ...i, precio: obtenerPrecio(i.productoId, listaNueva, obtenerDb().precios) })));
   };
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -171,6 +187,15 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
               <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
               <ImpactoCampo campo={`circuito.${circuito}`} />
             </FormField>
+            {cliente?.facturaEnUSD && (
+              <FormField label="Moneda" className="sm:col-span-2">
+                <label className="flex h-9 items-center gap-3 text-[13px]">
+                  <Switch checked={enUSD} disabled={!editable} onCheckedChange={(v) => setMoneda(v ? "USD" : "ARS")} /> Precios en USD
+                  {enUSD && <span className="text-muted">{dolar ? `Dólar de hoy ${formatMoney(dolar)}` : "Sin tipo de cambio disponible"}</span>}
+                </label>
+                <ImpactoCampo campo={`moneda.${enUSD ? "USD" : "ARS"}`} />
+              </FormField>
+            )}
           </div>
           <ItemsGrid<LineaCot>
             items={items}
@@ -181,6 +206,18 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
             depositoId={cliente ? db.sucursales.find((s) => s.id === cliente.sucursalPreferidaId)?.depositoId : undefined}
             totales={{ descuentoPct: descuento, ivaPct: circuito === 1 ? db.config.ivaPct : 0, onDescuentoChange: setDescuento }}
           />
+          {enUSD && (() => {
+            const neto = items.reduce((a, i) => a + i.cantidad * (i.precio ?? 0) * (1 - (i.descuentoPct ?? 0) / 100), 0) * (1 - descuento / 100);
+            const total = neto * (1 + (circuito === 1 ? db.config.ivaPct : 0) / 100);
+            const tc = actual?.tipoCambioAplicado ?? dolar;
+            return (
+              <p className="text-right text-[13px] text-muted">
+                Total en USD <span className="font-medium text-ink tnum">{formatUSD(aDolares(total, tc))}</span>
+                {" · "}
+                {actual?.tipoCambioAplicado ? textoTipoCambioAplicado(actual.tipoCambioAplicado, actual.tipoCambioFecha) : "Se guarda en pesos; al guardar queda el tipo de cambio del día."}
+              </p>
+            );
+          })()}
           {editable && <Impacto accion="crearCotizacion" />}
           {editable && (!actual || actual.estado !== "ACEPTADA") && <Impacto accion="convertirCotizacion" />}
         </div>
@@ -197,16 +234,27 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
 function CotizacionDocumento({ cot }: { cot: Cotizacion }) {
   const db = useDb();
   const c = db.clientes.find((x) => x.id === cot.clienteId);
+  // Cotización en USD: importes guardados en pesos, impresos en dólares al tipo de cambio aplicado.
+  const tc = cot.tipoCambioAplicado;
+  const usd = cot.moneda === "USD" && !!tc;
   return (
     <PrintLayout titulo="Cotización" numero={cot.numero} fecha={formatDate(cot.fecha)} leyenda={`Válida por ${cot.validezDias} días`} subtitulo={<div className="text-[11px]"><b>Cliente:</b> {c?.razonSocial} · CUIT {c?.cuit || "—"}<br /><b>Obra:</b> {db.obras.find((o) => o.id === cot.obraId)?.nombre ?? "—"}</div>} pie="Precios sujetos a disponibilidad de stock.">
       <PrintTable
         head={["Código", "Artículo", "Cantidad", "Precio", "Desc.", "Subtotal"]}
         rows={cot.items.map((i) => {
           const p = db.productos.find((x) => x.id === i.productoId);
-          return [p?.codigo, p?.nombre, formatQty(i.cantidad, p?.unidad ?? "UN"), formatMoney(i.precioUnitario), `${i.descuentoPct} %`, formatMoney(i.cantidad * i.precioUnitario * (1 - i.descuentoPct / 100))];
+          const sub = i.cantidad * i.precioUnitario * (1 - i.descuentoPct / 100);
+          return usd
+            ? [p?.codigo, p?.nombre, formatQty(i.cantidad, p?.unidad ?? "UN"), formatUSD(aDolares(i.precioUnitario, tc)), `${i.descuentoPct} %`, formatUSD(aDolares(sub, tc))]
+            : [p?.codigo, p?.nombre, formatQty(i.cantidad, p?.unidad ?? "UN"), formatMoney(i.precioUnitario), `${i.descuentoPct} %`, formatMoney(sub)];
         })}
-        foot={["", "", "", "", "Total", formatMoney(cot.total)]}
+        foot={["", "", "", "", "Total", usd ? formatUSD(aDolares(cot.total, tc)) : formatMoney(cot.total)]}
       />
+      {usd && (
+        <p className="mt-3 text-[11px]">
+          Equivalente en pesos: {formatMoney(cot.total)} · {textoTipoCambioAplicado(tc!, cot.tipoCambioFecha)}
+        </p>
+      )}
     </PrintLayout>
   );
 }

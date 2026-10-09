@@ -45,6 +45,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60, updateAge: 5 * 60 },
   pages: { signIn: "/login" },
+  // Los ingresos fallidos ya quedan en la auditoría: no se loguean como errores del servidor.
+  logger: {
+    error(e) {
+      if (e instanceof CredentialsSignin || (e as { type?: string }).type === "CredentialsSignin") return;
+      console.error("[auth]", e);
+    },
+  },
   providers: [
     Credentials({
       credentials: { email: {}, password: {}, recordar: {} },
@@ -81,7 +88,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       }
       if (!t.uid || t.invalida) return token;
       if (!t.vence || ahora > t.vence) return null;
-      const e = await estadoSesion(t.uid);
+      let e = await estadoSesion(t.uid);
+      // Antes de cortar una sesión se confirma contra la base: la caché puede demorar un corte,
+      // pero nunca provocar uno que ya no corresponde (ej. usuario recién reactivado).
+      if (!e || !e.activo || e.sesionVersion !== t.sv) e = await estadoSesion(t.uid, true);
       if (!e) return null;
       if (!e.activo) return { ...token, invalida: "desactivado" };
       if (e.sesionVersion !== t.sv) return { ...token, invalida: "sesion" };

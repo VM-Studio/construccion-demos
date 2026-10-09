@@ -49,9 +49,10 @@ export interface EstadoSesion {
 const TX = { maxWait: 10_000, timeout: 20_000 };
 const cacheSesion = new Map<string, { hasta: number; valor: EstadoSesion | null }>();
 
-export async function estadoSesion(id: string): Promise<EstadoSesion | null> {
+/** Estado del usuario para validar la sesión (caché 60 s). `fresco` saltea la caché. */
+export async function estadoSesion(id: string, fresco = false): Promise<EstadoSesion | null> {
   const c = cacheSesion.get(id);
-  if (c && c.hasta > Date.now()) return c.valor;
+  if (!fresco && c && c.hasta > Date.now()) return c.valor;
   const u = await prisma.usuario.findUnique({ where: { id }, select: { activo: true, sesionVersion: true, debeCambiarPassword: true, rol: true, nombre: true, sucursalId: true } });
   cacheSesion.set(id, { hasta: Date.now() + 60_000, valor: u });
   return u;

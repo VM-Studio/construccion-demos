@@ -209,7 +209,6 @@ export const IMPACTOS: Record<string, Impacto> = {
     efectos: [
       e("usuarios", "aparece con estado “Contraseña temporal” hasta su primer ingreso", "crea"),
       e("inicio", "al ingresar ve solo los módulos que permite su rol", "cambia"),
-      e("numeracion", "sus movimientos quedan firmados con su nombre en el historial", "cambia"),
     ],
     porQue: "Cada persona entra con su usuario: así el sistema sabe quién hizo cada cosa y qué puede ver.",
   },

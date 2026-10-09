@@ -45,6 +45,8 @@ export interface EstadoSesion {
   nombre: string;
   sucursalId: string | null;
 }
+/** Neon desde lejos puede tardar: margen amplio para las transacciones interactivas. */
+const TX = { maxWait: 10_000, timeout: 20_000 };
 const cacheSesion = new Map<string, { hasta: number; valor: EstadoSesion | null }>();
 
 export async function estadoSesion(id: string): Promise<EstadoSesion | null> {
@@ -115,7 +117,7 @@ export async function verificarCredenciales(emailCrudo: string, password: string
     await tx.usuario.update({ where: { id: u.id }, data: { intentosFallidos: 0, bloqueadoHasta: null, ultimoAcceso: new Date() } });
     await auditar(tx, u.id, "Ingresó al sistema", u.id, email, req);
     await publicar(tx, u.id, [u.id]);
-  });
+  }, TX);
   olvidarSesion(u.id);
   return { ok: true, usuario: { id: u.id, nombre: u.nombre, email: u.email, rol: u.rol, sucursalId: u.sucursalId, sesionVersion: u.sesionVersion, debeCambiarPassword: u.debeCambiarPassword } };
 }
@@ -174,7 +176,7 @@ export async function crearUsuario(actor: Usuario, datos: { nombre: string; apel
     await auditar(tx, actor.id, "Creó usuario", n.id, `${n.nombre} · ${n.rol} · ${email}`, req);
     await publicar(tx, actor.id, [n.id], `creó el usuario ${n.nombre}`);
     return n;
-  });
+  }, TX);
   return { ok: true, data: { id: u.id, passwordTemporal: pass } };
 }
 
@@ -189,7 +191,7 @@ export async function restablecerPassword(actor: Usuario, id: string, req: InfoR
     await tx.usuario.update({ where: { id }, data: { passwordHash: hash, debeCambiarPassword: true, intentosFallidos: 0, bloqueadoHasta: null, sesionVersion: { increment: 1 } } });
     await auditar(tx, actor.id, "Restableció contraseña", id, u.email, req);
     await publicar(tx, actor.id, [id]);
-  });
+  }, TX);
   olvidarSesion(id);
   return { ok: true, data: { passwordTemporal: pass, email: u.email } };
 }
@@ -202,7 +204,7 @@ export async function cerrarSesiones(actor: Usuario, id: string, req: InfoReques
     await tx.usuario.update({ where: { id }, data: { sesionVersion: { increment: 1 } } });
     await auditar(tx, actor.id, "Cerró las sesiones del usuario", id, u.email, req);
     await publicar(tx, actor.id, [id]);
-  });
+  }, TX);
   olvidarSesion(id);
   return { ok: true, data: undefined };
 }
@@ -217,7 +219,7 @@ export async function cambiarActivo(actor: Usuario, id: string, activo: boolean,
     await tx.usuario.update({ where: { id }, data: { activo, ...(activo ? {} : { sesionVersion: { increment: 1 } }) } });
     await auditar(tx, actor.id, activo ? "Reactivó usuario" : "Desactivó usuario", id, todos.find((u) => u.id === id)?.email ?? "", req);
     await publicar(tx, actor.id, [id]);
-  });
+  }, TX);
   olvidarSesion(id);
   return { ok: true, data: undefined };
 }
@@ -241,7 +243,7 @@ export async function cambiarPassword(usuarioId: string, datos: { actual?: strin
     await tx.usuario.update({ where: { id: u.id }, data: { passwordHash: hash, debeCambiarPassword: false } });
     await auditar(tx, u.id, "Cambió su contraseña", u.id, datos.forzado ? "contraseña temporal reemplazada" : "desde Mi cuenta", req);
     await publicar(tx, u.id, [u.id]);
-  });
+  }, TX);
   olvidarSesion(u.id);
   return { ok: true, data: undefined };
 }
@@ -253,7 +255,7 @@ export async function actualizarMiCuenta(usuarioId: string, datos: { nombre: str
     await tx.usuario.update({ where: { id: usuarioId }, data: { nombre, apellido: datos.apellido?.trim() || null, avatarIniciales: inicialesDe(nombre, datos.apellido) } });
     await auditar(tx, usuarioId, "Editó su cuenta", usuarioId, nombre, req);
     await publicar(tx, usuarioId, [usuarioId]);
-  });
+  }, TX);
   olvidarSesion(usuarioId);
   return { ok: true, data: undefined };
 }

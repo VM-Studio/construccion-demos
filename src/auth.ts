@@ -88,7 +88,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       t.rol = e.rol;
       t.suc = e.sucursalId;
       t.name = e.nombre;
-      t.dcp = trigger === "update" && session && typeof (session as { debeCambiarPassword?: boolean }).debeCambiarPassword === "boolean" ? (session as { debeCambiarPassword: boolean }).debeCambiarPassword : e.debeCambiarPassword;
+      // Durante una sesión la marca solo pasa de "debe cambiarla" a no (restablecer cierra las
+      // sesiones): así una caché todavía vieja no vuelve a pedir el cambio recién hecho.
+      const actualizada = trigger === "update" && (session as { debeCambiarPassword?: boolean } | undefined)?.debeCambiarPassword === false;
+      t.dcp = actualizada ? false : !!t.dcp && e.debeCambiarPassword;
       // Renovación al usar: la ventana de 12 h (o 30 días) se corre con cada uso.
       t.vence = ahora + (t.recordar ? TREINTA_DIAS : DOCE_HORAS);
       return token;

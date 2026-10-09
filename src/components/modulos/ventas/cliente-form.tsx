@@ -7,6 +7,8 @@ import { useStore } from "@/store";
 import { useDb, usePuede } from "@/store/selectors";
 import type { Cliente, CondicionIVA, CondicionPago, TipoCliente } from "@/domain/types";
 import { validarCUIT, formatearCUIT } from "@/domain/cuit";
+import { completarDesdePadron, type DatosPadron } from "@/domain/padron";
+import { CuitPadron } from "@/components/shared/cuit-padron";
 import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, TIPO_CLIENTE_LABEL, opciones } from "@/domain/estados";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -54,7 +56,26 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   React.useEffect(() => {
     if (cliente) setF({ ...cliente });
   }, [cliente]);
-  const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
+  // Campos que escribió el usuario: el padrón no los pisa (salvo "Reemplazar con los datos del padrón").
+  const tocados = React.useRef(new Set<string>());
+  const [duplicado, setDuplicado] = React.useState(false);
+  const set = <K extends keyof Form>(k: K, v: Form[K]) => {
+    tocados.current.add(k as string);
+    setF((x) => ({ ...x, [k]: v }));
+  };
+  const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" ? "lst_may" : t === "PARTICULAR" ? "lst_pub" : t === "ARQUITECTO" ? "lst_gen" : "lst_may");
+  const aplicarPadron = React.useCallback(
+    (d: DatosPadron, reemplazar: boolean) =>
+      setF((x) => {
+        const n: Form = { ...x, ...completarDesdePadron(x, d, { reemplazar, tocados: tocados.current }) };
+        if (reemplazar || !tocados.current.has("tipo")) {
+          n.tipo = d.tipoPersona === "FISICA" ? "PARTICULAR" : "CONSTRUCTORA";
+          if (!cliente && !tocados.current.has("listaPreciosId")) n.listaPreciosId = listaPorTipo(n.tipo);
+        }
+        return n;
+      }),
+    [cliente],
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +85,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
       const c = validarCUIT(f.cuit);
       if (c) er.cuit = c;
     }
+    if (duplicado) er.cuit = "Ya existe un cliente con este CUIT.";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) er.email = "Email inválido.";
     if (f.condicionPago.startsWith("CTA_CTE") && f.limiteCredito <= 0) er.limiteCredito = "Para cuenta corriente definí un límite de crédito.";
     setErr(er);
@@ -79,8 +101,9 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
+        <CuitPadron entidad="cliente" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={cliente?.id} disabled={ro} required={f.condicionIVA !== "CF"} error={err.cuit} autoFocus={!cliente} />
         <FormField label="Razón social / nombre" required error={err.razonSocial} htmlFor="cl-rs" className="sm:col-span-2">
-          <Input id="cl-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} autoFocus={!cliente} />
+          <Input id="cl-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} />
         </FormField>
         <FormField label="Nombre de fantasía" htmlFor="cl-nf">
           <Input id="cl-nf" disabled={ro} value={f.nombreFantasia ?? ""} onChange={(e) => set("nombreFantasia", e.target.value)} />
@@ -92,13 +115,10 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
             onValueChange={(v) => {
               const t = v as TipoCliente;
               set("tipo", t);
-              if (!cliente) set("listaPreciosId", t === "CONSTRUCTORA" ? "lst_may" : t === "PARTICULAR" ? "lst_pub" : t === "ARQUITECTO" ? "lst_gen" : "lst_may");
+              if (!cliente && !tocados.current.has("listaPreciosId")) setF((x) => ({ ...x, listaPreciosId: listaPorTipo(t) }));
             }}
             options={opciones(TIPO_CLIENTE_LABEL)}
           />
-        </FormField>
-        <FormField label="CUIT / CUIL" error={err.cuit} required={f.condicionIVA !== "CF"} hint="Se valida el dígito verificador" htmlFor="cl-cuit">
-          <Input id="cl-cuit" disabled={ro} value={f.cuit} onChange={(e) => set("cuit", e.target.value)} onBlur={() => f.cuit && set("cuit", formatearCUIT(f.cuit))} aria-invalid={!!err.cuit} placeholder="20-12345678-9" />
         </FormField>
         <FormField label="Condición IVA">
           <Select disabled={ro} value={f.condicionIVA} onValueChange={(v) => set("condicionIVA", v as CondicionIVA)} options={opciones(CONDICION_IVA_LABEL)} />
@@ -120,6 +140,12 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
         </FormField>
         <FormField label="Localidad" htmlFor="cl-loc">
           <Input id="cl-loc" disabled={ro} value={f.localidad} onChange={(e) => set("localidad", e.target.value)} />
+        </FormField>
+        <FormField label="Provincia" htmlFor="cl-prov">
+          <Input id="cl-prov" disabled={ro} value={f.provincia ?? ""} onChange={(e) => set("provincia", e.target.value || undefined)} />
+        </FormField>
+        <FormField label="Código postal" htmlFor="cl-cp">
+          <Input id="cl-cp" disabled={ro} value={f.codigoPostal ?? ""} onChange={(e) => set("codigoPostal", e.target.value || undefined)} />
         </FormField>
         <FormField label="Lista de precios">
           <Select disabled={ro} value={f.listaPreciosId} onValueChange={(v) => set("listaPreciosId", v)} options={db.listasPrecios.map((l) => ({ value: l.id, label: l.nombre }))} />

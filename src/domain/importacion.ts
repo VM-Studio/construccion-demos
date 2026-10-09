@@ -674,3 +674,40 @@ export function generarPlantillaCSV(tipo: TipoImportacion): string {
     EJEMPLOS[tipo],
   );
 }
+
+// ───────────────────────── Padrón de ARCA en la importación ─────────────────────────
+
+/** Filas (índices) de clientes/proveedores con CUIT válido y razón social vacía: se consultan al padrón. */
+export function filasParaPadron(filas: Record<string, unknown>[], mapeo: Mapeo): number[] {
+  const out: number[] = [];
+  filas.forEach((cruda, i) => {
+    const v = aplicarMapeo(cruda, mapeo);
+    if (!(v.razon_social ?? "").trim() && v.cuit && !validarCUIT(v.cuit)) out.push(i);
+  });
+  return out;
+}
+
+/**
+ * Completa una fila con los datos del padrón sin pisar lo que ya trae. Las columnas que el archivo
+ * no tiene se agregan como "(padrón) …" y se asignan en el mapeo.
+ */
+export function completarFilaConPadron(
+  fila: Record<string, unknown>,
+  mapeo: Mapeo,
+  datos: { razonSocial: string; condicionIVA?: string; domicilio?: string; localidad?: string },
+): { fila: Record<string, unknown>; mapeo: Mapeo } {
+  const f = { ...fila };
+  const m = { ...mapeo };
+  const IVA: Record<string, string> = { RI: "RI", MONOTRIBUTO: "Monotributo", EXENTO: "Exento", CF: "CF", NO_INSCRIPTO: "CF" };
+  const poner = (clave: string, valor: string | undefined) => {
+    if (!valor) return;
+    const col = m[clave] ?? `(padrón) ${clave}`;
+    m[clave] = col;
+    if (!String(f[col] ?? "").trim()) f[col] = valor;
+  };
+  poner("razon_social", datos.razonSocial);
+  poner("condicion_iva", datos.condicionIVA ? IVA[datos.condicionIVA] : undefined);
+  poner("direccion", datos.domicilio);
+  poner("localidad", datos.localidad);
+  return { fila: f, mapeo: m };
+}

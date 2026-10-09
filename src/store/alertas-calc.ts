@@ -27,6 +27,12 @@ export const calcularAlertas = memo((db: EstadoInicial, sucursalId: string | nul
   const enSuc = (s?: string) => !sucursalId || s === sucursalId;
   const visible = (c?: 1 | 2) => veC2 || c !== 2;
 
+  if (db.config.arcaCertVence && puede(usuario, "config.ver")) {
+    const dias = differenceInCalendarDays(parseISO(db.config.arcaCertVence), hoy);
+    if (dias <= 30)
+      out.push({ id: "arca-certificado", titulo: dias < 0 ? "El certificado de ARCA está vencido" : "El certificado de ARCA está por vencer", detalle: dias < 0 ? "La consulta del padrón usa la fuente pública hasta renovarlo" : `Vence en ${dias} días: renovalo para seguir consultando el padrón oficial`, cantidad: 1, href: "/configuracion?tab=parametros", severidad: dias < 0 ? "alta" : "media", icono: FileWarning });
+  }
+
   if ((puede(usuario, "stock.ver") || puede(usuario, "productos.ver")) && db.config.alertaStockMinimo) {
     const fis = new Map<string, number>();
     for (const s of db.stock) fis.set(s.productoId, (fis.get(s.productoId) ?? 0) + s.cantidadFisica);

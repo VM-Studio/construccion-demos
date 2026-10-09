@@ -9,6 +9,7 @@
 import { puede } from "@/domain/permisos";
 import type { EstadoInicial, Usuario } from "@/domain/types";
 import { obtenerEstado } from "./estado";
+import { vencimientoCertificado } from "./arca/config";
 
 type Coleccion = Exclude<keyof EstadoInicial, "config" | "numeradores">;
 
@@ -41,8 +42,10 @@ export async function estadoPara(actor: Usuario): Promise<{ version: bigint; db:
   if (enCache) return { version, db: enCache };
 
   const c2 = <T extends { circuito?: number }>(xs: T[]) => (veC2 ? xs : xs.filter((x) => x.circuito !== 2));
+  const certVence = vencimientoCertificado()?.toISOString();
   let v: EstadoInicial = {
     ...db,
+    config: certVence ? { ...db.config, arcaCertVence: certVence } : db.config,
     acopios: c2(db.acopios),
     notasPedido: c2(db.notasPedido),
     devoluciones: c2(db.devoluciones),

@@ -34,3 +34,10 @@ export function generarCUIT(prefijo: string, numero: number): string {
   const base = `${prefijo}${String(numero).padStart(8, "0")}`;
   return formatearCUIT(`${base}${digitoVerificadorCUIT(base)}`);
 }
+
+/** Otro registro con el mismo CUIT (comparando solo dígitos), excluyendo `excluirId`. */
+export function buscarPorCuit<T extends { id: string; cuit: string }>(lista: T[], cuit: string, excluirId?: string): T | undefined {
+  const d = (cuit ?? "").replace(/\D/g, "");
+  if (d.length !== 11) return undefined;
+  return lista.find((x) => x.id !== excluirId && (x.cuit ?? "").replace(/\D/g, "") === d);
+}

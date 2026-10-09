@@ -372,6 +372,9 @@ model Proveedor {
   email            String
   telefono         String
   direccion        String
+  localidad        String?
+  provincia        String?
+  codigoPostal     String?
   contacto         String
   plazoEntregaDias Int
   condicionPago    CondicionPagoTipo
@@ -554,6 +557,8 @@ model Cliente {
   contacto            String?
   direccion           String
   localidad           String
+  provincia           String?
+  codigoPostal        String?
   listaPreciosId      String
   condicionPago       CondicionPagoTipo
   limiteCredito       Decimal           @db.Decimal(14, 2)
@@ -1370,4 +1375,20 @@ model Auditoria {
   @@index([fecha])
   @@index([entidadId])
   @@index([usuarioId])
+}
+
+/// Respuestas del padrón (ARCA o fuente pública) por CUIT, válidas 30 días.
+model PadronCache {
+  id         String   @id @default(cuid())
+  cuit       String   @unique
+  datos      Json
+  obtenidoEn DateTime
+}
+
+/// Ticket de acceso de WSAA (token y sign) por servicio de ARCA; vale ~12 h.
+model ArcaTicket {
+  servicio String   @id
+  token    String
+  sign     String
+  expira   DateTime
 }

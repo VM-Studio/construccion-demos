@@ -7,7 +7,7 @@ import type { GetFn, SetFn } from "../types";
 /** Configuración, usuarios, sucursales y datos del demo. */
 export function crearSliceConfig(set: SetFn, get: GetFn) {
   return {
-    actualizarConfig: (patch: Partial<Omit<Configuracion, "empresa" | "tipoCambioVigente">>) =>
+    actualizarConfig: (patch: Partial<Omit<Configuracion, "empresa" | "tipoCambioVigente" | "arcaCertVence">>) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "config.ver");
         tx.setConfig(patch);

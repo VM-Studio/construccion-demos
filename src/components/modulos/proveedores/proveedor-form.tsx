@@ -7,6 +7,8 @@ import { useStore } from "@/store";
 import { useDb, usePuede } from "@/store/selectors";
 import type { CondicionIVA, CondicionPago, Proveedor, TipoProveedor } from "@/domain/types";
 import { validarCUIT, formatearCUIT } from "@/domain/cuit";
+import { completarDesdePadron, type DatosPadron } from "@/domain/padron";
+import { CuitPadron } from "@/components/shared/cuit-padron";
 import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, TIPO_PROVEEDOR_LABEL, opciones } from "@/domain/estados";
 import { Button } from "@/components/ui/button";
 import { Input, NumberInput, Textarea } from "@/components/ui/input";
@@ -29,13 +31,25 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
   React.useEffect(() => {
     if (proveedor) setF({ ...proveedor });
   }, [proveedor]);
-  const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
+  // Campos que escribió el usuario: el padrón no los pisa (salvo "Reemplazar con los datos del padrón").
+  const tocados = React.useRef(new Set<string>());
+  const [duplicado, setDuplicado] = React.useState(false);
+  const set = <K extends keyof Form>(k: K, v: Form[K]) => {
+    tocados.current.add(k as string);
+    setF((x) => ({ ...x, [k]: v }));
+  };
+  const aplicarPadron = React.useCallback(
+    (d: DatosPadron, reemplazar: boolean) =>
+      setF((x) => ({ ...x, ...completarDesdePadron({ ...x, localidad: x.localidad ?? "" }, d, { reemplazar, tocados: tocados.current }), ...(reemplazar || !tocados.current.has("tipo") ? { tipo: "FABRICANTE" as const } : {}) })),
+    [],
+  );
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const er: Record<string, string> = {};
     if (!f.razonSocial.trim()) er.razonSocial = "Ingresá la razón social.";
     const c = validarCUIT(f.cuit);
     if (c) er.cuit = c;
+    if (duplicado) er.cuit = "Ya existe un proveedor con este CUIT.";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) er.email = "Email inválido.";
     setErr(er);
     if (Object.keys(er).length) return;
@@ -48,12 +62,10 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
   const ro = !puede;
   return (
     <form onSubmit={submit} className="space-y-4">
-      <FormField label="Razón social" required error={err.razonSocial} htmlFor="pv-rs">
-        <Input id="pv-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} />
-      </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="CUIT" required error={err.cuit} hint="Se valida el dígito verificador" htmlFor="pv-cuit">
-          <Input id="pv-cuit" disabled={ro} value={f.cuit} onChange={(e) => set("cuit", e.target.value)} onBlur={() => set("cuit", formatearCUIT(f.cuit))} placeholder="30-12345678-9" aria-invalid={!!err.cuit} />
+        <CuitPadron entidad="proveedor" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={proveedor?.id} disabled={ro} required error={err.cuit} autoFocus={!proveedor} />
+        <FormField label="Razón social" required error={err.razonSocial} htmlFor="pv-rs" className="sm:col-span-2">
+          <Input id="pv-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} />
         </FormField>
         <FormField label="Condición IVA">
           <Select disabled={ro} value={f.condicionIVA} onValueChange={(v) => set("condicionIVA", v as CondicionIVA)} options={opciones(CONDICION_IVA_LABEL)} />
@@ -76,6 +88,15 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
         </FormField>
         <FormField label="Dirección" htmlFor="pv-dir">
           <Input id="pv-dir" disabled={ro} value={f.direccion} onChange={(e) => set("direccion", e.target.value)} />
+        </FormField>
+        <FormField label="Localidad" htmlFor="pv-loc">
+          <Input id="pv-loc" disabled={ro} value={f.localidad ?? ""} onChange={(e) => set("localidad", e.target.value || undefined)} />
+        </FormField>
+        <FormField label="Provincia" htmlFor="pv-prov">
+          <Input id="pv-prov" disabled={ro} value={f.provincia ?? ""} onChange={(e) => set("provincia", e.target.value || undefined)} />
+        </FormField>
+        <FormField label="Código postal" htmlFor="pv-cp">
+          <Input id="pv-cp" disabled={ro} value={f.codigoPostal ?? ""} onChange={(e) => set("codigoPostal", e.target.value || undefined)} />
         </FormField>
         <FormField label="Plazo de entrega (días)" htmlFor="pv-plazo">
           <NumberInput id="pv-plazo" disabled={ro} value={f.plazoEntregaDias} min={0} onValueChange={(v) => set("plazoEntregaDias", Math.round(v))} />

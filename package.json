@@ -17,7 +17,10 @@
     "db:check": "tsx --env-file-if-exists=.env.local scripts/db-check.ts",
     "db:studio": "bash -c 'set -a && . ./.env.local && prisma studio'",
     "db:test:mapeo": "tsx --env-file-if-exists=.env.local scripts/db-mapeo-check.ts",
-    "db:test:concurrencia": "tsx --env-file-if-exists=.env.local scripts/concurrencia-check.ts"
+    "db:test:concurrencia": "tsx --env-file-if-exists=.env.local scripts/concurrencia-check.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integracion": "vitest run --config vitest.integracion.config.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -74,7 +77,8 @@
     "pg": "^8.23.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

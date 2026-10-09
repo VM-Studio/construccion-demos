@@ -10,6 +10,9 @@
 import * as cheerio from "cheerio";
 import { prisma } from "../db-base";
 import type { Configuracion, TipoCambioVigente } from "@/domain/types";
+import { esHabil, estaDesactualizada, hoyAR, parsearFechaBNA, parsearNumero, valorManual } from "@/domain/tipoCambio";
+
+export { hoyAR, parsearNumero };
 
 export type FuenteTipoCambio = "BNA" | "DOLARAPI_MAYORISTA" | "MANUAL";
 
@@ -59,49 +62,8 @@ export const ACCION_FALLO = "No se pudo actualizar el tipo de cambio";
 const ACCION_OK = "Actualizó el tipo de cambio";
 const UA = "Mozilla/5.0 (compatible; AcerosRNF/1.0; +https://construccion-demos.vercel.app)";
 
-// ───────────────────────── Fechas (hora Argentina, UTC−3 sin horario de verano) ─────────────────────────
-
-const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
-const enArgentina = (d = new Date()) => new Date(d.getTime() - AR_OFFSET_MS);
-/** YYYY-MM-DD de hoy en Argentina. */
-export const hoyAR = (d = new Date()) => enArgentina(d).toISOString().slice(0, 10);
-const esHabil = (ymd: string) => {
-  const dia = new Date(`${ymd}T12:00:00Z`).getUTCDay();
-  return dia >= 1 && dia <= 5;
-};
-const restarDia = (ymd: string) => new Date(Date.parse(`${ymd}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-/** Día hábil anterior a `ymd` (lunes → viernes). */
-function habilAnterior(ymd: string): string {
-  let d = restarDia(ymd);
-  while (!esHabil(d)) d = restarDia(d);
-  return d;
-}
 const aFechaDb = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const deFechaDb = (d: Date) => d.toISOString().slice(0, 10);
-
-// ───────────────────────── Parseo ─────────────────────────
-
-/**
- * Número de la página del BNA. Billetes viene "1.450,00" (es-AR) y Divisas "1506.5000" (punto
- * decimal). Con coma: los puntos son miles. Solo con punto: decimal, salvo que dé un valor
- * absurdo para un dólar (ej. "1.450" → 1,45), en cuyo caso son miles.
- */
-export function parsearNumero(txt: string): number {
-  const s = txt.replace(/[^\d.,-]/g, "");
-  if (!s) return Number.NaN;
-  if (s.includes(",")) return Number(s.replace(/\./g, "").replace(",", "."));
-  const decimal = Number(s);
-  if ((s.match(/\./g) ?? []).length > 1 || (decimal < 50 && /^\d{1,3}\.\d{3}$/.test(s))) return Number(s.replace(/\./g, ""));
-  return decimal;
-}
-
-/** "8/10/2026" → "2026-10-08". */
-function parsearFechaBNA(txt: string): string | null {
-  const m = txt.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const ymd = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
-  return Number.isNaN(Date.parse(ymd)) ? null : ymd;
-}
 
 /** Lee la fila "Dolar U.S.A" de la tabla de una solapa (#divisas o #billetes). */
 function leerTabla($: cheerio.CheerioAPI, solapa: "divisas" | "billetes") {
@@ -281,8 +243,9 @@ export async function obtenerVigente(config?: Pick<Configuracion, "tipoCambioMod
   }
   const hoy = hoyAR();
   const esDiaHabil = esHabil(hoy);
-  if (cfg.tipoCambioModo === "MANUAL" && (cfg.tipoCambioManual ?? 0) > 0) {
-    return { valor: cfg.tipoCambioManual!, compra: null, fecha: hoy, fuente: "MANUAL", obtenidoEn: null, modo: "MANUAL", desactualizado: false, ultimoError: null, esDiaHabil };
+  const manual = valorManual(cfg);
+  if (manual !== null) {
+    return { valor: manual, compra: null, fecha: hoy, fuente: "MANUAL", obtenidoEn: null, modo: "MANUAL", desactualizado: false, ultimoError: null, esDiaHabil };
   }
   let { ultima, error } = await ultimaConocida();
   if (!ultima) {
@@ -294,8 +257,6 @@ export async function obtenerVigente(config?: Pick<Configuracion, "tipoCambioMod
   }
   if (!ultima) return { valor: null, compra: null, fecha: null, fuente: null, obtenidoEn: null, modo: "AUTO", desactualizado: true, ultimoError: error?.toISOString() ?? null, esDiaHabil };
   const fecha = deFechaDb(ultima.fecha);
-  // Desactualizada: anterior al último día hábil completo (hoy hábil → ayer hábil; finde → viernes).
-  const limite = habilAnterior(hoy);
   return {
     valor: ultima.divisaVenta.toNumber(),
     compra: ultima.divisaCompra.toNumber(),
@@ -303,7 +264,7 @@ export async function obtenerVigente(config?: Pick<Configuracion, "tipoCambioMod
     fuente: ultima.fuente as FuenteTipoCambio,
     obtenidoEn: ultima.obtenidoEn.toISOString(),
     modo: "AUTO",
-    desactualizado: fecha < limite || error !== null,
+    desactualizado: estaDesactualizada(fecha, hoy, error !== null),
     ultimoError: error?.toISOString() ?? null,
     esDiaHabil,
   };

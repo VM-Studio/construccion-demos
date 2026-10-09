@@ -134,6 +134,9 @@ export interface Usuario extends Entidad {
   sucursalId?: string;
   activo: boolean;
   avatarIniciales: string;
+  /** Solo lectura (lo maneja la autenticación): debe cambiar la contraseña temporal. */
+  debeCambiarPassword?: boolean;
+  ultimoAcceso?: string;
 }
 
 export interface UnidadNegocio extends Entidad {

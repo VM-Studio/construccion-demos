@@ -1,6 +1,7 @@
 import type { Configuracion, DatosEmpresa, Sucursal, UnidadNegocio, Usuario } from "@/domain/types";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
+import { validarCambioUsuario } from "@/domain/usuarios";
 import type { GetFn, SetFn } from "../types";
 
 /** Configuración, usuarios, sucursales y datos del demo. */
@@ -49,22 +50,23 @@ export function crearSliceConfig(set: SetFn, get: GetFn) {
         return sid;
       }),
 
-    guardarUsuario: (data: Omit<Usuario, "id" | "creadoEn" | "actualizadoEn">, id?: string) =>
+    /** Edición de un usuario existente (el alta, con contraseña temporal, la hace el servicio de autenticación). */
+    guardarUsuario: (data: Omit<Usuario, "id" | "creadoEn" | "actualizadoEn" | "debeCambiarPassword" | "ultimoAcceso">, id?: string) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "config.usuarios");
+        if (!id) throw new ErrorNegocio("Los usuarios nuevos se crean con «Nuevo usuario» (contraseña temporal).");
         if (!data.nombre.trim() || !data.email.trim()) throw new ErrorNegocio("Nombre y email son obligatorios.");
         if (!/^\S+@\S+\.\S+$/.test(data.email)) throw new ErrorNegocio("El email no es válido.");
         if ((data.rol === "VENTAS" || data.rol === "DEPOSITO") && !data.sucursalId) throw new ErrorNegocio("Ventas y Depósito necesitan una sucursal asignada.");
-        if (id === tx.usuarioId && !data.activo) throw new ErrorNegocio("No podés desactivar tu propio usuario.");
-        if (id) {
-          tx.patch("usuarios", id, data);
-          tx.auditar("Editó usuario", "Usuario", id, `${data.nombre} · ${data.rol}`);
-          return id;
-        }
-        const u: Usuario = { ...data, id: newId("usr"), ...tx.meta() };
-        tx.insert("usuarios", u);
-        tx.auditar("Creó usuario", "Usuario", u.id, `${data.nombre} · ${data.rol}`);
-        return u.id;
+        const err = validarCambioUsuario(tx.get("usuarios"), tx.usuarioId, id, { rol: data.rol, activo: data.activo });
+        if (err) throw new ErrorNegocio(err);
+        const email = data.email.trim().toLowerCase();
+        if (tx.get("usuarios").some((u) => u.id !== id && u.email.toLowerCase() === email)) throw new ErrorNegocio("Ya hay otro usuario con ese email.");
+        const previo = tx.must("usuarios", id);
+        tx.patch("usuarios", id, { ...data, email });
+        const accion = previo.activo && !data.activo ? "Desactivó usuario" : !previo.activo && data.activo ? "Reactivó usuario" : "Editó usuario";
+        tx.auditar(accion, "Usuario", id, `${data.nombre} · ${data.rol}`);
+        return id;
       }),
 
     guardarUnidadNegocio: (data: { nombre: string; codigo: UnidadNegocio["codigo"]; rubroIds: string[] }, id?: string) =>

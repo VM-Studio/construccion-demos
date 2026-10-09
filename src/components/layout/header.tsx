@@ -1,8 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Bell, ChevronRight, Heart, LogOut, Menu, PlayCircle, Search } from "lucide-react";
+import { Bell, ChevronRight, Heart, LogOut, Menu, PlayCircle, Search, UserRound } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, useEmpresa, usePuede, useUsuario } from "@/store/selectors";
 import { useAlertas } from "@/store/alertas";
@@ -16,6 +15,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { SidebarNav } from "./sidebar";
+import { MiCuentaDialog } from "@/components/modulos/auth/mi-cuenta";
 import { CommandPalette } from "./command-palette";
 import { useModuloActual } from "./use-modulo";
 import { InterruptorCapacitacion } from "@/capacitacion";
@@ -187,11 +187,12 @@ function Favoritos() {
 
 function Avatar() {
   const usuario = useUsuario();
-  const router = useRouter();
+  const [miCuenta, setMiCuenta] = React.useState(false);
   const logout = useStore((s) => s.logout);
   const abrirTour = useStore((s) => s.abrirTour);
   if (!usuario) return null;
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button aria-label="Menú de usuario" className="flex size-8 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">
@@ -203,19 +204,24 @@ function Avatar() {
           <span className="block text-[13px] font-medium text-ink">{usuario.nombre}</span>
           <span className="block text-[11px] font-normal text-muted">{ROL_LABEL[usuario.rol]} · {usuario.email}</span>
         </DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => setTimeout(() => setMiCuenta(true), 100)}>
+          <UserRound /> Mi cuenta
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
           <PlayCircle /> Ver recorrido
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {
-            void logout().then(() => router.replace("/login"));
+            void logout().then(() => (window.location.href = "/login"));
           }}
         >
           <LogOut /> Cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {miCuenta && <MiCuentaDialog onClose={() => setMiCuenta(false)} />}
+    </>
   );
 }
 

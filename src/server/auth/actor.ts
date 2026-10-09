@@ -1,28 +1,29 @@
 import "server-only";
 /**
- * Actor de la sesión. STUB hasta R2 (Auth.js): lee la cookie `actor-demo` con el id del usuario
- * y lo busca en la base. Ninguna acción acepta rol ni usuarioId del cliente: siempre sale de acá.
+ * Actor de la sesión (Auth.js). Ninguna acción acepta rol ni usuarioId del cliente: siempre se
+ * resuelve acá desde la cookie de sesión firmada y se busca el usuario en la base.
  */
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
+import { auth } from "@/auth";
 import type { Usuario } from "@/domain/types";
 import { estadoEnCache, obtenerEstado } from "../estado";
 
-export const COOKIE_ACTOR = "actor-demo";
-
 export async function obtenerActor(): Promise<Usuario | null> {
-  const id = (await cookies()).get(COOKIE_ACTOR)?.value;
-  if (!id) return null;
+  const s = await auth();
+  const id = s?.user?.id;
+  if (!id || s.user.invalida || s.user.debeCambiarPassword) return null;
   const { db } = await obtenerEstado();
   return db.usuarios.find((u) => u.id === id && u.activo) ?? null;
 }
 
 /**
- * Variante liviana para rutas de polling (/api/cambios): usa los usuarios de la caché de estado
- * de la instancia (sin consultar la versión) y solo va a la base si la instancia no tiene caché.
+ * Variante liviana para rutas de polling (/api/cambios): la sesión ya viene verificada por
+ * Auth.js (versión y activo, caché 60 s); usa los usuarios de la caché de la instancia.
  */
 export async function obtenerActorLigero(): Promise<Pick<Usuario, "id" | "rol" | "activo"> | null> {
-  const id = (await cookies()).get(COOKIE_ACTOR)?.value;
-  if (!id) return null;
+  const s = await auth();
+  const id = s?.user?.id;
+  if (!id || s.user.invalida) return null;
   const enCache = estadoEnCache()?.db.usuarios.find((u) => u.id === id);
   if (enCache) return enCache.activo ? enCache : null;
   return obtenerActor();

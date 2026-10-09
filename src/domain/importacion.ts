@@ -646,8 +646,8 @@ export function validarArchivo<T extends TipoImportacion>(
 
 const EJEMPLOS: Record<TipoImportacion, string[][]> = {
   articulos: [
-    ["50120", "CEMENTO PORTLAND NORMAL X 50 KG", "Loma Negra", "COR", "Cementos y cales", "BOLSA", "9850", "200", "40", "7790123000014", ""],
-    ["83120", "TARUGO NYLON S10 CON TORNILLO (CAJA X 50)", "Fischer", "FER", "Fijaciones y tornillería", "CAJA", "6350,50", "20", "", "", ""],
+    ["50120", "CEMENTO PORTLAND NORMAL X 50 KG", "Loma Negra", "COR", "Cementos y cales", "BOLSA", "9850", "ARS", "", "200", "40", "7790123000014", ""],
+    ["83120", "TARUGO NYLON S10 CON TORNILLO (CAJA X 50)", "Fischer", "FER", "Fijaciones y tornillería", "CAJA", "", "USD", "4,35", "20", "", "", ""],
   ],
   clientes: [
     ["", "Constructora del Sur S.R.L.", "CDS Obras", "Constructora", "30-71234567-1", "Responsable Inscripto", "compras@constructoradelsur.com.ar", "(011) 4244-1020", "Av. Hipólito Yrigoyen 8450", "Lomas de Zamora", "Mayorista", "30 días", "15000000", "1", "Edificio Boedo 1240|Barrio Las Acacias"],

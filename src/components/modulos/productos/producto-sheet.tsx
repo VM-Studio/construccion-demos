@@ -26,6 +26,7 @@ import { formatDate, formatDateTime, formatMoney, formatPercent, formatQty } fro
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { cn } from "@/lib/utils";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 
 type Form = Omit<Producto, "id" | "creadoEn" | "actualizadoEn">;
 
@@ -102,6 +103,8 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
     if (producto) setF({ ...producto });
   }, [producto]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
+  const enUSD = f.monedaCosto === "USD";
+  const { tc } = useTipoCambio();
 
   const accionId = producto ? "editarArticulo" : "crearArticulo";
   const submit = async (e: React.FormEvent) => {
@@ -111,9 +114,11 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
     if (!f.codigo.trim()) err.codigo = "Ingresá el código.";
     if (!f.rubroId) err.rubroId = "Elegí el rubro.";
     if (f.costoUltimo < 0) err.costoUltimo = "El costo no puede ser negativo.";
+    if (enUSD && !((f.costoUSD ?? 0) > 0)) err.costoUSD = "Ingresá el costo en dólares.";
     setErrores(err);
     if (Object.keys(err).length) return;
-    const data = { ...f, costoPromedio: producto ? f.costoPromedio : f.costoPromedio || f.costoUltimo, marca: f.marca || undefined, codigoBarras: f.codigoBarras || undefined };
+    // Con costo en USD, el costo en pesos lo calcula el servidor con su dólar vigente.
+    const data = { ...f, monedaCosto: f.monedaCosto ?? "ARS", costoUSD: enUSD ? f.costoUSD : undefined, costoPromedio: producto ? f.costoPromedio : f.costoPromedio || f.costoUltimo, marca: f.marca || undefined, codigoBarras: f.codigoBarras || undefined };
     const r = await medir(accionId, { productoIds: producto ? [producto.id] : [], proveedorId: f.proveedorHabitualId }, () => guardar(data, producto?.id));
     if (r.ok) {
       toast.success(producto ? "Producto actualizado" : `Producto ${f.codigo} creado`);
@@ -172,11 +177,46 @@ function TabGeneral({ producto, onSaved, unidadNegocioId }: { producto?: Product
           <Input id="p-ean" disabled={ro} value={f.codigoBarras ?? ""} onChange={(e) => set("codigoBarras", e.target.value.replace(/\D/g, ""))} inputMode="numeric" />
         </FormField>
       </div>
+      {verCostos && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField label="Moneda del costo">
+            <Select
+              disabled={ro}
+              value={f.monedaCosto ?? "ARS"}
+              onValueChange={(v) => set("monedaCosto", v as "ARS" | "USD")}
+              options={[
+                { value: "ARS", label: "Pesos (ARS)" },
+                { value: "USD", label: "Dólares (USD)" },
+              ]}
+            />
+            <ImpactoCampo campo="producto.monedaCosto" />
+          </FormField>
+          {enUSD && (
+            <FormField label="Costo USD" htmlFor="p-costo-usd" error={errores.costoUSD} hint="Sin IVA">
+              <NumberInput id="p-costo-usd" disabled={ro} value={f.costoUSD ?? 0} min={0} onValueChange={(v) => set("costoUSD", v || undefined)} />
+            </FormField>
+          )}
+          {enUSD && (
+            <div className="self-end pb-2 text-[13px]">
+              {tc?.valor ? (
+                <>
+                  <span className="tnum">
+                    {formatUSD(f.costoUSD ?? 0)} → <span className="font-medium">{formatMoney((f.costoUSD ?? 0) * tc.valor, { decimals: false })}</span>
+                  </span>
+                  <span className="block text-[12px] text-muted">Dólar {formatMoney(tc.valor)} · se recalcula al guardar</span>
+                </>
+              ) : (
+                <span className="text-muted">Sin tipo de cambio disponible</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         {verCostos && (
           <FormField label="Costo último" htmlFor="p-costo" error={errores.costoUltimo} hint={producto ? `Actualizado ${formatDate(producto.fechaUltimoCosto)}` : "Sin IVA"}>
-            <NumberInput id="p-costo" disabled={ro} value={f.costoUltimo} min={0} onValueChange={(v) => set("costoUltimo", v)} />
-            <ImpactoCampo campo="producto.costo" />
+            <NumberInput id="p-costo" disabled={ro || enUSD} value={f.costoUltimo} min={0} onValueChange={(v) => set("costoUltimo", v)} />
+            {enUSD ? <p className="mt-1 text-[12px] text-muted">En pesos: lo calcula el sistema desde el costo USD.</p> : <ImpactoCampo campo="producto.costo" />}
           </FormField>
         )}
         {verCostos && (

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, DatabaseZap, Download, Eraser, ImagePlus, Plus, Save, ShieldCheck, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, DatabaseZap, Download, Eraser, ImagePlus, Plus, RefreshCw, Save, ShieldCheck, Upload, XCircle } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal, Usuario } from "@/domain/types";
@@ -26,10 +26,15 @@ import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { FlotaTab } from "@/components/modulos/despachos/flota";
-import { formatDateTime } from "@/lib/format";
 import { cn, descargarArchivo } from "@/lib/utils";
 import { BRAND } from "@/config/brand";
 import { obtenerDb } from "@/lib/datos/almacen";
+import { formatDistanceToNowStrict } from "date-fns";
+import { es } from "date-fns/locale";
+import { ImpactoCampo } from "@/capacitacion";
+import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { actualizarTipoCambioAhora, diaYFecha, fuenteLabel, noEsDeHoy, refrescarTipoCambio, useTipoCambio } from "@/lib/tipo-cambio";
 
 const ok = <R extends { ok: boolean; error?: string }>(r: R | Promise<R>, msg: string) =>
   void Promise.resolve(r).then((x) => (x.ok ? toast.success(msg) : toast.error(x.error)));
@@ -288,10 +293,11 @@ function Listas() {
 function Parametros() {
   const db = useDb();
   const c = db.config;
-  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alicuotaIIBBPct: c.alicuotaIIBBPct, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tipoCambioUSD: c.tipoCambioUSD ?? 0, tamanoMaxAdjuntoMB: c.tamanoMaxAdjuntoMB });
+  const [f, setF] = React.useState({ ivaPct: c.ivaPct, validezPresupuestoDias: c.validezPresupuestoDias, diasVencimientoAcopio: c.diasVencimientoAcopio, alicuotaIIBBPct: c.alicuotaIIBBPct, alertaStockMinimo: c.alertaStockMinimo, umbralSubaCostoPct: c.umbralSubaCostoPct, tamanoMaxAdjuntoMB: c.tamanoMaxAdjuntoMB });
   const [cats, setCats] = React.useState(c.categoriasAdjunto);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <TipoCambioCard />
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Parámetros generales</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -301,7 +307,6 @@ function Parametros() {
           <FormField label="Validez de cotizaciones (días)" htmlFor="p-val"><NumberInput id="p-val" value={f.validezPresupuestoDias} min={1} onValueChange={(v) => setF({ ...f, validezPresupuestoDias: Math.round(v) })} /></FormField>
           <FormField label="Aviso de suba de costo (%)" htmlFor="p-suba" hint="Al recibir mercadería más cara que el último costo"><NumberInput id="p-suba" value={f.umbralSubaCostoPct} min={0} onValueChange={(v) => setF({ ...f, umbralSubaCostoPct: v })} /></FormField>
           <FormField label="Tamaño máximo de adjunto (MB)" htmlFor="p-adj"><NumberInput id="p-adj" value={f.tamanoMaxAdjuntoMB} min={1} onValueChange={(v) => setF({ ...f, tamanoMaxAdjuntoMB: Math.max(1, Math.round(v)) })} /></FormField>
-          <FormField label="Tipo de cambio USD de referencia" htmlFor="p-usd"><NumberInput id="p-usd" value={f.tipoCambioUSD} min={0} onValueChange={(v) => setF({ ...f, tipoCambioUSD: v })} /></FormField>
           <label className="flex items-center gap-3 self-end pb-2 text-[13px]"><Switch checked={f.alertaStockMinimo} onCheckedChange={(v) => setF({ ...f, alertaStockMinimo: v })} /> Alertar stock bajo mínimo</label>
           <div className="flex justify-end sm:col-span-2 lg:col-span-3"><Button onClick={() => ok(useStore.getState().actualizarConfig(f), "Parámetros guardados")}><Save /> Guardar</Button></div>
         </CardContent>
@@ -331,6 +336,121 @@ function Parametros() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Tipo de cambio USD: dólar divisa vendedor del BNA (automático) o valor manual. */
+function TipoCambioCard() {
+  const { tc, cargando } = useTipoCambio();
+  const config = useDb().config;
+  const rol = useUsuario()?.rol;
+  const puedeEditar = rol === "DUENO" || rol === "ADMINISTRACION";
+  const manual = config.tipoCambioModo === "MANUAL";
+  const [valorManual, setValorManual] = React.useState(config.tipoCambioManual ?? tc?.valor ?? 0);
+  const [actualizando, setActualizando] = React.useState(false);
+  const [guardando, setGuardando] = React.useState(false);
+  React.useEffect(() => {
+    if (config.tipoCambioManual) setValorManual(config.tipoCambioManual);
+  }, [config.tipoCambioManual]);
+
+  const actualizar = async () => {
+    setActualizando(true);
+    const r = await actualizarTipoCambioAhora();
+    setActualizando(false);
+    if (r.ok) toast.success(`Tipo de cambio actualizado: ${formatMoney(r.data?.valor ?? 0)} (${fuenteLabel(r.data?.fuente)})`);
+    else toast.error(r.error);
+  };
+  const guardarModo = async (modo: "AUTO" | "MANUAL", valor?: number) => {
+    if (modo === "MANUAL" && !(valor && valor > 0)) return toast.error("Ingresá un tipo de cambio mayor a cero.");
+    setGuardando(true);
+    const r = await useStore.getState().actualizarConfig(modo === "MANUAL" ? { tipoCambioModo: "MANUAL", tipoCambioManual: valor } : { tipoCambioModo: "AUTO" });
+    setGuardando(false);
+    if (!r.ok) return toast.error(r.error);
+    await refrescarTipoCambio();
+    toast.success(modo === "MANUAL" ? "Tipo de cambio manual guardado" : "Tipo de cambio automático activado");
+  };
+
+  const obtenido = tc?.obtenidoEn ? formatDistanceToNowStrict(new Date(tc.obtenidoEn), { locale: es, addSuffix: true }) : null;
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardTitle>Tipo de cambio USD</CardTitle>
+        {puedeEditar && !manual && (
+          <Button size="sm" variant="secondary" onClick={actualizar} disabled={actualizando}>
+            <RefreshCw className={cn(actualizando && "animate-spin")} /> {actualizando ? "Actualizando…" : "Actualizar ahora"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="space-y-3">
+          <div>
+            <div className="text-[32px] font-semibold leading-none tracking-tight tnum">{tc?.valor ? formatMoney(tc.valor) : cargando ? "…" : "Sin cotización"}</div>
+            <div className="mt-1.5 text-[13px] text-muted">{manual ? "Valor manual cargado en Configuración" : `Dólar divisa vendedor · ${tc?.fuente === "DOLARAPI_MAYORISTA" ? "Dólar mayorista (respaldo)" : "Banco Nación"}`}</div>
+            {!manual && tc?.fecha && (
+              <div className="mt-0.5 text-[12px] text-muted">
+                Cotización del {formatDate(`${tc.fecha}T12:00:00`, "dd/MM")}
+                {obtenido && ` · actualizado ${obtenido}`}
+                {tc.compra ? ` · compra ${formatMoney(tc.compra)}` : ""}
+              </div>
+            )}
+          </div>
+          {!manual && tc?.desactualizado && (
+            <Badge variant="danger" className="h-auto whitespace-normal py-1 leading-snug">
+              <AlertTriangle className="size-3.5 shrink-0" /> Sin conexión con el Banco Nación, usando la última cotización conocida del {tc.fecha ? formatDate(`${tc.fecha}T12:00:00`, "dd/MM") : "—"}
+            </Badge>
+          )}
+          {!manual && !tc?.desactualizado && tc?.fuente === "DOLARAPI_MAYORISTA" && (
+            <Badge variant="warning" className="h-auto whitespace-normal py-1 leading-snug">El Banco Nación no respondió: se usa el dólar mayorista (dolarapi.com) como respaldo.</Badge>
+          )}
+          {!manual && noEsDeHoy(tc) && !tc?.desactualizado && <p className="text-[12px] text-muted">Última cotización disponible: {diaYFecha(tc?.fecha)}</p>}
+          {puedeEditar && (
+            <div className="space-y-2 rounded-control border border-border p-3">
+              <label className="flex items-center gap-3 text-[13px] font-medium">
+                <Switch checked={manual} disabled={guardando} onCheckedChange={(v) => void guardarModo(v ? "MANUAL" : "AUTO", v ? valorManual || tc?.valor || 0 : undefined)} /> Cargar manualmente
+              </label>
+              {manual && (
+                <>
+                  <div className="flex items-end gap-2">
+                    <FormField label="Tipo de cambio manual ($ por USD)" htmlFor="tc-manual" className="flex-1">
+                      <NumberInput id="tc-manual" value={valorManual} min={0} onValueChange={setValorManual} />
+                    </FormField>
+                    <Button size="sm" onClick={() => void guardarModo("MANUAL", valorManual)} disabled={guardando || valorManual === config.tipoCambioManual}><Save /> Guardar</Button>
+                  </div>
+                  <p className="flex items-start gap-1.5 rounded-control bg-accent-soft px-2.5 py-2 text-[12px] leading-snug text-accent">
+                    <AlertTriangle className="mt-px size-3.5 shrink-0" /> Estás usando un valor manual; el sistema no lo actualiza hasta que lo desactives.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          <ImpactoCampo campo="parametros.tipoCambio" />
+        </div>
+        <div className="min-w-0">
+          <div className="mb-1.5 text-[12px] font-medium text-muted">Últimos 30 días</div>
+          {tc?.historial.length ? (
+            <div className="max-h-64 overflow-auto rounded-control border border-border">
+              <Table>
+                <THead>
+                  <TR><TH>Fecha</TH><TH className="text-right">Compra</TH><TH className="text-right">Venta</TH><TH>Fuente</TH></TR>
+                </THead>
+                <TBody>
+                  {tc.historial.map((h) => (
+                    <TR key={h.fecha}>
+                      <TD className="capitalize">{formatDate(`${h.fecha}T12:00:00`, "EEE dd/MM")}</TD>
+                      <TD className="text-right tnum">{formatMoney(h.compra)}</TD>
+                      <TD className="text-right font-medium tnum">{formatMoney(h.venta)}</TD>
+                      <TD className="text-muted">{h.fuente === "BNA" ? "BNA" : "Mayorista"}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted">{cargando ? "Cargando…" : "Todavía no hay cotizaciones guardadas."}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

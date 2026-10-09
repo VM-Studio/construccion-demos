@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronRight, Heart, LogOut, Menu, PlayCircle, Search } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb, useEmpresa, useUsuario } from "@/store/selectors";
+import { useDb, useEmpresa, usePuede, useUsuario } from "@/store/selectors";
 import { useAlertas } from "@/store/alertas";
 import { MODULOS } from "@/config/modulos";
 import { ROL_LABEL } from "@/domain/permisos";
@@ -19,6 +19,45 @@ import { SidebarNav } from "./sidebar";
 import { CommandPalette } from "./command-palette";
 import { useModuloActual } from "./use-modulo";
 import { InterruptorCapacitacion } from "@/capacitacion";
+import { formatTipoCambioCorto, fuenteLabel, useTipoCambio } from "@/lib/tipo-cambio";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+
+/** Indicador compacto del dólar vigente (se actualiza solo con la clave SWR "tipo-cambio"). */
+function IndicadorDolar() {
+  const { tc } = useTipoCambio();
+  const verConfig = usePuede("config.ver");
+  if (!tc?.valor) return null;
+  const contenido = (
+    <span className="block">
+      <span className="block font-medium">{formatMoney(tc.valor)} · {fuenteLabel(tc.fuente)}</span>
+      {tc.modo === "MANUAL" ? (
+        <span className="block opacity-80">Valor manual (Configuración → Parámetros)</span>
+      ) : (
+        <span className="block opacity-80">
+          Cotización del {formatDate(`${tc.fecha}T12:00:00`)}
+          {tc.obtenidoEn ? ` · leída ${formatDateTime(tc.obtenidoEn)}` : ""}
+        </span>
+      )}
+      {tc.desactualizado && tc.modo !== "MANUAL" && <span className="block opacity-80">Sin conexión con el Banco Nación: última cotización conocida.</span>}
+    </span>
+  );
+  return (
+    <Tooltip content={contenido}>
+      <Link
+        href={verConfig ? "/configuracion?tab=parametros" : "#"}
+        onClick={(e) => !verConfig && e.preventDefault()}
+        className={cn(
+          "hidden h-8 items-center gap-1.5 rounded-control border border-border px-2 text-[12px] font-medium tnum text-ink hover:bg-subtle sm:inline-flex",
+          tc.desactualizado && tc.modo !== "MANUAL" && "border-danger/30 text-danger",
+        )}
+        aria-label={`Dólar ${formatMoney(tc.valor)}`}
+      >
+        {formatTipoCambioCorto(tc.valor)}
+        {tc.modo === "MANUAL" && <span className="text-[10px] font-normal text-muted">manual</span>}
+      </Link>
+    </Tooltip>
+  );
+}
 
 /** Nombre del documento abierto (último segmento de la URL si es un id). */
 function useDocumento(pathname: string): string | undefined {
@@ -225,6 +264,7 @@ export function Header() {
         <kbd className="ml-auto hidden rounded border border-border bg-subtle px-1 text-[10px] font-medium sm:inline">⌘K</kbd>
       </Button>
       <div className="flex items-center gap-1 sm:gap-1.5" data-tour="sucursal">
+        <IndicadorDolar />
         <Tooltip content={fija ? "Tu usuario está asignado a esta sucursal" : "Filtra listados y KPIs por sucursal"}>
           <div className="hidden w-[150px] md:block xl:w-[170px]">
             <Select

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ArrowRight, TrendingUp } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb } from "@/store/selectors";
-import { calcularActualizacionMasiva, type ModoActualizacion, type Redondeo } from "@/domain/precios";
+import { calcularActualizacionMasiva, costoEnDolares, type ModoActualizacion, type Redondeo } from "@/domain/precios";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { NumberInput } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
 import { Segmented } from "@/components/ui/tabs";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatDate, formatMoney, formatPercent } from "@/lib/format";
+import { fuenteLabel, useTipoCambio } from "@/lib/tipo-cambio";
 import { cn } from "@/lib/utils";
 import { Impacto, medir } from "@/capacitacion";
 
@@ -39,7 +40,7 @@ export function ActualizacionMasivaDialog({
   const [alcance, setAlcance] = React.useState<Alcance>(inicial?.alcance ?? (seleccionados?.size ? "SELECCIONADOS" : "TODO"));
   const [valorAlcance, setValorAlcance] = React.useState("");
   const [listas, setListas] = React.useState<Set<string>>(() => new Set(db.listasPrecios.filter((l) => l.activa).map((l) => l.id)));
-  const [modo, setModo] = React.useState<"AUMENTAR" | "DISMINUIR" | "MARKUP">(inicial?.modo ?? "AUMENTAR");
+  const [modo, setModo] = React.useState<"AUMENTAR" | "DISMINUIR" | "MARKUP" | "DESDE_USD">(inicial?.modo ?? "AUMENTAR");
   const [pct, setPct] = React.useState(inicial?.pct ?? 5);
   const [redondeo, setRedondeo] = React.useState<Redondeo>(10);
   const [idsFijos, setIdsFijos] = React.useState<string[] | undefined>(inicial?.productoIds);
@@ -72,24 +73,38 @@ export function ActualizacionMasivaDialog({
     }
   }, [alcance, valorAlcance, db.productos, seleccionados, idsFijos]);
 
+  const { tc } = useTipoCambio();
+  const dolar = tc?.valor ?? 0;
+  const markups = React.useMemo(() => Object.fromEntries(db.listasPrecios.map((l) => [l.id, l.markupPorDefecto])), [db.listasPrecios]);
   const modoCalc: ModoActualizacion =
-    modo === "MARKUP"
-      ? { tipo: "MARKUP", markups: Object.fromEntries(db.listasPrecios.map((l) => [l.id, l.markupPorDefecto])) }
-      : { tipo: modo, pct };
+    modo === "MARKUP" ? { tipo: "MARKUP", markups } : modo === "DESDE_USD" ? { tipo: "DESDE_USD", markups, tipoCambio: dolar } : { tipo: modo, pct };
   const cambios = React.useMemo(
-    () => calcularActualizacionMasiva(db.precios, db.productos, { productoIds, listaIds: [...listas] }, modoCalc, redondeo),
+    () => (modo === "DESDE_USD" && !dolar ? [] : calcularActualizacionMasiva(db.precios, db.productos, { productoIds, listaIds: [...listas] }, modoCalc, redondeo)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db.precios, db.productos, productoIds, listas, modo, pct, redondeo],
+    [db.precios, db.productos, productoIds, listas, modo, pct, redondeo, dolar, markups],
   );
+  const enUSD = React.useMemo(() => {
+    const ids = new Set(productoIds);
+    return db.productos.filter((p) => ids.has(p.id) && costoEnDolares(p)).length;
+  }, [db.productos, productoIds]);
   const reales = cambios.filter((c) => c.nuevo !== c.anterior);
+  // Desde USD se mandan todos los artículos en dólares: el servidor recalcula precios y costo en pesos con su dólar.
+  const aEnviar = modo === "DESDE_USD" ? cambios : reales;
   const nProductos = new Set(reales.map((c) => c.productoId)).size;
   const prod = (id: string) => db.productos.find((p) => p.id === id);
   const lista = (id: string) => db.listasPrecios.find((l) => l.id === id);
 
   const confirmar = async () => {
     const desc =
-      modo === "MARKUP" ? "Recalculado desde costo + markup" : `${modo === "AUMENTAR" ? "Aumento" : "Baja"} de ${pct} %`;
-    const r = await medir("actualizarPreciosMasivo", { productoIds: [...new Set(reales.map((c) => c.productoId))], n: reales.length }, () => aplicar(reales, `${desc} · ${[...listas].map((l) => lista(l)?.nombre).join(", ")}`));
+      modo === "MARKUP"
+        ? "Recalculado desde costo + markup"
+        : modo === "DESDE_USD"
+          ? "Recalculado desde costo USD × tipo de cambio + markup"
+          : `${modo === "AUMENTAR" ? "Aumento" : "Baja"} de ${pct} %`;
+    const texto = `${desc} · ${[...listas].map((l) => lista(l)?.nombre).join(", ")}`;
+    const r = await medir("actualizarPreciosMasivo", { productoIds: [...new Set(aEnviar.map((c) => c.productoId))], n: aEnviar.length }, () =>
+      modo === "DESDE_USD" ? aplicar(aEnviar, texto, { tipo: "DESDE_USD", markups, redondeo }) : aplicar(aEnviar, texto),
+    );
     if (r.ok) {
       toast.success(`Precios actualizados en ${r.data} productos`, { description: desc });
       onOpenChange(false);
@@ -107,9 +122,9 @@ export function ActualizacionMasivaDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button disabled={!reales.length} onClick={confirmar}>
+            <Button disabled={!aEnviar.length} onClick={confirmar}>
               <TrendingUp />
-              Aplicar a {nProductos} productos
+              Aplicar a {modo === "DESDE_USD" ? new Set(aEnviar.map((c) => c.productoId)).size : nProductos} productos
             </Button>
           </>
         }
@@ -169,10 +184,25 @@ export function ActualizacionMasivaDialog({
                   { value: "AUMENTAR", label: "Aumentar %" },
                   { value: "DISMINUIR", label: "Disminuir %" },
                   { value: "MARKUP", label: "Recalcular desde costo + markup de la lista" },
+                  { value: "DESDE_USD", label: "Recalcular desde costo USD × tipo de cambio × markup" },
                 ]}
               />
             </FormField>
-            {modo !== "MARKUP" && (
+            {modo === "DESDE_USD" && (
+              <div className="space-y-1 rounded-control border border-border bg-subtle p-3 text-[12px]">
+                {dolar ? (
+                  <p>
+                    Dólar usado: <span className="font-medium tnum">{formatMoney(dolar)}</span> ({fuenteLabel(tc?.fuente)}, {formatDate(tc?.fecha ? `${tc.fecha}T12:00:00` : null, "dd/MM")})
+                  </p>
+                ) : (
+                  <p className="text-danger">No hay tipo de cambio disponible.</p>
+                )}
+                <p className="text-muted">
+                  Solo aplica a artículos con costo en USD: {enUSD} de {productoIds.length} en el alcance. Al aplicar, el sistema recalcula con el dólar vigente y actualiza el costo en pesos.
+                </p>
+              </div>
+            )}
+            {modo !== "MARKUP" && modo !== "DESDE_USD" && (
               <FormField label="Porcentaje">
                 <div className="flex items-center gap-2">
                   <NumberInput aria-label="Porcentaje" value={pct} min={0} onValueChange={setPct} className="w-28" />

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Ban, CheckCircle2, Info, Mail, PackageCheck, Printer, RotateCcw, Save, Sparkles, Trash2 } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosProveedorResumen, useDb, usePosiciones, usePuede } from "@/store/selectors";
-import type { Circuito, OrigenVenta } from "@/domain/types";
+import type { Circuito, Moneda, OrigenVenta, Producto } from "@/domain/types";
 import { Segmented } from "@/components/ui/tabs";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import { AdjuntosPanel } from "@/components/shared/adjuntos-panel";
@@ -25,7 +25,7 @@ import { useConfirm } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, NumberInput, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { FormField } from "@/components/ui/form-field";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -34,14 +34,18 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime, formatMoney, formatQty } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { newId } from "@/lib/utils";
-import { totalesOC } from "@/store/slices/compras";
+import { totalesOC, totalesOCUSD } from "@/store/slices/compras";
+import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { OCDocumento } from "./oc-documento";
 import { RecepcionDialog } from "./recepcion-dialog";
 import { obtenerDb } from "@/lib/datos/almacen";
 
-type Linea = LineaBase & { cantidadRecibida: number };
+/** En una OC en USD, `costoUSD` es lo que se carga; `precio` queda como vista previa en pesos. */
+type Linea = LineaBase & { cantidadRecibida: number; costoUSD?: number };
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 const aInput = (iso: string) => diaLocal(iso);
 const deInput = (v: string) => {
@@ -79,8 +83,10 @@ export function OCEditor({ id }: { id: string }) {
   const [fecha, setFecha] = React.useState(aInput(oc?.fechaEmision ?? new Date().toISOString()));
   const [entrega, setEntrega] = React.useState(aInput(oc?.fechaEntregaEstimada ?? new Date().toISOString()));
   const [obs, setObs] = React.useState(oc?.observaciones ?? "");
+  const [moneda, setMoneda] = React.useState<Moneda>(oc?.moneda ?? "ARS");
+  const { tc, valor: tcHoy } = useTipoCambio();
   const [items, setItems] = React.useState<Linea[]>(() => {
-    if (oc) return oc.items.map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida }));
+    if (oc) return oc.items.map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, costoUSD: i.costoUSD, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida }));
     const pid = params.get("producto");
     if (!pid) return [];
     const costo = acpParam?.preciosCongelados.find((c) => c.productoId === pid)?.costo ?? db.productos.find((p) => p.id === pid)?.costoUltimo ?? 0;
@@ -102,7 +108,7 @@ export function OCEditor({ id }: { id: string }) {
 
   React.useEffect(() => {
     if (!oc) return;
-    setItems(oc.items.map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida })));
+    setItems(oc.items.map((i) => ({ id: i.id, productoId: i.productoId, cantidad: i.cantidadPedida, precio: i.costoUnitario, costoUSD: i.costoUSD, descuentoPct: i.descuentoPct, cantidadRecibida: i.cantidadRecibida })));
   }, [oc]);
 
   if (!esNueva && !oc)
@@ -114,12 +120,25 @@ export function OCEditor({ id }: { id: string }) {
 
   const editable = (esNueva || oc?.estado === "BORRADOR") && puedeEditar;
   const prov = db.proveedores.find((p) => p.id === proveedorId);
-  const t = totalesOC(items.map((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: 0, costoUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct ?? 0 })), circuito === 1 ? db.config.ivaPct : 0);
+  const enUSD = moneda === "USD" && origen === "NUEVA";
+  // Tipo de cambio de la vista previa: el de la OC si ya está confirmada, si no el de hoy.
+  const tcVista = oc?.tipoCambioAplicado ?? tcHoy ?? 0;
+  const pesosDe = (i: Linea) => (enUSD ? r2((i.costoUSD ?? 0) * tcVista) : (i.precio ?? 0));
+  const ivaPct = circuito === 1 ? db.config.ivaPct : 0;
+  const itemsOC = (): ItemOC[] => items.map<ItemOC>((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: i.cantidadRecibida, costoUnitario: pesosDe(i), costoUSD: enUSD ? i.costoUSD ?? 0 : undefined, descuentoPct: i.descuentoPct ?? 0 }));
+  const t = enUSD && oc && oc.estado !== "BORRADOR" ? { subtotal: oc.subtotal, iva: oc.iva, total: oc.total } : totalesOC(itemsOC(), ivaPct);
+  const tUSD = enUSD ? totalesOCUSD(itemsOC(), ivaPct) : null;
+  const costoUSDInicial = (p: Producto) => (p.monedaCosto === "USD" && p.costoUSD ? p.costoUSD : tcHoy ? r2(p.costoUltimo / tcHoy) : 0);
+  const cambiarMoneda = (m: Moneda) => {
+    setMoneda(m);
+    if (m === "USD") setItems((its) => its.map((i) => ({ ...i, costoUSD: i.costoUSD ?? (tcHoy ? r2((i.precio ?? 0) / tcHoy) : 0) })));
+    else setItems((its) => its.map((i) => ({ ...i, precio: i.costoUSD && tcHoy ? r2(i.costoUSD * tcHoy) : i.precio })));
+  };
   const saldoAcpAntes = acpRes ? acpRes.saldo + (oc && oc.estado !== "BORRADOR" ? t.subtotal : 0) : 0;
   const saldoAcpDespues = saldoAcpAntes - t.subtotal;
   const recepciones = oc ? db.recepciones.filter((r) => r.ordenCompraId === oc.id) : [];
-  const pedido = items.reduce((a, i) => a + i.cantidad * (i.precio ?? 0), 0);
-  const recibido = items.reduce((a, i) => a + Math.min(i.cantidad, i.cantidadRecibida) * (i.precio ?? 0), 0);
+  const pedido = items.reduce((a, i) => a + i.cantidad * pesosDe(i), 0);
+  const recibido = items.reduce((a, i) => a + Math.min(i.cantidad, i.cantidadRecibida) * pesosDe(i), 0);
   const atrasada = oc && (oc.estado === "CONFIRMADA" || oc.estado === "RECIBIDA_PARCIAL") && diaLocal(oc.fechaEntregaEstimada) < diaLocal(new Date());
 
   const elegirProveedor = (v: string) => {
@@ -141,7 +160,7 @@ export function OCEditor({ id }: { id: string }) {
       const p = pos.producto;
       if (p.proveedorHabitualId !== proveedorId || !p.activo || pos.estado === "OK" || ya.has(p.id)) continue;
       const q = cantidadReposicion(p, pos.disponible, pos.enTransito);
-      if (q > 0) nuevas.push({ id: newId("ioc"), productoId: p.id, cantidad: q, precio: p.costoUltimo, descuentoPct: 0, cantidadRecibida: 0 });
+      if (q > 0) nuevas.push({ id: newId("ioc"), productoId: p.id, cantidad: q, precio: p.costoUltimo, costoUSD: enUSD ? costoUSDInicial(p) : undefined, descuentoPct: 0, cantidadRecibida: 0 });
     }
     if (!nuevas.length) return toast.info("Este proveedor no tiene productos bajo mínimo para reponer.");
     setItems([...items, ...nuevas]);
@@ -158,7 +177,9 @@ export function OCEditor({ id }: { id: string }) {
     fechaEmision: deInput(fecha),
     fechaEntregaEstimada: deInput(entrega),
     observaciones: obs || undefined,
-    items: items.map<ItemOC>((i) => ({ id: i.id, productoId: i.productoId, cantidadPedida: i.cantidad, cantidadRecibida: i.cantidadRecibida, costoUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct ?? 0 })),
+    // En USD, `costoUnitario` es solo la vista previa: el servidor lo recalcula con su tipo de cambio.
+    moneda: enUSD ? ("USD" as const) : ("ARS" as const),
+    items: itemsOC(),
   });
 
   const ctx = () => ({ proveedorId: proveedorId || undefined, productoIds: items.map((i) => i.productoId), depositoIds: [depositoId], acopioProveedorId: origen === "ACOPIO" ? acpId || undefined : undefined });
@@ -195,6 +216,7 @@ export function OCEditor({ id }: { id: string }) {
             {oc && <StatusBadge tipo="OC" estado={oc.estado} />}
             {oc && <CircuitoBadge circuito={oc.circuito} corto />}
             {oc?.origen === "ACOPIO" && <Badge variant="accent">Retiro de acopio</Badge>}
+            {oc?.moneda === "USD" && <Badge>USD</Badge>}
             {atrasada && <Badge variant="danger">Atrasada</Badge>}
           </span>
         }
@@ -244,6 +266,16 @@ export function OCEditor({ id }: { id: string }) {
                 )}
                 <ImpactoCampo campo={`oc.origen.${origen}`} />
               </FormField>
+              {origen === "NUEVA" && (
+                <FormField label="Moneda">
+                  {editable ? (
+                    <Segmented value={moneda} onChange={cambiarMoneda} options={[{ value: "ARS", label: "Pesos" }, { value: "USD", label: "Dólares" }]} />
+                  ) : (
+                    <div className="flex h-9 items-center text-[13px]">{moneda === "USD" ? "Dólares (USD)" : "Pesos"}</div>
+                  )}
+                  <ImpactoCampo campo={`moneda.${moneda}`} />
+                </FormField>
+              )}
               <FormField label="Circuito">
                 {editable && origen === "NUEVA" ? (
                   <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
@@ -286,7 +318,7 @@ export function OCEditor({ id }: { id: string }) {
                 items={items}
                 onChange={setItems}
                 readOnly={!editable}
-                crearItem={(p) => ({ id: newId("ioc"), productoId: p.id, cantidad: p.unidadesPorPallet ?? 1, precio: p.costoUltimo, descuentoPct: 0, cantidadRecibida: 0 })}
+                crearItem={(p) => ({ id: newId("ioc"), productoId: p.id, cantidad: p.unidadesPorPallet ?? 1, precio: p.costoUltimo, costoUSD: enUSD ? costoUSDInicial(p) : undefined, descuentoPct: 0, cantidadRecibida: 0 })}
                 depositoId={depositoId}
                 proveedorId={proveedorId || undefined}
                 filtroProductos={acp ? (p) => acp.preciosCongelados.some((c) => c.productoId === p.id) : undefined}
@@ -295,12 +327,52 @@ export function OCEditor({ id }: { id: string }) {
                 conDescuento={!acp}
                 mostrarCosto
                 precioLabel="Costo unit."
-                conPrecio={verCostos}
-                extras={
-                  oc && oc.estado !== "BORRADOR"
-                    ? [{ header: "Recibido", width: 110, align: "right", cell: (i) => <span className="tnum text-muted">{formatQty(i.cantidadRecibida, db.productos.find((p) => p.id === i.productoId)?.unidad ?? "UN").split(" ")[0]}</span> }]
-                    : []
-                }
+                conPrecio={verCostos && !enUSD}
+                extras={[
+                  ...(oc && oc.estado !== "BORRADOR"
+                    ? [{ header: "Recibido", width: 110, align: "right" as const, cell: (i: Linea) => <span className="tnum text-muted">{formatQty(i.cantidadRecibida, db.productos.find((p) => p.id === i.productoId)?.unidad ?? "UN").split(" ")[0]}</span> }]
+                    : []),
+                  ...(enUSD && verCostos
+                    ? [
+                        {
+                          header: "Costo USD",
+                          width: 140,
+                          align: "right" as const,
+                          cell: (i: Linea, update: (patch: Partial<Linea>) => void) =>
+                            editable ? (
+                              <NumberInput aria-label="Costo en USD" value={i.costoUSD ?? 0} min={0} onValueChange={(v) => update({ costoUSD: v })} className="h-8" />
+                            ) : (
+                              <div className="pt-1.5 tnum">{formatUSD(i.costoUSD ?? 0)}</div>
+                            ),
+                        },
+                        {
+                          header: "Desc. %",
+                          width: 90,
+                          align: "right" as const,
+                          cell: (i: Linea, update: (patch: Partial<Linea>) => void) =>
+                            editable ? (
+                              <NumberInput aria-label="Descuento" value={i.descuentoPct ?? 0} min={0} onValueChange={(v) => update({ descuentoPct: Math.min(100, v) })} className="h-8" />
+                            ) : (
+                              <div className="pt-1.5 tnum">{i.descuentoPct ?? 0} %</div>
+                            ),
+                        },
+                        {
+                          header: "Subtotal",
+                          width: 150,
+                          align: "right" as const,
+                          cell: (i: Linea) => {
+                            const usd = i.cantidad * (i.costoUSD ?? 0) * (1 - (i.descuentoPct ?? 0) / 100);
+                            return (
+                              <div className="pt-1.5 tnum">
+                                <span className="font-medium">{formatUSD(usd)}</span>
+                                {tcVista > 0 && <span className="block text-[11px] text-muted">{formatMoney(usd * tcVista)}</span>}
+                              </div>
+                            );
+                          },
+                        },
+                      ]
+                    : []),
+                ]}
                 vacio="Agregá productos con el buscador o usá “Sugerir reposición”."
               />
             </CardContent>
@@ -338,13 +410,32 @@ export function OCEditor({ id }: { id: string }) {
               <CardTitle>Resumen</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {verCostos && tUSD && (
+                <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-[13px]">
+                  <dt className="text-muted">Subtotal USD</dt>
+                  <dd className="text-right tnum">{formatUSD(tUSD.subtotal)}</dd>
+                  <dt className="text-muted">IVA {ivaPct} %</dt>
+                  <dd className="text-right tnum">{formatUSD(tUSD.iva)}</dd>
+                  <dt className="border-t border-border pt-1.5 font-semibold">Total USD</dt>
+                  <dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatUSD(tUSD.total)}</dd>
+                </dl>
+              )}
+              {enUSD && (
+                <p className="rounded-control bg-[#FAFAF8] p-2.5 text-[12px] text-muted">
+                  {oc?.tipoCambioAplicado
+                    ? `Tipo de cambio de la OC: ${formatMoney(oc.tipoCambioAplicado)} (${formatDate(oc.tipoCambioFecha)})`
+                    : tcHoy
+                      ? `En pesos al dólar de hoy (${formatMoney(tcHoy)}, ${formatDate(tc?.fecha ? `${tc.fecha}T12:00:00` : undefined)}); al confirmar la OC queda su tipo de cambio.`
+                      : "Sin tipo de cambio disponible: revisalo en Configuración → Parámetros."}
+                </p>
+              )}
               {verCostos && (
                 <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-[13px]">
-                  <dt className="text-muted">Subtotal</dt>
+                  <dt className="text-muted">{enUSD ? "Subtotal en pesos" : "Subtotal"}</dt>
                   <dd className="text-right tnum">{formatMoney(t.subtotal)}</dd>
                   <dt className="text-muted">IVA {circuito === 1 ? db.config.ivaPct : 0} %</dt>
                   <dd className="text-right tnum">{formatMoney(t.iva)}</dd>
-                  <dt className="border-t border-border pt-1.5 font-semibold">Total</dt>
+                  <dt className="border-t border-border pt-1.5 font-semibold">{enUSD ? "Total en pesos" : "Total"}</dt>
                   <dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(t.total)}</dd>
                 </dl>
               )}

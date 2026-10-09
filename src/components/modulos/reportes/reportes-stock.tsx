@@ -22,6 +22,27 @@ import { formatDate, formatMoney, formatNumber, formatPercent, formatQty, unidad
 import { cn, newId } from "@/lib/utils";
 import { MovimientosTab } from "@/components/modulos/stock/movimientos-tab";
 import { ReporteLayout } from "./reporte-layout";
+import { Segmented } from "@/components/ui/tabs";
+import { aDolares, formatUSD, fuenteLabel, useTipoCambio, type Vigente } from "@/lib/tipo-cambio";
+
+/** "USD 1,2M" / "USD 850k" (KPIs) o "USD 12.345". */
+export function formatUSDCompacto(n: number, compact?: boolean): string {
+  if (!compact) return formatUSD(n, { decimals: false });
+  const a = Math.abs(n);
+  const s = n < 0 ? "−" : "";
+  if (a >= 1_000_000) return `${s}USD ${formatNumber(a / 1_000_000, 1)}M`;
+  if (a >= 1_000) return `${s}USD ${formatNumber(a / 1_000, 0)}k`;
+  return `${s}USD ${formatNumber(a, 0)}`;
+}
+
+/** Pie de los reportes en USD: el dólar usado para convertir. */
+export function PieTipoCambio({ tc }: { tc: Pick<Vigente, "valor" | "fuente" | "fecha"> | undefined | null }) {
+  return (
+    <p className="mt-2 text-[12px] text-muted">
+      {tc?.valor ? `Valor usado: ${formatMoney(tc.valor)} (${fuenteLabel(tc.fuente)}, ${formatDate(tc.fecha ? `${tc.fecha.slice(0, 10)}T12:00:00` : null, "dd/MM")})` : "Sin tipo de cambio disponible: los valores se muestran en pesos."}
+    </p>
+  );
+}
 
 // ───────────────────────── 5. Valorización de inventario ─────────────────────────
 
@@ -31,6 +52,12 @@ export function ReporteValorizacion() {
   const unR = useUnidadNegocio();
   const posiciones = usePosiciones();
   const [lista, setLista] = React.useState("lst_gen");
+  // ARS/USD: solo presentación, al dólar vigente (la valorización es del stock de hoy).
+  const [moneda, setMoneda] = React.useState<"ARS" | "USD">("ARS");
+  const { tc } = useTipoCambio();
+  const dolar = tc?.valor ?? 0;
+  const usd = moneda === "USD" && dolar > 0;
+  const m = (n: number, o: { compact?: boolean; decimals?: boolean } = {}) => (usd ? formatUSDCompacto(aDolares(n, dolar), o.compact) : formatMoney(n, o));
   const deps = suc ? db.depositos.filter((d) => d.sucursalId === suc) : db.depositos;
   const filas = React.useMemo(
     () =>
@@ -54,25 +81,30 @@ export function ReporteValorizacion() {
     { key: "p", header: "Producto", footer: "Total", sortable: true, sortValue: (f) => f.p.codigo, cell: (f) => <span className="block min-w-[200px]"><span className="mr-1.5 whitespace-nowrap font-mono text-[11px] text-muted">{f.p.codigo}</span>{f.p.nombre}</span> },
     { key: "r", header: "Rubro", hideOnMobile: true, cell: (f) => <span className="whitespace-nowrap text-muted">{db.rubros.find((r) => r.id === f.p.rubroId)?.nombre}</span> },
     { key: "q", header: "Físico", align: "right", cell: (f) => <span className="tnum">{formatNumber(f.fis)} {unidadCorta(f.p.unidad)}</span> },
-    ...deps.map((d) => ({ key: d.id, header: d.nombre.replace("Depósito ", "Dep. "), align: "right" as const, footer: <span className="tnum">{formatMoney(filas.reduce((a, f) => a + f.porDep[d.id], 0), { decimals: false })}</span>, cell: (f: F) => <span className="tnum text-muted">{formatMoney(f.porDep[d.id], { decimals: false })}</span> })),
-    { key: "prom", header: "A costo promedio", align: "right", footer: <span className="tnum text-accent">{formatMoney(t.prom, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.prom, cell: (f) => <span className="font-medium tnum">{formatMoney(f.prom, { decimals: false })}</span> },
-    { key: "ult", header: "A costo último", align: "right", footer: <span className="tnum">{formatMoney(t.ult, { decimals: false })}</span>, cell: (f) => <span className="tnum">{formatMoney(f.ult, { decimals: false })}</span> },
-    { key: "dif", header: "Diferencia", align: "right", footer: <span className="tnum">{formatMoney(t.ult - t.prom, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.ult - f.prom, cell: (f) => <span className={cn("tnum", f.ult - f.prom > 0 ? "text-danger" : f.ult - f.prom < 0 ? "text-success" : "text-muted")}>{formatMoney(f.ult - f.prom, { decimals: false })}</span> },
-    { key: "v", header: "A precio de venta", align: "right", footer: <span className="tnum">{formatMoney(t.venta, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.venta, cell: (f) => <span className="tnum">{formatMoney(f.venta, { decimals: false })}</span> },
+    ...deps.map((d) => ({ key: d.id, header: d.nombre.replace("Depósito ", "Dep. "), align: "right" as const, footer: <span className="tnum">{m(filas.reduce((a, f) => a + f.porDep[d.id], 0), { decimals: false })}</span>, cell: (f: F) => <span className="tnum text-muted">{m(f.porDep[d.id], { decimals: false })}</span> })),
+    { key: "prom", header: "A costo promedio", align: "right", footer: <span className="tnum text-accent">{m(t.prom, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.prom, cell: (f) => <span className="font-medium tnum">{m(f.prom, { decimals: false })}</span> },
+    { key: "ult", header: "A costo último", align: "right", footer: <span className="tnum">{m(t.ult, { decimals: false })}</span>, cell: (f) => <span className="tnum">{m(f.ult, { decimals: false })}</span> },
+    { key: "dif", header: "Diferencia", align: "right", footer: <span className="tnum">{m(t.ult - t.prom, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.ult - f.prom, cell: (f) => <span className={cn("tnum", f.ult - f.prom > 0 ? "text-danger" : f.ult - f.prom < 0 ? "text-success" : "text-muted")}>{m(f.ult - f.prom, { decimals: false })}</span> },
+    { key: "v", header: "A precio de venta", align: "right", footer: <span className="tnum">{m(t.venta, { decimals: false })}</span>, sortable: true, sortValue: (f) => f.venta, cell: (f) => <span className="tnum">{m(f.venta, { decimals: false })}</span> },
   ];
   return (
     <ReporteLayout
       slug="valorizacion"
       titulo="Valorización de inventario"
       descripcion="Cuánto vale el stock por depósito y rubro, a costo promedio y a costo último, y el margen potencial embebido a precio de venta."
-      filtros={<Select size="sm" className="w-[190px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.map((l) => ({ value: l.id, label: `Venta a lista ${l.nombre}` }))} />}
-      filtrosTexto={`Precio de venta: lista ${db.listasPrecios.find((l) => l.id === lista)?.nombre}`}
+      filtros={
+        <>
+          <Select size="sm" className="w-[190px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.map((l) => ({ value: l.id, label: `Venta a lista ${l.nombre}` }))} />
+          <Segmented value={moneda} onChange={setMoneda} options={[{ value: "ARS", label: "ARS" }, { value: "USD", label: "USD" }]} />
+        </>
+      }
+      filtrosTexto={`Precio de venta: lista ${db.listasPrecios.find((l) => l.id === lista)?.nombre}${usd ? ` · en USD a ${formatMoney(dolar)}` : ""}`}
       kpis={
         <>
-          <KpiCard label="Inventario a costo promedio" valor={formatMoney(t.prom, { compact: true })} acento />
-          <KpiCard label="A costo de reposición (último)" valor={formatMoney(t.ult, { compact: true })} subtexto={`${formatMoney(t.ult - t.prom, { compact: true })} vs promedio`} />
-          <KpiCard label="A precio de venta" valor={formatMoney(t.venta, { compact: true })} />
-          <KpiCard label="Margen potencial embebido" valor={formatMoney(t.venta - t.prom, { compact: true })} subtexto={formatPercent(t.venta ? (t.venta - t.prom) / t.venta : 0)} />
+          <KpiCard label="Inventario a costo promedio" valor={m(t.prom, { compact: true })} acento />
+          <KpiCard label="A costo de reposición (último)" valor={m(t.ult, { compact: true })} subtexto={`${m(t.ult - t.prom, { compact: true })} vs promedio`} />
+          <KpiCard label="A precio de venta" valor={m(t.venta, { compact: true })} />
+          <KpiCard label="Margen potencial embebido" valor={m(t.venta - t.prom, { compact: true })} subtexto={formatPercent(t.venta ? (t.venta - t.prom) / t.venta : 0)} />
         </>
       }
       graficoTitulo="Valor por rubro y depósito (costo promedio)"
@@ -84,6 +116,7 @@ export function ReporteValorizacion() {
       })}
     >
       <DataTable rows={filas} columns={columnas} getRowId={(f) => f.p.id} searchText={(f) => `${f.p.codigo} ${f.p.nombre}`} initialSort={{ key: "prom", dir: "desc" }} showFooter pageSize={100} empty={{ titulo: "Sin stock para valorizar", descripcion: "Sale del stock físico de cada artículo a costo promedio, costo último y precio de venta. El stock nace de los ingresos de mercadería y del inventario inicial." }} />
+      {moneda === "USD" && <PieTipoCambio tc={tc} />}
     </ReporteLayout>
   );
 }

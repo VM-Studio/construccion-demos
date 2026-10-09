@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Info, Plus, Save, ShieldAlert, Users } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosResumen, useDb, usePendientes, usePuede, useUnidadNegocio, useUsuario } from "@/store/selectors";
-import type { Circuito, FormaPagoVenta, ModalidadEntrega, NotaPedido, OrigenVenta, Producto } from "@/domain/types";
+import type { Circuito, FormaPagoVenta, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Producto } from "@/domain/types";
 import { obtenerPrecio } from "@/domain/precios";
 import { calcularTotales } from "@/domain/ventas";
 import { precioCongelado } from "@/domain/acopios";
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -33,6 +34,7 @@ import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { PendientesTabla } from "./pendientes-tabla";
 import { obtenerDb } from "@/lib/datos/almacen";
+import { aDolares, formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 
 interface Linea extends LineaBase {
   obraId?: string;
@@ -73,6 +75,8 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const [direccion, setDireccion] = React.useState(borrador?.direccionEntrega ?? "");
   const [descuento, setDescuento] = React.useState(borrador?.descuentoPct ?? cotizacion?.descuentoPct ?? 0);
   const [obs, setObs] = React.useState(borrador?.observaciones ?? "");
+  const [moneda, setMoneda] = React.useState<Moneda>(borrador?.moneda ?? cotizacion?.moneda ?? "ARS");
+  const { valor: dolar } = useTipoCambio();
   const [items, setItems] = React.useState<Linea[]>(
     () =>
       borrador?.items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct ?? 0 })) ??
@@ -94,6 +98,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     const c = obtenerDb().clientes.find((x) => x.id === id);
     if (!c) return;
     setCircuito(c.circuitoHabitual);
+    if (!c.facturaEnUSD) setMoneda("ARS");
     setFormaPago(c.condicionPago === "CONTADO" ? "CONTADO" : "CUENTA_CORRIENTE");
     if (c.vendedorId) setVendedorId(c.vendedorId);
     if (!usuario?.sucursalId) {
@@ -143,6 +148,12 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const saldoAntes = acopioRes?.saldo ?? 0;
   const saldoDespues = Math.round((saldoAntes - t.subtotal) * 100) / 100;
 
+  // Precios en USD: solo clientes con facturaEnUSD y venta nueva. Vista previa con el dólar de hoy;
+  // los importes se guardan en pesos y el servidor fija el tipo de cambio al confirmar.
+  const usdHabilitado = !!cliente?.facturaEnUSD && origen === "NUEVA";
+  const enUSD = usdHabilitado && moneda === "USD";
+  const usd = (pesos: number) => formatUSD(aDolares(pesos, dolar));
+
   const datos = () => ({
     clienteId,
     sucursalId,
@@ -161,6 +172,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     direccionEntrega: pendiente && modalidad === "ENVIO" ? direccion || [db.obras.find((o) => o.id === obraEntrega)?.direccion, db.obras.find((o) => o.id === obraEntrega)?.localidad].filter(Boolean).join(", ") || undefined : undefined,
     observaciones: obs || undefined,
     cotizacionId: cotizacion?.id,
+    moneda: (enUSD ? "USD" : "ARS") as Moneda,
   });
 
   const contextoMedir = () => ({ clienteId, productoIds: items.map((i) => i.productoId), depositoIds: [depositoId], acopioId: acopio?.id, notaPedidoId: borrador?.id });
@@ -306,6 +318,16 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <ImpactoCampo campo={pendiente ? "entrega.PENDIENTE" : "entrega.INMEDIATA"} />
                 </FormField>
               </div>
+              {usdHabilitado && (
+                <div className="border-t border-border pt-4">
+                  <label className="flex items-center gap-3 text-[13px] font-medium">
+                    <Switch checked={enUSD} onCheckedChange={(v) => setMoneda(v ? "USD" : "ARS")} /> Precios en USD
+                    {enUSD && <span className="font-normal text-muted">{dolar ? `Dólar de hoy ${formatMoney(dolar)}` : "Sin tipo de cambio disponible"}</span>}
+                  </label>
+                  <ImpactoCampo campo={`moneda.${enUSD ? "USD" : "ARS"}`} />
+                  {enUSD && <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted"><Info className="size-3.5" /> Se guarda en pesos; al confirmar queda el tipo de cambio del día.</p>}
+                </div>
+              )}
               {pendiente && (
                 <div className="grid gap-3 rounded-card border border-border bg-[#FAFAF8] p-3 sm:grid-cols-2 lg:grid-cols-4">
                   <FormField label="Modalidad">
@@ -354,6 +376,15 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                     width: 200,
                     cell: (i, up) => <ObraSelect clienteId={clienteId} value={i.obraId} onChange={(v) => up({ obraId: v })} permitidas={obrasPermitidas} className="h-8 text-[12px]" />,
                   },
+                  ...(enUSD
+                    ? [
+                        {
+                          header: "Subtotal USD",
+                          width: 110,
+                          cell: (i: Linea) => <span className="block text-right text-[12px] text-muted tnum">{usd(i.cantidad * (i.precio ?? 0) * (1 - (i.descuentoPct ?? 0) / 100))}</span>,
+                        },
+                      ]
+                    : []),
                 ]}
                 avisoLinea={(i, p) => {
                   const costoU = acopio ? precioCongelado(acopio, p.id)?.costoSnapshot : p.costoPromedio;
@@ -405,6 +436,13 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                 )}
                 <dt className="border-t border-border pt-1.5 font-semibold">{acopio ? "Monto del retiro" : "Total"}</dt>
                 <dd className="border-t border-border pt-1.5 text-right text-[16px] font-semibold tnum">{formatMoney(monto)}</dd>
+                {enUSD && (
+                  <>
+                    <dt className="text-muted">Total en USD</dt>
+                    <dd className="text-right font-medium tnum">{usd(monto)}</dd>
+                    <dt className="col-span-2 text-[11px] text-muted">Vista previa con el dólar de hoy{dolar ? ` (${formatMoney(dolar)})` : ""}; el tipo de cambio queda fijo al confirmar.</dt>
+                  </>
+                )}
               </dl>
               {acopio && (
                 <div className={cn("rounded-control border p-3 text-[13px]", saldoDespues < 0 ? "border-danger/30 bg-danger-soft" : "border-accent/30 bg-accent-soft")} data-tour="np-saldo">

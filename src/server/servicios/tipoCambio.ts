@@ -1,4 +1,3 @@
-import "server-only";
 /**
  * Tipo de cambio USD: dólar divisa vendedor del Banco Nación.
  * - Fuente principal: https://www.bna.com.ar/Personas, solapa "Cotización Divisas" (no "Billetes").
@@ -6,6 +5,7 @@ import "server-only";
  * - Una fila de CotizacionUSD por fecha de cotización (upsert). Cada actualización publica un
  *   Cambio de tipo "CotizacionUSD" para que todos los navegadores revaliden la clave "tipo-cambio".
  * - TODO valor en dólares del sistema sale de `obtenerVigente()` (modo AUTO o MANUAL).
+ * Sin `server-only`: lo importa el motor, que también corre en los scripts de pruebas (tsx).
  */
 import * as cheerio from "cheerio";
 import { prisma } from "../db-base";
@@ -218,11 +218,15 @@ export function actualizarCotizacion(): Promise<ResultadoActualizacion> {
       const ultima = await prisma.cotizacionUSD.findFirst({ orderBy: { fecha: "desc" } });
       return { ok: false, fuente: null, cotizacion: ultima ? filaAHistorial(ultima) : null, errores };
     }
+    // El respaldo no pisa una cotización del BNA del mismo día (solo completa días sin BNA).
+    if (c.fuente !== "BNA") {
+      const previa = await prisma.cotizacionUSD.findUnique({ where: { fecha: aFechaDb(c.fecha) } });
+      if (previa?.fuente === "BNA") return { ok: true, fuente: "BNA" as const, cotizacion: filaAHistorial(previa), errores };
+    }
     const datos = {
       divisaCompra: c.divisaCompra,
       divisaVenta: c.divisaVenta,
-      billeteCompra: c.billeteCompra ?? null,
-      billeteVenta: c.billeteVenta ?? null,
+      ...(c.billeteCompra !== undefined ? { billeteCompra: c.billeteCompra, billeteVenta: c.billeteVenta ?? null } : {}),
       fuente: c.fuente,
       obtenidoEn: new Date(),
     };

@@ -4,7 +4,17 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm vercel-build",
   "crons": [
-    { "path": "/api/tipo-cambio/cron", "schedule": "35 13 * * 1-5" },
-    { "path": "/api/tipo-cambio/cron", "schedule": "5 19 * * 1-5" }
+    {
+      "path": "/api/tipo-cambio/cron",
+      "schedule": "35 13 * * 1-5"
+    },
+    {
+      "path": "/api/tipo-cambio/cron",
+      "schedule": "5 19 * * 1-5"
+    },
+    {
+      "path": "/api/mantenimiento/cron",
+      "schedule": "0 6 * * *"
+    }
   ]
 }

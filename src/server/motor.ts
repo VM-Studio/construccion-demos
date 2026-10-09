@@ -3,7 +3,7 @@
  * 1. Lee el estado vigente (caché por versión) y corre la acción del dominio (src/store/negocio.ts,
  *    reglas de src/domain/) en memoria, con el actor de la sesión como usuario.
  * 2. Mide los efectos reales (modo capacitación) comparando antes y después.
- * 3. En una transacción Serializable: lock global de escritura, verificación de que nadie escribió
+ * 3. En una transacción (Read Committed, en la cola del proceso): lock global de escritura, verificación de que nadie escribió
  *    desde la lectura (si no, reintenta), FOR UPDATE de las filas de stock / acopio involucradas,
  *    persistencia de SOLO lo que cambió, numeración con concurrencia optimista, auditoría con
  *    efectos y una fila de Cambio para la sincronización en vivo.
@@ -67,6 +67,18 @@ const esReintentable = (e: unknown) =>
   /could not serialize|deadlock detected|40001/i.test(String((e as Error)?.message ?? ""));
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Cola de escrituras del proceso: dentro de una misma instancia las transacciones se abren de a
+ * una, así nadie consume su tiempo de transacción esperando el lock global (que queda para la
+ * competencia entre instancias).
+ */
+let colaEscritura: Promise<unknown> = Promise.resolve();
+function enCola<T>(fn: () => Promise<T>): Promise<T> {
+  const turno = colaEscritura.then(fn, fn);
+  colaEscritura = turno.catch(() => undefined);
+  return turno;
+}
 
 /** Corre la acción del dominio en memoria sobre `antes`. */
 function correrEnMemoria(antes: EstadoInicial, actor: Usuario, nombre: NombreAccion, args: unknown[]) {
@@ -133,15 +145,13 @@ export async function ejecutarAccion<N extends NombreAccion>(
   args: Parameters<AccionesNegocio[N]>,
   opts: { accionId?: string; bloqueos?: Bloqueos } = {},
 ): Promise<ResultadoServidor> {
-  for (let intento = 0; intento <= BACKOFF.length; intento++) {
-    const { version, db: antes } = await obtenerEstado();
+  /** Corre la acción en memoria sobre `antes` y arma el estado final con la auditoría completa. */
+  const preparar = async (antes: EstadoInicial) => {
     const inyectado = await conTipoCambio(antes);
     const corrida = correrEnMemoria(inyectado, ctx.actor, nombre, args as unknown[]);
     const r = corrida.r;
     const despues = corrida.despues === inyectado ? antes : sinTipoCambio(antes, inyectado, corrida.despues);
-    if (!r.ok) return { ok: false, error: r.error ?? "No se pudo completar la acción.", codigo: r.codigo };
-    if (despues === antes) return { ok: true, data: r.data, efectos: [], tipos: [] };
-
+    if (!r.ok || despues === antes) return { r, final: null, efectos: [] as Diferencia[], nuevasAud: [] as EstadoInicial["auditoria"] };
     // Efectos reales (modo capacitación), medidos sobre el estado leído y el resultante.
     let efectos: Diferencia[] = [];
     try {
@@ -155,19 +165,46 @@ export async function ejecutarAccion<N extends NombreAccion>(
       ...despues,
       auditoria: despues.auditoria.map((a, i) => (nuevasAud.includes(a) ? { ...a, accionId: opts.accionId ?? nombre, efectos: i === despues.auditoria.length - 1 ? efectos : undefined, ip: ctx.ip, userAgent: ctx.userAgent } : a)),
     };
+    return { r, final, efectos, nuevasAud };
+  };
+
+  for (let intento = 0; intento <= BACKOFF.length; intento++) {
+    // Primer intento optimista: se calcula afuera y se verifica la versión adentro. Si otro
+    // usuario guardó en el medio, los reintentos toman el lock global ANTES de leer el estado:
+    // así no vuelven a chocar aunque haya muchas escrituras simultáneas.
+    const pesimista = intento > 0;
+    let previo: { version: bigint; antes: EstadoInicial; p: Awaited<ReturnType<typeof preparar>> } | null = null;
+    if (!pesimista) {
+      const { version, db: antes } = await obtenerEstado();
+      const p = await preparar(antes);
+      if (!p.r.ok) return { ok: false, error: p.r.error ?? "No se pudo completar la acción.", codigo: p.r.codigo };
+      if (!p.final) return { ok: true, data: p.r.data, efectos: [], tipos: [] };
+      previo = { version, antes, p };
+    }
 
     try {
-      const { idCambio, tipos } = await prisma.$transaction(
+      const res = await enCola(() => prisma.$transaction(
         async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(42424242)`;
-          if ((await versionActual(tx)) !== version) throw new ConflictoVersion();
+          let version: bigint, antes: EstadoInicial, p: Awaited<ReturnType<typeof preparar>>;
+          if (previo) {
+            ({ version, antes, p } = previo);
+            if ((await versionActual(tx)) !== version) throw new ConflictoVersion();
+          } else {
+            // Con el lock tomado nadie más escribe: el estado leído es el vigente.
+            ({ version, db: antes } = await obtenerEstado());
+            if ((await versionActual(tx)) !== version) throw new ConflictoVersion();
+            p = await preparar(antes);
+            if (!p.r.ok || !p.final) return { sinCambios: true as const, p };
+          }
+          const final = p.final!;
           await bloquear(tx, opts.bloqueos);
           const cambios = await persistirDiferencias(tx, antes, final, COLECCIONES);
           await persistirNumeradores(tx, antes.numeradores, final.numeradores);
           const tipos: string[] = [...new Set(cambios.filter((c) => c.coleccion !== "auditoria").map((c) => MODELOS[c.coleccion as Coleccion] as string))];
           if (final.config !== antes.config) tipos.push("Configuracion");
           if (final.numeradores !== antes.numeradores) tipos.push("Contador");
-          const principal = nuevasAud.at(-1);
+          const principal = p.nuevasAud.at(-1);
           const cambio = await tx.cambio.create({
             data: {
               tipos,
@@ -177,12 +214,20 @@ export async function ejecutarAccion<N extends NombreAccion>(
               href: principal ? (hrefEntidad(principal.entidad, principal.entidadId) ?? null) : null,
             },
           });
-          return { idCambio: cambio.id, tipos };
+          return { sinCambios: false as const, idCambio: cambio.id, tipos, final, p };
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 15000 },
-      );
-      actualizarCache(idCambio, final);
-      return { ok: true, data: r.data, efectos, tipos };
+        // Read Committed a propósito: el lock global ya serializa a todos los que escriben y, a
+        // diferencia de Serializable (cuya foto se toma en la primera consulta, mientras se espera
+        // el lock), cada consulta posterior al lock ve lo último confirmado.
+        { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, maxWait: 20_000, timeout: 30_000 },
+      ));
+      if (res.sinCambios) {
+        const { r } = res.p;
+        if (!r.ok) return { ok: false, error: r.error ?? "No se pudo completar la acción.", codigo: r.codigo };
+        return { ok: true, data: r.data, efectos: [], tipos: [] };
+      }
+      actualizarCache(res.idCambio, res.final);
+      return { ok: true, data: res.p.r.data, efectos: res.p.efectos, tipos: res.tipos };
     } catch (e) {
       if (esReintentable(e) && intento < BACKOFF.length) {
         await espera(BACKOFF[intento]);

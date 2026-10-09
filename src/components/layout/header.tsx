@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { Bell, ChevronRight, Heart, LogOut, Menu, PlayCircle, Search, UserRound } from "lucide-react";
+import { Bell, ChevronRight, Heart, LogOut, Menu, PlayCircle, Search, UserRound, LifeBuoy } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, useEmpresa, usePuede, useUsuario } from "@/store/selectors";
 import { useAlertas } from "@/store/alertas";
@@ -206,6 +206,9 @@ function Avatar() {
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => setTimeout(() => setMiCuenta(true), 100)}>
           <UserRound /> Mi cuenta
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/ayuda"><LifeBuoy /> Ayuda</Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
           <PlayCircle /> Ver recorrido

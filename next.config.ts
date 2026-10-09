@@ -9,7 +9,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://vercel.com https://*.vercel-storage.com",
+  "connect-src 'self' https://vercel.com https://*.vercel-storage.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
   "frame-src 'self' blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",

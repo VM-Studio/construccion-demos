@@ -16,7 +16,7 @@ export const config = {
 
 // /api/adjuntos/upload: el webhook firmado de Vercel Blob llega sin sesión; la ruta verifica la
 // firma y, para generar el token de subida, la sesión y el permiso.
-const PUBLICAS = ["/login", "/registro", "/api/auth", "/api/salud", "/api/tipo-cambio/cron", "/api/adjuntos/upload"];
+const PUBLICAS = ["/login", "/registro", "/api/auth", "/api/salud", "/api/tipo-cambio/cron", "/api/mantenimiento/cron", "/api/adjuntos/upload"];
 const COOKIES = ["authjs.session-token", "__Secure-authjs.session-token"];
 
 const esPublica = (req: NextRequest) => {

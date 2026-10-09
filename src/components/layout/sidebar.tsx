@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle, UserRound, LifeBuoy } from "lucide-react";
 import { useStore } from "@/store";
 import { useEmpresa, useUsuario } from "@/store/selectors";
 import { coincidencia } from "@/config/modulos";
@@ -154,6 +154,9 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
               <DropdownMenuLabel>{usuario.email}</DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => setTimeout(() => setMiCuenta(true), 100)}>
           <UserRound /> Mi cuenta
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/ayuda"><LifeBuoy /> Ayuda</Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
                 <PlayCircle />

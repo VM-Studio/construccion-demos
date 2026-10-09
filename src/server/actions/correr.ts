@@ -10,6 +10,7 @@ import { REGISTRO, type NombreExpuesto } from "../servicios/registro";
 import { ErrorPermiso, servicio } from "../servicios/base";
 import { datosRequest, ErrorSesion, exigirActor } from "../auth/actor";
 import type { Diferencia } from "@/capacitacion/slice";
+import { registrarDuracion, usuarioEnSentry } from "../monitoreo";
 
 export type RespuestaAccion<T = unknown> = { ok: true; data: T; efectos: Diferencia[]; tipos: string[] } | { ok: false; error: string; codigo?: string };
 
@@ -23,13 +24,13 @@ export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[
       return { ok: false, error: "Los datos enviados no son válidos.", codigo: "ENTRADA" };
     }
     const actor = await exigirActor();
+    usuarioEnSentry(actor.id);
     const req = await datosRequest();
     let fn = servicios.get(nombre);
     if (!fn) servicios.set(nombre, (fn = servicio(nombre) as ReturnType<typeof servicio>));
     const t0 = Date.now();
     const r = await (fn as (...a: unknown[]) => ReturnType<ReturnType<typeof servicio>>)({ actor, ...req }, ...(entrada.data as unknown[]));
-    const ms = Date.now() - t0;
-    if (ms > 2000) console.warn(`[accion] ${nombre} tardó ${ms} ms`);
+    registrarDuracion(nombre, Date.now() - t0);
     if (r.ok) for (const ruta of REGISTRO[nombre].rutas) revalidatePath(ruta, "layout");
     return r as never;
   } catch (e) {

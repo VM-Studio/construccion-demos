@@ -1,6 +1,7 @@
 /**
  * Lectura de datos de negocio para un actor: parte del estado vigente (caché por versión) y
- * filtra según el rol ANTES de mandar nada al navegador:
+ * filtra según el rol ANTES de mandar nada al navegador (los campos ocultos se QUITAN del JSON, no
+ * se ponen en cero):
  * - VENTAS: sin costos ni márgenes (costos de artículos, snapshots, costos congelados) y sin compras.
  * - DEPOSITO: sin precios de venta ni saldos de dinero (listas, montos, comprobantes, cobros).
  * - Sin "ver circuito 2": se excluyen todos los documentos de circuito 2.
@@ -24,7 +25,7 @@ const cache = new Map<string, EstadoInicial>();
 
 const sinCostos = <T extends object>(x: T, campos: string[]): T => {
   const o = { ...x } as Record<string, unknown>;
-  for (const c of campos) if (c in o) o[c] = 0;
+  for (const c of campos) delete o[c];
   return o as T;
 };
 
@@ -62,6 +63,9 @@ export async function estadoPara(actor: Usuario): Promise<{ version: bigint; db:
       cotizaciones: v.cotizaciones.map((n) => ({ ...n, items: n.items.map((i) => sinCostos(i, ["costoUnitarioSnapshot"])) })),
       comprobantes: v.comprobantes.map((n) => (n.items ? { ...n, items: n.items.map((i) => sinCostos(i, ["costoUnitarioSnapshot"])) } : n)),
       acopios: v.acopios.map((a) => ({ ...a, preciosCongelados: a.preciosCongelados.map((p) => sinCostos(p, ["costoSnapshot"])) })),
+      ordenesCompra: v.ordenesCompra.map((o) => ({ ...sinCostos(o, ["subtotal", "iva", "total"]), items: o.items.map((i) => sinCostos(i, ["costoUnitario", "costoUSD"])) })),
+      recepciones: v.recepciones.map((r) => ({ ...r, items: r.items.map((i) => sinCostos(i, ["costoUnitario", "costoUSD"])) })),
+      acopiosProveedor: v.acopiosProveedor.map((a) => ({ ...sinCostos(a, ["importe", "pagado"]), preciosCongelados: a.preciosCongelados.map((p) => sinCostos(p, ["costo"])) })),
     };
   }
   if (!verCompras) v = { ...v, ordenesCompra: [], recepciones: [], acopiosProveedor: [], pagosProveedores: [], comprobantes: v.comprobantes.filter((c) => !c.proveedorId) };
@@ -73,6 +77,8 @@ export async function estadoPara(actor: Usuario): Promise<{ version: bigint; db:
       cobranzas: [],
       pagosProveedores: [],
       cheques: [],
+      devoluciones: v.devoluciones.map((d) => sinCostos(d, ["monto"])),
+      ajustesAcopio: v.ajustesAcopio.map((a) => sinCostos(a, ["monto"])),
       notasPedido: v.notasPedido.map((n) => ({ ...sinCostos(n, ["monto", "iva", "total"]), items: n.items.map((i) => sinCostos(i, ["precioUnitario", "subtotal", "costoUnitarioSnapshot"])) })),
       acopios: v.acopios.map((a) => ({ ...sinCostos(a, ["importe", "importeConIIBB"]), preciosCongelados: a.preciosCongelados.map((p) => sinCostos(p, ["precio", "costoSnapshot"])) })),
       cotizaciones: [],

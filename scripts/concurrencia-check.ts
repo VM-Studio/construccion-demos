@@ -19,6 +19,7 @@ const check = (n: string, c: boolean, d = "") => {
 
 async function main() {
   const { db } = await obtenerEstado();
+  if (!db.usuarios.some((u) => u.rol === "DUENO") || !db.usuarios.some((u) => u.rol === "VENTAS")) throw new Error("Hacen falta datos de ejemplo: corré pnpm db:seed:ejemplo");
   const felipe = db.usuarios.find((u) => u.rol === "DUENO")!;
   const lucas = db.usuarios.find((u) => u.rol === "VENTAS")!;
   const hoy = new Date().toISOString();

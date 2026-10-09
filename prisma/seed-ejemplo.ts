@@ -6,6 +6,7 @@ import { prisma } from "../src/server/db-base";
 import { seedEjemplo } from "../src/data/seed";
 import { COLECCIONES, guardarConfig, insertarMuchos } from "../src/server/datos/mapeo";
 import { CONDICIONES_PAGO } from "./condiciones";
+import bcrypt from "bcryptjs";
 
 if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
   console.error("✘ db:seed:ejemplo está bloqueado en producción.");
@@ -24,7 +25,18 @@ async function main() {
   await prisma.contador.deleteMany();
   await prisma.cambio.deleteMany();
   let n = 0;
+  // Los usuarios de ejemplo no tienen contraseña utilizable (hash inválido): se entra restableciéndola
+  // desde un dueño, o con EJEMPLO_PASSWORD (solo desarrollo) si se define al correr el seed.
+  const hash = process.env.EJEMPLO_PASSWORD ? await bcrypt.hash(process.env.EJEMPLO_PASSWORD, 10) : "!sin-acceso";
   for (const k of COLECCIONES) {
+    if (k === "usuarios") {
+      for (const u of db.usuarios) {
+        const { id, nombre, apellido, email, rol, sucursalId, activo, avatarIniciales, creadoEn, actualizadoEn } = u;
+        await prisma.usuario.create({ data: { id, nombre, apellido: apellido ?? null, email, rol, sucursalId: sucursalId ?? null, activo, avatarIniciales, creadoEn: new Date(creadoEn), actualizadoEn: new Date(actualizadoEn), passwordHash: hash } });
+      }
+      n += db.usuarios.length;
+      continue;
+    }
     await insertarMuchos(prisma, k, db[k] as object[]);
     n += (db[k] as object[]).length;
   }

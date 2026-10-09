@@ -316,16 +316,24 @@ model PosicionCarga {
 }
 
 model Usuario {
-  id              String   @id @default(cuid())
-  nombre          String
-  apellido        String?
-  email           String   @unique
-  rol             Rol
-  sucursalId      String?
-  activo          Boolean  @default(true)
-  avatarIniciales String
-  creadoEn        DateTime @default(now())
-  actualizadoEn   DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  nombre              String
+  apellido            String?
+  email               String    @unique
+  rol                 Rol
+  sucursalId          String?
+  activo              Boolean   @default(true)
+  avatarIniciales     String
+  /// bcrypt. Nunca sale del servidor (ver CAMPOS_PRIVADOS en mapeo.ts).
+  passwordHash        String
+  debeCambiarPassword Boolean   @default(false)
+  ultimoAcceso        DateTime?
+  intentosFallidos    Int       @default(0)
+  bloqueadoHasta      DateTime?
+  /// Se incrementa para cerrar todas las sesiones del usuario.
+  sesionVersion       Int       @default(0)
+  creadoEn            DateTime  @default(now())
+  actualizadoEn       DateTime  @updatedAt
 
   @@index([sucursalId])
 }
@@ -1012,21 +1020,21 @@ model ItemOC {
 }
 
 model RecepcionMercaderia {
-  id              String          @id @default(cuid())
-  numero          String          @unique
-  ordenCompraId   String
-  depositoId      String
-  remitoProveedor String
-  fecha           DateTime
-  items           ItemRecepcion[]
-  usuarioId       String
-  observaciones   String?
-  comprobanteId   String?
+  id                 String          @id @default(cuid())
+  numero             String          @unique
+  ordenCompraId      String
+  depositoId         String
+  remitoProveedor    String
+  fecha              DateTime
+  items              ItemRecepcion[]
+  usuarioId          String
+  observaciones      String?
+  comprobanteId      String?
   /// OC en USD: tipo de cambio del día de la recepción (el costo que entra al stock en pesos).
-  tipoCambioAplicado Decimal?     @db.Decimal(14, 4)
+  tipoCambioAplicado Decimal?        @db.Decimal(14, 4)
   tipoCambioFecha    DateTime?
-  creadoEn        DateTime        @default(now())
-  actualizadoEn   DateTime        @updatedAt
+  creadoEn           DateTime        @default(now())
+  actualizadoEn      DateTime        @updatedAt
 
   @@index([ordenCompraId])
   @@index([fecha])

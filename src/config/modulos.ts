@@ -195,3 +195,23 @@ export function moduloDeRuta(pathname: string, search: URLSearchParams = new URL
 export function moduloPorId(id: string) {
   return MODULOS.find((m) => m.id === id);
 }
+
+/**
+ * Permiso que exige una ruta (lo usa el middleware): la página de MODULOS cuyo path es el prefijo
+ * más largo de la ruta. Si varias comparten ese path, alcanza con tener el permiso de una.
+ * Las rutas que no están en ningún módulo (ej. /inicio) solo piden sesión.
+ */
+export function permisosDeRuta(pathname: string): Permiso[] {
+  let largo = -1;
+  let permisos: Permiso[] = [];
+  for (const m of MODULOS)
+    for (const pag of m.paginas) {
+      const path = pag.href.split("?")[0];
+      if (pathname !== path && !pathname.startsWith(`${path}/`)) continue;
+      if (path.length > largo) {
+        largo = path.length;
+        permisos = [pag.permiso];
+      } else if (path.length === largo && !permisos.includes(pag.permiso)) permisos.push(pag.permiso);
+    }
+  return permisos;
+}

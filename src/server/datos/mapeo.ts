@@ -74,6 +74,16 @@ const HIJOS_SIN_ID = new Set([
 /** Hijos que en el dominio son una lista de strings (Deposito.posiciones). */
 const HIJOS_ESCALARES: Record<string, string> = { PosicionCarga: "nombre" };
 
+/**
+ * Campos que el mapeo genérico NUNCA lee (no llegan al estado ni al navegador) ni escribe:
+ * los maneja solo el servicio de autenticación (src/server/auth).
+ */
+const CAMPOS_PRIVADOS: Record<string, Set<string>> = { Usuario: new Set(["passwordHash", "intentosFallidos", "bloqueadoHasta", "sesionVersion"]) };
+/** Campos que se leen pero el motor nunca escribe (los actualiza el servicio de autenticación). */
+const CAMPOS_SOLO_LECTURA: Record<string, Set<string>> = { Usuario: new Set(["debeCambiarPassword", "ultimoAcceso"]) };
+const esPrivado = (m: string, f: string) => !!CAMPOS_PRIVADOS[m]?.has(f);
+const esSoloLectura = (m: string, f: string) => !!CAMPOS_SOLO_LECTURA[m]?.has(f);
+
 /** En borrador el número es "" en el dominio y NULL en la base (el número es único). */
 const NUMERO_OPCIONAL = new Set(["NotaPedido"]);
 
@@ -125,6 +135,7 @@ function filaADominio(m: Modelo, fila: Record<string, unknown>, esHijo?: { fk: s
       out[f.name] = esc ? filas.map((r) => r[esc]) : filas.map((r) => filaADominio(h.hijo, r, h));
       continue;
     }
+    if (esPrivado(m.name, f.name)) continue;
     if (esHijo && (f.name === esHijo.fk || f.name === "orden" || (f.name === "id" && HIJOS_SIN_ID.has(m.name)))) continue;
     const v = valorADominio(fila[f.name]);
     if (v === undefined) {
@@ -165,6 +176,7 @@ function datosCrear(m: Modelo, obj: Record<string, unknown>, fk?: string): Recor
   const data: Record<string, unknown> = {};
   for (const f of escalares(m)) {
     if (fk && (f.name === fk || f.name === "orden")) continue;
+    if (esPrivado(m.name, f.name) || esSoloLectura(m.name, f.name)) continue;
     if (f.name === "id" && HIJOS_SIN_ID.has(m.name)) continue;
     let v = obj[f.name];
     if (f.name === "numero" && NUMERO_OPCIONAL.has(m.name) && v === "") v = undefined;

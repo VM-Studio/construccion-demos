@@ -5,7 +5,7 @@ import "server-only";
  */
 import { cookies, headers } from "next/headers";
 import type { Usuario } from "@/domain/types";
-import { obtenerEstado } from "../estado";
+import { estadoEnCache, obtenerEstado } from "../estado";
 
 export const COOKIE_ACTOR = "actor-demo";
 
@@ -14,6 +14,18 @@ export async function obtenerActor(): Promise<Usuario | null> {
   if (!id) return null;
   const { db } = await obtenerEstado();
   return db.usuarios.find((u) => u.id === id && u.activo) ?? null;
+}
+
+/**
+ * Variante liviana para rutas de polling (/api/cambios): usa los usuarios de la caché de estado
+ * de la instancia (sin consultar la versión) y solo va a la base si la instancia no tiene caché.
+ */
+export async function obtenerActorLigero(): Promise<Pick<Usuario, "id" | "rol" | "activo"> | null> {
+  const id = (await cookies()).get(COOKIE_ACTOR)?.value;
+  if (!id) return null;
+  const enCache = estadoEnCache()?.db.usuarios.find((u) => u.id === id);
+  if (enCache) return enCache.activo ? enCache : null;
+  return obtenerActor();
 }
 
 export class ErrorSesion extends Error {

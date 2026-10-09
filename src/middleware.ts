@@ -58,7 +58,11 @@ export default auth((req) => {
     const sinPermiso = (permisos.length && !permisos.some((p) => puede(quien, p))) || ademasDeRuta(pathname).some((p) => !puede(quien, p));
     if (sinPermiso) {
       // Precargas de links (prefetch) a páginas sin permiso: sin contenido, sin error en la consola.
-      if (req.headers.get("next-router-prefetch") || req.nextUrl.searchParams.has("_rsc")) return new NextResponse(null, { status: 204 });
+      // Pedidos internos del router (precargas de links): Next le quita al middleware los headers
+      // RSC y el parámetro _rsc, pero deja `next-url` y no es una carga de documento. Se responde
+      // vacío (sin error en consola); si el usuario hace clic, el router navega completo y ve el 403.
+      const esPrecarga = !!req.headers.get("next-url") && req.headers.get("sec-fetch-dest") !== "document";
+      if (esPrecarga) return new NextResponse(null, { status: 204 });
       return NextResponse.rewrite(new URL("/acceso-denegado", req.url), { status: 403 });
     }
   }

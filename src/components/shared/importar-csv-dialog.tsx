@@ -10,12 +10,17 @@ import { cn, descargarArchivo } from "@/lib/utils";
 import { useStore } from "@/store";
 import { Impacto, medir } from "@/capacitacion";
 import { useDb } from "@/store/selectors";
+import { consultarPadronAction } from "@/server/actions/padron";
+import { Progress } from "@/components/ui/progress";
 import {
   COLUMNAS,
   NOMBRE_PLANTILLA,
   generarPlantillaCSV,
   mapearColumnas,
   validarArchivo,
+  aplicarMapeo,
+  filasParaPadron,
+  completarFilaConPadron,
   type DatosImportacion,
   type Mapeo,
   type TipoImportacion,
@@ -76,6 +81,9 @@ export function ImportarCsvDialog({
   const [arrastrando, setArrastrando] = React.useState(false);
   const [cargando, setCargando] = React.useState(false);
   const [importando, setImportando] = React.useState(false);
+  // Consulta al padrón de ARCA de las filas con CUIT y sin razón social (1 por segundo).
+  const [padron, setPadron] = React.useState<{ total: number; hechas: number; completadas: number } | null>(null);
+  const padronCorrida = React.useRef(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -92,11 +100,15 @@ export function ImportarCsvDialog({
         toast.error("El archivo no tiene cabeceras reconocibles.");
         return;
       }
+      const m = mapearColumnas(tipo, a.cabeceras);
       setArchivo(a);
-      setMapeo(mapearColumnas(tipo, a.cabeceras));
+      setMapeo(m);
+      setPadron(null);
+      if (tipo !== "articulos") void completarRef.current?.(a, m);
     },
     [tipo],
   );
+  const completarRef = React.useRef<((a: ArchivoCargado, m: Mapeo) => Promise<void>) | null>(null);
 
   const elegirArchivo = async (file: File | undefined) => {
     if (!file) return;
@@ -138,6 +150,40 @@ export function ImportarCsvDialog({
   const columnasVisibles = columnas.filter((c) => mapeo[c.clave]);
   const erroresOcultos = validadas.slice(FILAS_VISTA_PREVIA).filter((v) => !v.ok);
 
+  const completarDesdePadron = React.useCallback(async (base: ArchivoCargado, mapeoBase: Mapeo) => {
+    const pendientes = filasParaPadron(base.filas, mapeoBase);
+    if (!pendientes.length) return;
+    const corrida = ++padronCorrida.current;
+    let filas = [...base.filas];
+    let m = { ...mapeoBase };
+    let completadas = 0;
+    setPadron({ total: pendientes.length, hechas: 0, completadas: 0 });
+    for (const [n, i] of pendientes.entries()) {
+      if (padronCorrida.current !== corrida) return;
+      const t0 = Date.now();
+      const cuit = String(aplicarMapeo(filas[i], m).cuit ?? "");
+      let r = await consultarPadronAction(cuit);
+      while (!r.ok && r.codigo === "LIMITE" && padronCorrida.current === corrida) {
+        await new Promise((ok) => setTimeout(ok, 10_000));
+        r = await consultarPadronAction(cuit);
+      }
+      if (r.ok && r.data) {
+        const c = completarFilaConPadron(filas[i], m, r.data);
+        filas = filas.map((f, j) => (j === i ? c.fila : f));
+        m = c.mapeo;
+        completadas++;
+        setArchivo((a) => (a ? { ...a, filas, cabeceras: [...new Set([...a.cabeceras, ...Object.values(m)])] } : a));
+        setMapeo(m);
+      }
+      setPadron({ total: pendientes.length, hechas: n + 1, completadas });
+      await new Promise((ok) => setTimeout(ok, Math.max(0, 1000 - (Date.now() - t0))));
+    }
+    if (padronCorrida.current === corrida) toast.success(`Padrón: se completaron ${completadas} de ${pendientes.length} filas`);
+  }, []);
+
+  completarRef.current = completarDesdePadron;
+  React.useEffect(() => () => void (padronCorrida.current += 1), []);
+
   const importar = async () => {
     if (!validas.length) return;
     const acciones = useStore.getState();
@@ -176,7 +222,7 @@ export function ImportarCsvDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={importar} disabled={validas.length === 0} loading={importando}>
+            <Button onClick={importar} disabled={validas.length === 0 || (!!padron && padron.hechas < padron.total)} loading={importando}>
               Importar {validas.length} {validas.length === 1 ? "fila válida" : "filas válidas"}
             </Button>
           </>
@@ -217,6 +263,17 @@ export function ImportarCsvDialog({
               <Button variant="ghost" size="sm" onClick={() => inputRef.current?.click()}>
                 Cambiar archivo
               </Button>
+              {padron && (
+                <div className="w-full space-y-1">
+                  <div className="flex justify-between text-[12px] text-muted">
+                    <span>{padron.hechas < padron.total ? "Consultando el padrón de ARCA…" : "Consulta al padrón terminada"} · filas con CUIT y sin razón social</span>
+                    <span>
+                      {padron.hechas}/{padron.total} · {padron.completadas} completadas
+                    </span>
+                  </div>
+                  <Progress value={padron.total ? (padron.hechas / padron.total) * 100 : 100} />
+                </div>
+              )}
             </div>
           ) : (
             <button

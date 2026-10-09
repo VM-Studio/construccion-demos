@@ -821,6 +821,7 @@ export const CAMPOS: Record<string, string> = {
   "entrega.PENDIENTE": "Queda en Pendientes de entrega con el stock reservado hasta que se programe o retire.",
   "circuito.1": "Fiscal: factura A/B, numeración F1.",
   "circuito.2": "Interno: documentos con numeración 2.",
+  "padron.cuit": "Con el CUIT el sistema trae los datos del padrón de ARCA: nombre, condición de IVA y domicilio. La condición de IVA define qué factura se emite.",
   "acopio.formaPago.ANTICIPO": "Paga ahora: se genera el recibo al crear.",
   "acopio.formaPago.CUENTA_CORRIENTE": "Lo va pagando: no puede retirar más proporción que la pagada.",
   deposito: "El stock se reserva y se descuenta de este depósito.",

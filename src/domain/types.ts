@@ -164,6 +164,9 @@ export interface Proveedor extends Entidad {
   email: string;
   telefono: string;
   direccion: string;
+  localidad?: string;
+  provincia?: string;
+  codigoPostal?: string;
   contacto: string;
   plazoEntregaDias: number;
   condicionPago: CondicionPago;
@@ -282,6 +285,8 @@ export interface Cliente extends Entidad {
   contacto?: string;
   direccion: string;
   localidad: string;
+  provincia?: string;
+  codigoPostal?: string;
   listaPreciosId: string;
   condicionPago: CondicionPago;
   limiteCredito: number;
@@ -781,6 +786,8 @@ export interface Configuracion {
    * inyecta antes de correr cada acción para que las reglas del dominio lo lean de `tx.config`.
    */
   tipoCambioVigente?: TipoCambioVigente;
+  /** Vencimiento del certificado de ARCA (padrón). NO se guarda: lo agrega el servidor al leer. */
+  arcaCertVence?: string;
   tamanoMaxAdjuntoMB: number;
   categoriasAdjunto: { codigo: CategoriaAdjunto; nombre: string }[];
   empresa: DatosEmpresa;

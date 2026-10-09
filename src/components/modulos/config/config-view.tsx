@@ -27,6 +27,7 @@ import { FlotaTab } from "@/components/modulos/despachos/flota";
 import { UsuariosTabla } from "./usuarios";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/config/brand";
+import { estadoPadronAction } from "@/server/actions/padron";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
 import { ImpactoCampo } from "@/capacitacion";
@@ -264,6 +265,7 @@ function Parametros() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <TipoCambioCard />
+      <PadronCard />
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle>Parámetros generales</CardTitle></CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -306,6 +308,37 @@ function Parametros() {
 }
 
 /** Tipo de cambio USD: dólar divisa vendedor del BNA (automático) o valor manual. */
+/** Estado de la consulta del padrón de ARCA (oficial con certificado o fuente pública). */
+function PadronCard() {
+  const [estado, setEstado] = React.useState<{ fuente: "ARCA" | "PUBLICO"; entorno?: string; certVence?: string } | null>(null);
+  React.useEffect(() => {
+    void estadoPadronAction().then((r) => r.ok && setEstado(r.data));
+  }, []);
+  const dias = estado?.certVence ? Math.ceil((new Date(estado.certVence).getTime() - Date.now()) / 86_400_000) : null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Padrón de ARCA (alta de clientes y proveedores)</CardTitle></CardHeader>
+      <CardContent className="space-y-2 text-[13px]">
+        {!estado ? (
+          <p className="text-muted">Consultando…</p>
+        ) : estado.fuente === "PUBLICO" ? (
+          <>
+            <p className="font-medium">Consulta de padrón: fuente pública (sin certificado ARCA)</p>
+            <p className="text-muted">Al cargar un CUIT se intenta completar los datos desde una fuente pública no oficial, que puede no responder. Con el certificado de ARCA la consulta es oficial y estable: ver docs/ARCA-PADRON.md.</p>
+          </>
+        ) : (
+          <>
+            <p className="font-medium">
+              ARCA oficial{estado.entorno === "homologacion" ? " (homologación)" : ""} · certificado vence el {estado.certVence ? formatDate(estado.certVence) : "—"}
+            </p>
+            {dias !== null && dias <= 30 && <Badge variant={dias < 0 ? "danger" : "warning"}>{dias < 0 ? "Certificado vencido: se usa la fuente pública" : `Vence en ${dias} días: hay que renovarlo`}</Badge>}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TipoCambioCard() {
   const { tc, cargando } = useTipoCambio();
   const config = useDb().config;

@@ -1,6 +1,6 @@
 import type { Cliente, ListaPrecios, Obra, PrecioProducto, Producto, Proveedor, Rubro } from "@/domain/types";
 import { calcularPrecioDesdeMarkup, aplicarCambiosPrecio, calcularActualizacionMasiva, costoEnPesos, type CambioPrecio, type Redondeo } from "@/domain/precios";
-import { validarCUIT } from "@/domain/cuit";
+import { validarCUIT, buscarPorCuit } from "@/domain/cuit";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
 import type { Tx } from "../tx";
@@ -124,6 +124,8 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         if (!data.razonSocial.trim()) throw new ErrorNegocio("La razón social es obligatoria.");
         const err = validarCUIT(data.cuit);
         if (err) throw new ErrorNegocio(err);
+        const dupP = buscarPorCuit(tx.get("proveedores"), data.cuit, id);
+        if (dupP) throw new ErrorNegocio(`Ya existe el proveedor ${dupP.razonSocial} con ese CUIT.`);
         if (!id && !data.codigo) data = { ...data, codigo: `P${String(tx.get("proveedores").length + 1).padStart(4, "0")}` };
         if (id) {
           tx.patch("proveedores", id, data);
@@ -144,6 +146,8 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           const err = validarCUIT(data.cuit);
           if (err) throw new ErrorNegocio(err);
         }
+        const dupC = buscarPorCuit(tx.get("clientes"), data.cuit, id);
+        if (dupC) throw new ErrorNegocio(`Ya existe el cliente ${dupC.razonSocial} con ese CUIT.`);
         if (!id && !data.codigo) {
           const max = tx.get("clientes").reduce((m, c) => Math.max(m, Number(c.codigo.replace(/\D/g, "")) || 0), 0);
           data = { ...data, codigo: `C${String(max + 1).padStart(4, "0")}` };

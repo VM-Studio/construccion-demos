@@ -8,7 +8,7 @@ import { strToU8, Zip, ZipDeflate } from "fflate";
 import { prisma } from "../db";
 
 const PAGINA = 2000;
-const EXCLUIDAS: Record<string, Set<string>> = { Usuario: new Set(["passwordHash", "intentosFallidos", "bloqueadoHasta", "sesionVersion"]) };
+const EXCLUIDAS: Record<string, Set<string>> = { Usuario: new Set(["passwordHash", "intentosFallidos", "bloqueadoHasta", "sesionVersion"]), ArcaTicket: new Set(["token", "sign"]) };
 
 type Fila = Record<string, unknown>;
 

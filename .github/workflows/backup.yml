@@ -1,0 +1,94 @@
+name: Backup diario
+
+# Copia propia de la base de producción en Cloudflare R2 (regla 3-2-1: Neon + historial + R2).
+# Todos los días a las 07:00 UTC (04:00 Argentina) y a mano desde Actions → "Run workflow".
+# Retención: los últimos 35 diarios y el primero de cada mes durante 12 meses.
+# Si algo falla, el workflow queda en rojo y GitHub avisa por mail al dueño del repo.
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_REGION: auto
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+      BUCKET: aceros-rnf-backups
+    steps:
+      - name: Verificar secrets
+        run: |
+          for v in BACKUP_DATABASE_URL RCLONE_CONFIG_R2_ACCESS_KEY_ID RCLONE_CONFIG_R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Falta el secret de $v"; exit 1; fi
+          done
+
+      # Neon corre Postgres 18: pg_dump tiene que ser de la misma versión o más nueva.
+      - name: Instalar postgresql-client-18 y rclone
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18 rclone
+          /usr/lib/postgresql/18/bin/pg_dump --version
+
+      - name: pg_dump
+        run: |
+          FECHA=$(TZ=America/Argentina/Buenos_Aires date +%F)
+          ARCHIVO="aceros-rnf-${FECHA}.dump.gz"
+          echo "ARCHIVO=$ARCHIVO" >> "$GITHUB_ENV"
+          /usr/lib/postgresql/18/bin/pg_dump --no-owner --no-privileges --format=custom --dbname="$BACKUP_DATABASE_URL" --file=backup.dump
+          gzip -9 backup.dump
+          mv backup.dump.gz "$ARCHIVO"
+          ls -l "$ARCHIVO"
+          # Verificación local: el dump se puede leer (lista el contenido).
+          gunzip -c "$ARCHIVO" > verificar.dump
+          /usr/lib/postgresql/18/bin/pg_restore --list verificar.dump | grep -c "TABLE DATA" | xargs -I{} echo "Tablas con datos en el dump: {}"
+          rm verificar.dump
+
+      - name: Subir a R2
+        run: rclone copyto "$ARCHIVO" "r2:$BUCKET/$ARCHIVO" --s3-no-check-bucket
+
+      - name: Verificar la subida
+        run: |
+          TAM_LOCAL=$(stat -c %s "$ARCHIVO")
+          TAM_R2=$(rclone lsjson "r2:$BUCKET/$ARCHIVO" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['Size'] if d else 0)")
+          echo "Local: $TAM_LOCAL bytes · R2: $TAM_R2 bytes"
+          if [ "$TAM_R2" -le 0 ] || [ "$TAM_R2" != "$TAM_LOCAL" ]; then echo "::error::El backup en R2 no coincide"; exit 1; fi
+
+      - name: Retención (35 diarios + el primero de cada mes por 12 meses)
+        run: |
+          rclone lsf "r2:$BUCKET" --include "aceros-rnf-*.dump.gz" > lista.txt
+          python3 - <<'EOF' > borrar.txt
+          import re, datetime
+          fechas = sorted({m.group(1) for l in open("lista.txt") if (m := re.match(r"aceros-rnf-(\d{4}-\d{2}-\d{2})\.dump\.gz", l.strip()))})
+          hoy = datetime.date.today()
+          diarios = set(fechas[-35:])
+          primeros = {}
+          for f in fechas:
+              primeros.setdefault(f[:7], f)  # el primer backup de cada mes
+          limite = (hoy.replace(day=1) - datetime.timedelta(days=365)).isoformat()[:7]
+          mensuales = {f for mes, f in primeros.items() if mes > limite}
+          for f in fechas:
+              if f not in diarios and f not in mensuales:
+                  print(f"aceros-rnf-{f}.dump.gz")
+          EOF
+          echo "Se conservan $(($(wc -l < lista.txt) - $(wc -l < borrar.txt))) · se borran $(wc -l < borrar.txt)"
+          while read -r f; do [ -n "$f" ] && rclone deletefile "r2:$BUCKET/$f"; done < borrar.txt
+
+      - name: Resumen
+        run: |
+          echo "### Backup ${ARCHIVO}" >> "$GITHUB_STEP_SUMMARY"
+          rclone lsl "r2:$BUCKET" --include "aceros-rnf-*.dump.gz" | sort -k4 | tail -5 >> "$GITHUB_STEP_SUMMARY"

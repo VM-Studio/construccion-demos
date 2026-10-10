@@ -22,6 +22,14 @@ const FLUJOS: { titulo: string; href: string; donde: string; pasos: string[] }[]
 
 const PREGUNTAS: { p: string; r: React.ReactNode }[] = [
   {
+    p: "Cargar artículos parecidos: Guardar y duplicar / Crear serie",
+    r: (
+      <>
+        Para familias de artículos que solo cambian medida, peso y precio (hierros, caños, ladrillos): al dar de alta un artículo tocá <b>&quot;Guardar y duplicar&quot;</b> (o Ctrl/Cmd + Shift + Enter). Se guarda y se abre otro igual, con el código siguiente y el nombre seleccionado para cambiarlo; los campos que cambiás se marcan en ámbar. Si cambiás el costo, los precios se recalculan con el markup del original. En &quot;Campos a cambiar siempre&quot; podés dejar vacíos, por ejemplo, Nombre, Peso y Costo. También podés duplicar desde la ficha o el menú ⋮ del listado de <Link className="underline" href="/productos">Artículos</Link>. Para cargar varios de una vez, usá <b>&quot;Crear serie a partir de este artículo&quot;</b>: una grilla con una fila por medida, en la que podés pegar desde Excel las columnas variante, peso y costo. El stock de los artículos nuevos arranca en 0 y el original nunca se modifica.
+      </>
+    ),
+  },
+  {
     p: "¿Dónde están mis datos?",
     r: <>En una base de datos PostgreSQL en la nube (Neon, servidores de Amazon en Estados Unidos), cifrada, con historial para volver atrás. Los archivos adjuntos (remitos firmados, fotos) están en almacenamiento privado de Vercel. Además se hace una copia propia todas las noches en otro proveedor (Cloudflare R2), que se guarda 35 días y una por mes durante un año.</>,
   },

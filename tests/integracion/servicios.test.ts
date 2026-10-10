@@ -190,3 +190,68 @@ describe("Estado en memoria de cada instancia", () => {
     expect(incremental.numeradores).toEqual(completo.numeradores);
   });
 });
+
+describe("Duplicar artículo y crear serie", () => {
+  it("solo crean artículos nuevos: los existentes, sus precios, su stock y los movimientos no cambian", async () => {
+    const { duplicarProducto, crearSerieProductos } = await import("@/server/servicios/catalogo");
+    const foto = async () => {
+      const db = await estado();
+      return {
+        productos: new Map(db.productos.map((p) => [p.id, JSON.stringify(p)])),
+        precios: new Map(db.precios.map((p) => [p.id, JSON.stringify(p)])),
+        stock: new Map(db.stock.map((s) => [s.id, JSON.stringify(s)])),
+        movimientos: await prisma.movimientoStock.count(),
+        acopiosCongelados: await prisma.precioCongelado.count(),
+      };
+    };
+    const antes = await foto();
+    const db = await estado();
+    const origen = db.productos.find((p) => p.costoUltimo > 0 && db.precios.filter((x) => x.productoId === p.id).length === db.listasPrecios.length)!;
+    const stockOrigenAntes = db.stock.filter((s) => s.productoId === origen.id).map((s) => s.cantidadFisica);
+    const sello = Date.now().toString(36).toUpperCase();
+
+    // 1) Duplicar con otro costo: precios recalculados con el markup efectivo del origen.
+    const nuevoCosto = Math.round(origen.costoUltimo * 1.37 * 100) / 100;
+    const d = await duplicarProducto(dueno, origen.id, { codigo: `DUP${sello}`, nombre: `${origen.nombre} dup ${sello}`, costoUltimo: nuevoCosto });
+    expect(d.ok, d.ok ? "" : d.error).toBe(true);
+    const idDup = idDe(d.ok && d.data);
+    // Nombre igual al del origen en el mismo rubro: se rechaza y no crea nada.
+    const igual = await duplicarProducto(dueno, origen.id, { codigo: `DUQ${sello}`, nombre: origen.nombre });
+    expect(igual.ok).toBe(false);
+    expect((igual as { error: string }).error).toMatch(/Ya existe un artículo/);
+
+    // 2) Serie de 3 + una serie con una fila inválida (no se crea ninguna).
+    const filas = [1, 2, 3].map((n) => ({ codigo: `SER${sello}${n}`, nombre: `${origen.nombre} serie ${sello} ${n}`, pesoKg: n, costoUltimo: 100 * n, stockMinimo: 0 }));
+    const s = await crearSerieProductos(dueno, origen.id, filas);
+    expect(s.ok, s.ok ? "" : s.error).toBe(true);
+    const mala = await crearSerieProductos(dueno, origen.id, [{ ...filas[0], codigo: `MAL${sello}1`, nombre: `ok ${sello}` }, { ...filas[1], codigo: `MAL${sello}2`, nombre: `ok2 ${sello}`, costoUltimo: 0 }]);
+    expect(mala.ok).toBe(false);
+
+    const despues = await foto();
+    const db2 = await estado();
+    // Existentes: mismo contenido, fila por fila.
+    for (const [id, json] of antes.productos) expect(despues.productos.get(id), `producto ${id}`).toBe(json);
+    for (const [id, json] of antes.precios) expect(despues.precios.get(id), `precio ${id}`).toBe(json);
+    for (const [id, json] of antes.stock) expect(despues.stock.get(id), `stock ${id}`).toBe(json);
+    // Cantidades: exactamente 1 + 3 artículos nuevos; sin movimientos ni precios congelados nuevos.
+    expect(despues.productos.size).toBe(antes.productos.size + 4);
+    expect(despues.movimientos).toBe(antes.movimientos);
+    expect(despues.acopiosCongelados).toBe(antes.acopiosCongelados);
+    expect(db2.productos.some((p) => p.codigo.startsWith(`MAL${sello}`))).toBe(false);
+    // El origen quedó intacto: mismo stock y mismos precios.
+    expect(db2.stock.filter((x) => x.productoId === origen.id).map((x) => x.cantidadFisica)).toEqual(stockOrigenAntes);
+    // El duplicado: stock 0, sin código de barras, costo promedio = costo, precios con el markup del origen.
+    const dup = db2.productos.find((p) => p.id === idDup)!;
+    expect(dup.codigoBarras ?? "").toBe("");
+    expect(dup.costoPromedio).toBe(nuevoCosto);
+    expect(db2.stock.filter((x) => x.productoId === idDup).every((x) => x.cantidadFisica === 0)).toBe(true);
+    for (const l of db2.listasPrecios) {
+      const pOrig = db2.precios.find((x) => x.productoId === origen.id && x.listaPreciosId === l.id)!.precio;
+      const pDup = db2.precios.find((x) => x.productoId === idDup && x.listaPreciosId === l.id)!.precio;
+      expect(Math.abs(pDup - nuevoCosto * (pOrig / origen.costoUltimo))).toBeLessThanOrEqual(5); // redondeo a $10
+    }
+    // Auditoría de la serie.
+    const aud = await prisma.auditoria.findFirst({ where: { accion: "Creó serie de artículos", entidadId: origen.id }, orderBy: { fecha: "desc" } });
+    expect(aud?.detalle).toMatch(new RegExp(`Creó una serie de 3 artículos a partir de ${origen.codigo}`));
+  });
+});

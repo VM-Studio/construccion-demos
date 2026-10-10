@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Download, FileUp, Package, Plus, TrendingUp } from "lucide-react";
+import { Copy, Download, Eye, FileUp, MoreVertical, Package, Plus, Rows3, TrendingUp } from "lucide-react";
 import { useDb, usePosiciones, usePuede, useDepositoActivo, useUnidadNegocio } from "@/store/selectors";
 import { obtenerPrecio } from "@/domain/precios";
 import { UNIDAD_LABEL } from "@/domain/estados";
@@ -19,6 +19,8 @@ import { formatMoney, formatQty, unidadCorta } from "@/lib/format";
 import { aCSV, descargarArchivo, cn } from "@/lib/utils";
 import { posicionEn } from "@/store/selectors";
 import { ProductoSheet } from "./producto-sheet";
+import { SerieDialog } from "./serie-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ActualizacionMasivaDialog, type Alcance } from "./actualizacion-masiva";
 
 export function ProductosView() {
@@ -31,7 +33,14 @@ export function ProductosView() {
   const puedeEditar = usePuede("productos.editar");
   const puedePrecios = usePuede("precios.editar");
   const [lista, setLista] = React.useState(() => db.listasPrecios.find((l) => l.id === "lst_gen")?.id ?? db.listasPrecios[0]?.id ?? "");
-  const [rubro, setRubro] = React.useState("");
+  const [rubro, setRubro] = React.useState(params.get("rubro") ?? "");
+  const rubroParam = params.get("rubro");
+  React.useEffect(() => {
+    if (rubroParam) setRubro(rubroParam);
+  }, [rubroParam]);
+  const [duplicarDe, setDuplicarDe] = React.useState<string | null>(null);
+  const [serieDe, setSerieDe] = React.useState<string | null>(null);
+  const puedeEditarProductos = usePuede("productos.editar");
   const [proveedor, setProveedor] = React.useState("");
   const [estado, setEstado] = React.useState(params.get("filtro") === "bajo-minimo" ? "BAJO" : "ACTIVOS");
   const [seleccion, setSeleccion] = React.useState<Set<string>>(new Set());
@@ -75,6 +84,7 @@ export function ProductosView() {
   const abrir = (id: string) => router.replace(`/productos?id=${id}`, { scroll: false });
   const cerrar = () => {
     setNuevo(false);
+    setDuplicarDe(null);
     router.replace("/productos", { scroll: false });
   };
 
@@ -127,6 +137,29 @@ export function ProductosView() {
     },
     { key: "proveedor", header: "Proveedor habitual", hideOnMobile: true, cell: (p) => <span className="block max-w-[180px] truncate text-muted">{p.proveedorHabitualId ? provNombre.get(p.proveedorHabitualId) : "—"}</span> },
     { key: "activo", header: "Estado", hideOnMobile: true, cell: (p) => (p.activo ? <Badge variant="success">Activo</Badge> : <Badge>Inactivo</Badge>) },
+    ...(puedeEditarProductos
+      ? [
+          {
+            key: "acciones",
+            header: "",
+            width: 44,
+            cell: (p: Producto) => (
+              <span onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon-sm" variant="ghost" aria-label={`Acciones de ${p.codigo}`}><MoreVertical /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-60">
+                    <DropdownMenuItem onSelect={() => abrir(p.id)}><Eye /> Ver ficha</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setDuplicarDe(p.id)}><Copy /> Duplicar</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSerieDe(p.id)}><Rows3 /> Crear serie a partir de este artículo</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </span>
+            ),
+          } satisfies Column<Producto>,
+        ]
+      : []),
   ];
 
   const exportar = () => {
@@ -238,7 +271,8 @@ export function ProductosView() {
           </>
         }
       />
-      <ProductoSheet productoId={productoId} nuevo={nuevo} onClose={cerrar} />
+      <ProductoSheet productoId={duplicarDe ? null : productoId} nuevo={nuevo} duplicarDeId={duplicarDe} onClose={cerrar} />
+      {serieDe && <SerieDialog origenId={serieDe} onClose={() => setSerieDe(null)} />}
       <ActualizacionMasivaDialog open={masiva} onOpenChange={cerrarMasiva} seleccionados={seleccion} inicial={inicialMasiva} />
       <ImportarCsvDialog tipo="articulos" open={importar} onOpenChange={setImportar} />
     </>

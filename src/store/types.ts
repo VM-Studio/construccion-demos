@@ -18,7 +18,12 @@ export interface UIState {
   tourAbierto: boolean;
   /** Usuarios que ocultaron la guía de carga inicial ("No mostrar más"). */
   guiaOculta: Record<string, boolean>;
+  /** Carga de artículos: último rubro/proveedor usados y "campos a cambiar siempre" al duplicar (por usuario). */
+  cargaArticulos?: { ultimoRubroId?: string; ultimoProveedorId?: string; camposSiempre?: Record<string, CampoDuplicar[]> };
 }
+
+/** Campos que quedan vacíos y resaltados al abrir un artículo duplicado. */
+export type CampoDuplicar = "nombre" | "pesoKg" | "costoUltimo" | "precios";
 
 export type Resultado<T = void> = { ok: true; data: T; mensaje?: string } | { ok: false; error: string; codigo?: string };
 

@@ -16,7 +16,7 @@ import { obtenerDb } from "@/lib/datos/almacen";
 import type { RespuestaAccion } from "@/server/actions/correr";
 import { NOMBRES_EXPUESTOS, type NombreExpuesto } from "@/server/servicios/registro";
 import type { AccionesNegocio } from "./negocio";
-import type { UIState } from "./types";
+import type { CampoDuplicar, UIState } from "./types";
 import { CAPACITACION_INICIAL, crearSliceCapacitacion, persistirCapacitacion, type EstadoCapacitacion } from "@/capacitacion/slice";
 
 export const STORAGE_KEY = "aceros-rnf-interfaz-v1";
@@ -32,6 +32,7 @@ const UI_INICIAL: UIState = {
   favoritosModulos: {},
   favoritosPaginas: {},
   guiaOculta: {},
+  cargaArticulos: {},
 };
 
 interface EstadoInterfaz {
@@ -73,6 +74,10 @@ function crearAcciones(set: SetUI, get: () => EstadoInterfaz) {
       set((s) => ({ ui: { ...s.ui, usuarioId: null, tourAbierto: false } }));
     },
     setSucursalActiva: (sucursalActivaId: string | null) => set((s) => ({ ui: { ...s.ui, sucursalActivaId } })),
+    /** Recuerda el último rubro/proveedor usados en un alta de artículo. */
+    recordarCargaArticulo: (rubroId: string, proveedorId?: string) => set((s) => ({ ui: { ...s.ui, cargaArticulos: { ...s.ui.cargaArticulos, ultimoRubroId: rubroId, ultimoProveedorId: proveedorId } } })),
+    setCamposSiempre: (campos: CampoDuplicar[]) =>
+      set((s) => ({ ui: { ...s.ui, cargaArticulos: { ...s.ui.cargaArticulos, camposSiempre: { ...(s.ui.cargaArticulos?.camposSiempre ?? {}), [s.ui.usuarioId ?? ""]: campos } } } })),
     setUnidadNegocio: (unidadNegocioId: string | null) => set((s) => ({ ui: { ...s.ui, unidadNegocioId } })),
     setModuloActivo: (moduloActivo: string | null) => set((s) => (s.ui.moduloActivo === moduloActivo ? {} : { ui: { ...s.ui, moduloActivo } })),
     toggleFavoritoModulo: (moduloId: string) =>

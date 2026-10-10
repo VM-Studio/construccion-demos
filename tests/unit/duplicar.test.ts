@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectarVariante, markupsEfectivos, nombreConVariante, nombreRepetidoEnRubro, numeroAR, parsearPegado, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
+import { detectarVariante, markupsEfectivos, markupsSospechosos, nombreConVariante, nombreRepetidoEnRubro, numeroAR, parsearPegado, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
 import type { PrecioProducto } from "@/domain/types";
 
 const listas = [
@@ -117,5 +117,12 @@ describe("campo numérico (numeroAR): punto decimal o de miles", () => {
     expect(Number.isNaN(numeroAR("1.757.5"))).toBe(true); // se ignora hasta completar
     expect(numeroAR("0,5")).toBe(0.5);
     expect(numeroAR("-12,5")).toBe(-12.5);
+  });
+});
+
+describe("markups sospechosos", () => {
+  it("avisa cuando el precio del origen es más de 10 veces el costo", () => {
+    expect(markupsSospechosos({ may: 22, cor: 12700, pub: 14400 })).toEqual(["cor", "pub"]);
+    expect(markupsSospechosos({ may: 22, cor: 28, pub: 900 })).toEqual([]);
   });
 });

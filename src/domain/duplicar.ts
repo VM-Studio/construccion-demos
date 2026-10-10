@@ -23,6 +23,15 @@ export function markupsEfectivos(origen: Pick<Producto, "id" | "costoUltimo">, p
 }
 
 /**
+ * Listas en las que el precio del origen es más de 10 veces el costo (markup > 900 %): casi
+ * seguro un error de carga (ej. un costo escrito 100 veces más alto). Se avisa antes de duplicar
+ * para no copiar el error a los artículos nuevos.
+ */
+export function markupsSospechosos(markups: Record<string, number>): string[] {
+  return Object.entries(markups).filter(([, m]) => m > 900).map(([id]) => id);
+}
+
+/**
  * Precios del artículo nuevo. Si el costo no cambió se copian iguales; si cambió, se recalculan
  * con el markup efectivo del origen en cada lista y se redondean.
  */

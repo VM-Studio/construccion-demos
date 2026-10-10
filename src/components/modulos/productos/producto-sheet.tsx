@@ -10,7 +10,7 @@ import { useStore } from "@/store";
 import { useDb, usePosiciones, usePuede } from "@/store/selectors";
 import type { Producto, Unidad } from "@/domain/types";
 import { siguienteCodigoProducto } from "@/domain/productos";
-import { markupsEfectivos, nombreRepetidoEnRubro, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
+import { markupsEfectivos, markupsSospechosos, nombreRepetidoEnRubro, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
 import type { CampoDuplicar } from "@/store/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SerieDialog } from "./serie-dialog";
@@ -302,6 +302,11 @@ function TabGeneral({
           </Link>
           . Cambiá lo que sea distinto y guardá.
         </div>
+      )}
+      {origen && verCostos && markupsSospechosos(markups).length > 0 && (
+        <p className="rounded-control bg-warning-soft px-3 py-2 text-[13px] text-warning">
+          Los precios del artículo original parecen mal cargados: son más de 10 veces su costo ({listas.filter((l) => markupsSospechosos(markups).includes(l.id)).map((l) => `${l.nombre} ${formatPercent((markups[l.id] ?? 0) / 100)}`).join(", ")}). Si cambiás el costo, el duplicado copia ese markup: revisá los precios abajo.
+        </p>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Rubro" required error={errores.rubroId}>

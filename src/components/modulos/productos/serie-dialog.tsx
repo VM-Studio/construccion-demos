@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ClipboardPaste, Plus, Trash2 } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede } from "@/store/selectors";
-import { detectarVariante, markupsEfectivos, nombreConVariante, nombreRepetidoEnRubro, parsearPegado, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
+import { detectarVariante, markupsEfectivos, markupsSospechosos, nombreConVariante, nombreRepetidoEnRubro, parsearPegado, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
 import { UNIDAD_LABEL } from "@/domain/estados";
 import { Impacto, medir } from "@/capacitacion";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -118,7 +118,7 @@ export function SerieDialog({ origenId, onClose }: { origenId: string; onClose: 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        size="xl"
+        size="2xl"
         title="Crear serie a partir de este artículo"
         description="Artículos iguales al base que solo cambian medida, peso, costo y precio. Se crean todos juntos o ninguno."
         footer={
@@ -135,6 +135,11 @@ export function SerieDialog({ origenId, onClose }: { origenId: string; onClose: 
             <span><span className="text-muted">Marca:</span> {origen.marca ?? "—"} · <span className="text-muted">Proveedor:</span> {proveedor?.razonSocial ?? "—"}</span>
             {verCostos && <span className="sm:col-span-3"><span className="text-muted">Markups del base:</span> {listas.map((l) => `${l.nombre} ${formatPercent((markups[l.id] ?? 0) / 100)}`).join(" · ")} · <span className="text-muted">Costo base:</span> {formatMoney(origen.costoUltimo)}</span>}
           </div>
+          {verCostos && markupsSospechosos(markups).length > 0 && (
+            <p className="rounded-control bg-warning-soft px-3 py-2 text-[13px] text-warning">
+              Los precios del artículo base parecen mal cargados: son más de 10 veces su costo ({listas.filter((l) => markupsSospechosos(markups).includes(l.id)).map((l) => `${l.nombre} ${formatPercent((markups[l.id] ?? 0) / 100)}`).join(", ")}). Si creás la serie, los artículos nuevos copian ese markup. Revisá los precios del base antes, o corregí los de cada fila.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <FormField label="Nombre base (sin la medida)" htmlFor="serie-base" hint={detectada.variante ? `Detectado: "${detectada.base}" + variante "${detectada.variante}"` : "No se detectó una medida al final del nombre: corregilo si hace falta."}>
               <Input id="serie-base" value={base} onChange={(e) => setBase(e.target.value)} />
@@ -155,16 +160,16 @@ export function SerieDialog({ origenId, onClose }: { origenId: string; onClose: 
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-table">
+            <table className="w-full min-w-[1180px] table-fixed text-table">
               <thead>
                 <tr className="border-b border-border text-left text-[12px] text-muted">
-                  <th className="px-1.5 py-1.5 font-medium">Sufijo / variante</th>
-                  <th className="px-1.5 py-1.5 font-medium">Nombre resultante</th>
-                  <th className="w-24 px-1.5 py-1.5 font-medium">Peso (kg)</th>
-                  <th className="w-28 px-1.5 py-1.5 font-medium">Costo</th>
-                  {listas.map((l) => <th key={l.id} className="w-28 px-1.5 py-1.5 font-medium">{l.nombre}</th>)}
-                  <th className="w-24 px-1.5 py-1.5 font-medium">Stock mín.</th>
-                  <th className="w-28 px-1.5 py-1.5 font-medium">Código</th>
+                  <th className="w-[110px] px-1.5 py-1.5 font-medium">Sufijo / variante</th>
+                  <th className="w-[260px] px-1.5 py-1.5 font-medium">Nombre resultante</th>
+                  <th className="w-[90px] px-1.5 py-1.5 font-medium">Peso (kg)</th>
+                  <th className="w-[120px] px-1.5 py-1.5 font-medium">Costo</th>
+                  {listas.map((l) => <th key={l.id} className="w-[130px] px-1.5 py-1.5 font-medium">{l.nombre}</th>)}
+                  <th className="w-[90px] px-1.5 py-1.5 font-medium">Stock mín.</th>
+                  <th className="w-[100px] px-1.5 py-1.5 font-medium">Código</th>
                   <th className="w-8" />
                 </tr>
               </thead>

@@ -5,6 +5,7 @@
  */
 import type { ListaPrecios, PrecioProducto, Producto, Rubro } from "./types";
 import { redondearPrecio, type Redondeo } from "./precios";
+import { numeroAR } from "@/lib/numero";
 
 // ───────────────────────── Precios ─────────────────────────
 
@@ -102,17 +103,7 @@ export function siguientesCodigos(rubroId: string, productos: Pick<Producto, "co
 
 // ───────────────────────── Pegar desde Excel ─────────────────────────
 
-/**
- * Número con formato argentino: "5.900" → 5900, "4,74" → 4.74, "1.234,56" → 1234.56,
- * "$ 5.900" → 5900. Con un solo punto y decimales que no son de a 3 ("4.74") es decimal.
- */
-export function numeroAR(texto: string): number {
-  const s = (texto ?? "").replace(/[^\d.,-]/g, "");
-  if (!s) return Number.NaN;
-  if (s.includes(",")) return Number(s.replace(/\./g, "").replace(",", "."));
-  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, ""));
-  return Number(s);
-}
+export { numeroAR };
 
 export interface FilaPegada {
   variante: string;

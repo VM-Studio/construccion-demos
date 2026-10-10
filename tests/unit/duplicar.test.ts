@@ -104,3 +104,18 @@ describe("pegar desde Excel", () => {
     expect(parsearPegado("16 mm\t\t21.000")).toEqual([{ variante: "16 mm", peso: undefined, costo: 21000 }]);
   });
 });
+
+describe("campo numérico (numeroAR): punto decimal o de miles", () => {
+  it("un costo escrito con punto decimal no se multiplica por 100", () => {
+    expect(numeroAR("1757509.28")).toBe(1757509.28);
+    expect(numeroAR("1757509,28")).toBe(1757509.28);
+    expect(numeroAR("1.757.509,28")).toBe(1757509.28);
+    expect(numeroAR("1.757.509")).toBe(1757509);
+  });
+  it("mientras se escribe no da valores intermedios absurdos", () => {
+    expect(numeroAR("1757509.")).toBe(1757509);
+    expect(Number.isNaN(numeroAR("1.757.5"))).toBe(true); // se ignora hasta completar
+    expect(numeroAR("0,5")).toBe(0.5);
+    expect(numeroAR("-12,5")).toBe(-12.5);
+  });
+});

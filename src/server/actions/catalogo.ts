@@ -7,6 +7,14 @@ export async function guardarProducto(...args: Parameters<AccionesNegocio["guard
   return correr("guardarProducto", args);
 }
 
+export async function duplicarProducto(...args: Parameters<AccionesNegocio["duplicarProducto"]>) {
+  return correr("duplicarProducto", args);
+}
+
+export async function crearSerieProductos(...args: Parameters<AccionesNegocio["crearSerieProductos"]>) {
+  return correr("crearSerieProductos", args);
+}
+
 export async function actualizarPrecio(...args: Parameters<AccionesNegocio["actualizarPrecio"]>) {
   return correr("actualizarPrecio", args);
 }

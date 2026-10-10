@@ -1,6 +1,6 @@
 /** Esquemas de entrada (tupla de argumentos) de las acciones del módulo catálogo. */
 import { z } from "zod";
-import { id, lista, MAX_CAMBIOS_PRECIO, MAX_FILAS_IMPORTACION, montoNoNegativo, porcentaje, productoInput, ref, texto } from "./comunes";
+import { cantidad, id, lista, MAX_CAMBIOS_PRECIO, MAX_FILAS_IMPORTACION, moneda, montoNoNegativo, porcentaje, productoInput, ref, texto, unidad } from "./comunes";
 
 const cambioPrecio = z.object({ productoId: id, listaPreciosId: id, anterior: montoNoNegativo, nuevo: montoNoNegativo });
 
@@ -19,6 +19,29 @@ const rubroInput = z.object({
 });
 
 export const guardarProducto = z.tuple([productoInput, id.optional()]);
+
+const preciosPorLista = z.record(z.string().max(100), montoNoNegativo);
+const duplicarProductoInput = z.object({
+  codigo: texto,
+  nombre: texto,
+  rubroId: ref.optional(),
+  descripcion: texto.optional(),
+  marca: texto.optional(),
+  unidad: unidad.optional(),
+  unidadesPorPallet: cantidad.optional(),
+  proveedorHabitualId: ref.optional(),
+  codigoBarras: texto.optional(),
+  pesoKg: cantidad.optional(),
+  monedaCosto: moneda.optional(),
+  costoUSD: montoNoNegativo.optional(),
+  costoUltimo: montoNoNegativo.optional(),
+  stockMinimo: cantidad.optional(),
+  activo: z.boolean().optional(),
+  precios: preciosPorLista.optional(),
+});
+const filaSerieInput = z.object({ codigo: texto, nombre: texto, pesoKg: cantidad.optional(), costoUltimo: montoNoNegativo, stockMinimo: cantidad, precios: preciosPorLista.optional() });
+export const duplicarProducto = z.tuple([id, duplicarProductoInput]);
+export const crearSerieProductos = z.tuple([id, lista(filaSerieInput, 200)]);
 export const actualizarPrecio = z.tuple([id, id, montoNoNegativo]);
 const recalculoDesdeUSD = z.object({
   tipo: z.literal("DESDE_USD"),

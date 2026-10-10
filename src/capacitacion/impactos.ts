@@ -87,6 +87,26 @@ export const IMPACTOS: Record<string, Impacto> = {
     ],
     porQue: "Todo lo que se mueve en el sistema es un artículo: sin artículo no hay stock ni venta.",
   },
+  duplicarProducto: {
+    titulo: "Duplicar artículo",
+    resumen: "Crea un artículo nuevo con los mismos datos; el stock arranca en 0 y los precios se recalculan si cambiás el costo.",
+    efectos: [
+      e("articulos", "aparece el artículo nuevo con su código; el original no cambia", "crea"),
+      e("stock", "el artículo nuevo arranca con stock 0 en todos los depósitos", "crea"),
+      e("listas", "nace con precio en las tres listas (el markup del original si cambiaste el costo)", "crea"),
+    ],
+    porQue: "Para cargar artículos parecidos (hierros, caños, ladrillos) sin volver a escribir todo: solo cambiás lo distinto.",
+  },
+  crearSerieProductos: {
+    titulo: "Crear serie de artículos",
+    resumen: "Crea varios artículos iguales al base que solo cambian medida, peso, costo y precio, todos juntos o ninguno.",
+    efectos: [
+      e("articulos", "aparece un artículo por fila, con códigos consecutivos; el base no cambia", "crea"),
+      e("stock", "cada artículo nuevo arranca con stock 0", "crea"),
+      e("listas", "precios calculados con los markups del artículo base (editables por fila)", "crea"),
+    ],
+    porQue: "Una familia de medidas (6, 8, 10, 12 mm…) se carga de una vez, igual a la anterior salvo lo que cambia.",
+  },
   importarArticulos: {
     titulo: "Importar artículos",
     resumen: "Al importar, los {n} artículos quedan disponibles para comprar, vender y acopiar.",

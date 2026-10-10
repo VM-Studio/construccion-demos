@@ -2,6 +2,8 @@
 import { servicio } from "./base";
 
 export const guardarProducto = servicio("guardarProducto");
+export const duplicarProducto = servicio("duplicarProducto");
+export const crearSerieProductos = servicio("crearSerieProductos");
 export const actualizarPrecio = servicio("actualizarPrecio");
 export const aplicarCambiosPrecios = servicio("aplicarCambiosPrecios");
 export const guardarLista = servicio("guardarLista");

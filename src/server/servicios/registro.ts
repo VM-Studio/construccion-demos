@@ -45,6 +45,8 @@ const R = {
 export const REGISTRO: Registro = {
   // ── Catálogo ──
   guardarProducto: { modulo: "catalogo", permiso: "productos.editar", accionId: "crearArticulo", rutas: R.catalogo },
+  duplicarProducto: { modulo: "catalogo", permiso: "productos.editar", accionId: "duplicarProducto", rutas: R.catalogo },
+  crearSerieProductos: { modulo: "catalogo", permiso: "productos.editar", accionId: "crearSerieProductos", rutas: R.catalogo },
   actualizarPrecio: { modulo: "catalogo", permiso: "precios.editar", accionId: "actualizarPrecio", rutas: R.catalogo },
   aplicarCambiosPrecios: { modulo: "catalogo", permiso: "precios.editar", accionId: "actualizarPreciosMasivo", rutas: R.catalogo },
   guardarLista: { modulo: "catalogo", permiso: "precios.editar", rutas: R.catalogo },

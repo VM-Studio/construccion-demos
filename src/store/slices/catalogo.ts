@@ -1,6 +1,7 @@
 import type { Cliente, ListaPrecios, Obra, PrecioProducto, Producto, Proveedor, Rubro } from "@/domain/types";
 import { calcularPrecioDesdeMarkup, aplicarCambiosPrecio, calcularActualizacionMasiva, costoEnPesos, type CambioPrecio, type Redondeo } from "@/domain/precios";
 import { validarCUIT, buscarPorCuit } from "@/domain/cuit";
+import { nombreRepetidoEnRubro, preciosParaCosto } from "@/domain/duplicar";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
 import type { Tx } from "../tx";
@@ -9,6 +10,97 @@ import type { GetFn, SetFn } from "../types";
 export type ProductoInput = Omit<Producto, "id" | "creadoEn" | "actualizadoEn">;
 export type ProveedorInput = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
 export type ClienteInput = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
+
+/** Lo que el usuario cambia al duplicar (el resto se copia del origen). `precios`: listaId → precio. */
+export interface DuplicarProductoInput {
+  codigo: string;
+  nombre: string;
+  rubroId?: string;
+  descripcion?: string;
+  marca?: string;
+  unidad?: Producto["unidad"];
+  unidadesPorPallet?: number;
+  proveedorHabitualId?: string;
+  codigoBarras?: string;
+  pesoKg?: number;
+  monedaCosto?: Producto["monedaCosto"];
+  costoUSD?: number;
+  costoUltimo?: number;
+  stockMinimo?: number;
+  activo?: boolean;
+  precios?: Record<string, number>;
+}
+
+/** Una fila de "Crear serie": cambia nombre, código, peso, costo, stock mínimo y precios. */
+export interface FilaSerieInput {
+  codigo: string;
+  nombre: string;
+  pesoKg?: number;
+  costoUltimo: number;
+  stockMinimo: number;
+  precios?: Record<string, number>;
+}
+
+/**
+ * Alta de un artículo derivado de `origen` (duplicar / serie): copia los datos del origen salvo
+ * código de barras, stock, movimientos, acopios, adjuntos e historial; nace con stock 0 en cada
+ * depósito y con los precios indicados (o recalculados con el markup efectivo del origen).
+ * Valida código único, nombre distinto dentro del rubro y código de barras único.
+ */
+function crearDerivado(tx: Tx, origen: Producto, c: DuplicarProductoInput, reservadosNombres: Set<string> = new Set()): Producto {
+  const codigo = c.codigo.trim().toUpperCase();
+  const nombre = c.nombre.trim().replace(/\s+/g, " ");
+  if (!codigo) throw new ErrorNegocio("Ingresá el código.");
+  if (!nombre) throw new ErrorNegocio("Ingresá el nombre.");
+  const rubroId = c.rubroId ?? origen.rubroId;
+  const rubro = tx.must("rubros", rubroId);
+  const productos = tx.get("productos");
+  const dupCodigo = productos.find((p) => p.codigo.toUpperCase() === codigo);
+  if (dupCodigo) throw new ErrorNegocio(`El código ${codigo} ya existe (${dupCodigo.nombre}).`);
+  const clave = `${rubroId}|${nombre.toLowerCase()}`;
+  if (nombreRepetidoEnRubro(nombre, rubroId, productos) || reservadosNombres.has(clave)) throw new ErrorNegocio(`Ya existe un artículo con el nombre "${nombre}"; cambiá el nombre o el diámetro/medida.`);
+  reservadosNombres.add(clave);
+  const barras = (c.codigoBarras ?? "").replace(/\D/g, "");
+  if (barras) {
+    const dupBarras = productos.find((p) => (p.codigoBarras ?? "") === barras);
+    if (dupBarras) throw new ErrorNegocio(`El código de barras ${barras} ya es de ${dupBarras.codigo} ${dupBarras.nombre}.`);
+  }
+  const costo = c.costoUltimo ?? origen.costoUltimo;
+  if (costo < 0) throw new ErrorNegocio("El costo no puede ser negativo.");
+  let data: ProductoInput = {
+    codigo,
+    nombre,
+    descripcion: c.descripcion ?? origen.descripcion,
+    rubroId,
+    unidadNegocioId: rubro.unidadNegocioId,
+    marca: c.marca ?? origen.marca,
+    unidad: c.unidad ?? origen.unidad,
+    unidadesPorPallet: c.unidadesPorPallet ?? origen.unidadesPorPallet,
+    proveedorHabitualId: c.proveedorHabitualId ?? origen.proveedorHabitualId,
+    codigoBarras: barras || undefined,
+    pesoKg: c.pesoKg ?? origen.pesoKg,
+    monedaCosto: c.monedaCosto ?? origen.monedaCosto,
+    costoUSD: (c.monedaCosto ?? origen.monedaCosto) === "USD" ? (c.costoUSD ?? origen.costoUSD) : undefined,
+    costoUltimo: costo,
+    costoPromedio: costo,
+    fechaUltimoCosto: tx.ahora,
+    stockMinimo: c.stockMinimo ?? origen.stockMinimo,
+    activo: c.activo ?? origen.activo,
+  };
+  data = normalizarCostoUSD(tx, data);
+  data = { ...data, costoPromedio: data.costoUltimo };
+  const nuevo: Producto = { ...data, id: newId("prod"), ...tx.meta() };
+  tx.insert("productos", nuevo);
+  for (const d of tx.get("depositos")) tx.insert("stock", { id: newId("stk"), productoId: nuevo.id, depositoId: d.id, cantidadFisica: 0, ...tx.meta() });
+  const listas = tx.get("listasPrecios");
+  const calculados = preciosParaCosto(origen, tx.get("precios"), listas, nuevo.costoUltimo);
+  for (const l of listas) {
+    const precio = c.precios?.[l.id] ?? calculados[l.id];
+    if (!(precio >= 0)) throw new ErrorNegocio(`Precio inválido para la lista ${l.nombre}.`);
+    tx.insert("precios", { id: newId("pre"), productoId: nuevo.id, listaPreciosId: l.id, precio, ...tx.meta() } as PrecioProducto);
+  }
+  return nuevo;
+}
 
 /** Recalcular precios desde el costo en USD con el tipo de cambio vigente del servidor. */
 export interface RecalculoDesdeUSD {
@@ -70,6 +162,41 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           });
         tx.auditar("Creó producto", "Producto", nuevo.id, `${nuevo.codigo} ${nuevo.nombre}`);
         return nuevo.id;
+      }),
+
+    /** Duplicar artículo: crea uno NUEVO a partir de otro (el origen no se modifica). */
+    duplicarProducto: (origenId: string, cambios: DuplicarProductoInput) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "productos.editar");
+        const origen = tx.must("productos", origenId);
+        const nuevo = crearDerivado(tx, origen, cambios);
+        tx.auditar("Duplicó artículo", "Producto", nuevo.id, `Duplicó el artículo ${origen.codigo} → ${nuevo.codigo} · ${nuevo.nombre}`);
+        return nuevo.id;
+      }),
+
+    /** Crear serie: varios artículos derivados del mismo origen en una sola transacción (todos o ninguno). */
+    crearSerieProductos: (origenId: string, filas: FilaSerieInput[]) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "productos.editar");
+        const origen = tx.must("productos", origenId);
+        if (!filas.length) throw new ErrorNegocio("Agregá al menos una fila.");
+        const codigos = new Set<string>();
+        const nombres = new Set<string>();
+        const creados: Producto[] = [];
+        filas.forEach((f, i) => {
+          const cod = f.codigo.trim().toUpperCase();
+          if (codigos.has(cod)) throw new ErrorNegocio(`Fila ${i + 1}: el código ${cod} está repetido en la serie.`);
+          codigos.add(cod);
+          if (!(f.costoUltimo > 0)) throw new ErrorNegocio(`Fila ${i + 1}: el costo tiene que ser mayor a 0.`);
+          try {
+            creados.push(crearDerivado(tx, origen, { codigo: f.codigo, nombre: f.nombre, pesoKg: f.pesoKg, costoUltimo: f.costoUltimo, stockMinimo: f.stockMinimo, precios: f.precios, monedaCosto: "ARS" }, nombres));
+          } catch (e) {
+            if (e instanceof ErrorNegocio) throw new ErrorNegocio(`Fila ${i + 1}: ${e.message}`);
+            throw e;
+          }
+        });
+        tx.auditar("Creó serie de artículos", "Producto", origen.id, `Creó una serie de ${creados.length} artículos a partir de ${origen.codigo}: ${creados.map((p) => p.codigo).join(", ")}`);
+        return { ids: creados.map((p) => p.id), codigos: creados.map((p) => p.codigo) };
       }),
 
     actualizarPrecio: (productoId: string, listaPreciosId: string, precio: number) =>

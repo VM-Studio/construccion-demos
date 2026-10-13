@@ -136,6 +136,14 @@ export const IMPACTOS: Record<string, Impacto> = {
     ],
     porQue: "El cliente es el centro: todo lo que le pase (acopios, ventas, deudas, entregas) se ve desde su ficha.",
   },
+  eliminarCliente: {
+    titulo: "Eliminar cliente",
+    resumen: "Solo se pueden eliminar clientes que todavía no operaron; si ya tiene documentos, se desactiva.",
+    efectos: [
+      e("ccClientes", "desaparece del listado y de los selectores", "baja"),
+    ],
+    porQue: "Un cliente con ventas, acopios o cuenta corriente tiene historia: se desactiva para no perderla.",
+  },
   importarClientes: {
     titulo: "Importar clientes",
     resumen: "Al importar, los {n} clientes (con sus obras) ya pueden comprar, acopiar y tener cuenta corriente.",
@@ -525,6 +533,23 @@ export const IMPACTOS: Record<string, Impacto> = {
       e("tablero", "Por cobrar baja", "baja"),
     ],
     porQue: "Lo anulado queda visible pero no cuenta: la numeración no se reutiliza.",
+  },
+  anularRecibo: {
+    titulo: "Anular recibo",
+    resumen: "Al anular, las facturas que cancelaba vuelven a quedar con saldo en la cuenta corriente.",
+    efectos: [
+      e("ccClientes", "el saldo del cliente vuelve a subir por lo imputado", "sube"),
+      e("tablero", "Por cobrar sube", "sube"),
+    ],
+    porQue: "Un cobro mal cargado se anula (queda visible y en la auditoría); la numeración no se reutiliza.",
+  },
+  anularOrdenPago: {
+    titulo: "Anular orden de pago",
+    resumen: "Al anular, las facturas del proveedor vuelven a quedar con saldo y los cheques de terceros vuelven a cartera.",
+    efectos: [
+      e("ccProveedores", "lo que le debemos vuelve a subir", "sube"),
+    ],
+    porQue: "Un pago mal cargado se anula (queda visible y en la auditoría); la numeración no se reutiliza.",
   },
   crearDevolucion: {
     titulo: "Registrar devolución",

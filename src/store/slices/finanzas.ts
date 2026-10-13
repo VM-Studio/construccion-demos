@@ -2,7 +2,7 @@ import type { Cheque, Circuito, Cobranza, Comprobante, EstadoCheque, Imputacion,
 import { formatMoney } from "@/lib/format";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir, r2 } from "../helpers";
-import { aplicarAComprobante, puntoVentaDe } from "../ops";
+import { aplicarAComprobante, desaplicarDeComprobante, puntoVentaDe } from "../ops";
 import type { Tx } from "../tx";
 import type { GetFn, SetFn } from "../types";
 
@@ -157,6 +157,56 @@ export function crearSliceFinanzas(set: SetFn, get: GetFn) {
         }
         tx.auditar("Registró orden de pago", "PagoProveedor", op.id, `${op.numero} · ${prov.razonSocial} · ${formatMoney(total)}`);
         return { pagoId: op.id, numero: op.numero };
+      }),
+
+    /**
+     * Anula un recibo: las facturas imputadas vuelven a tener saldo, el saldo a favor que generó
+     * se anula y sus cheques salen de cartera. El recibo queda visible como anulado.
+     */
+    anularCobranza: (id: string, motivo: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "ctacte.cobrar");
+        const cob = tx.must("cobranzas", id);
+        if (cob.anulado) throw new ErrorNegocio("El recibo ya está anulado.");
+        if (!motivo.trim()) throw new ErrorNegocio("Indicá el motivo de la anulación.");
+        const cheques = tx.get("cheques").filter((ch) => ch.cobranzaId === cob.id);
+        const usado = cheques.find((ch) => ch.estado !== "EN_CARTERA");
+        if (usado) throw new ErrorNegocio(`El cheque ${usado.banco} Nº ${usado.numero} ya no está en cartera: anulá primero la orden de pago o revertí su estado.`);
+        if (cob.saldoAFavor && cob.saldoAFavor > 0) {
+          const saf = tx.get("comprobantes").find((c) => c.tipo === "SALDO_A_FAVOR" && c.clienteId === cob.clienteId && c.numero === `${cob.numero} (a favor)` && c.estado !== "ANULADO");
+          if (saf && Math.abs(saf.saldoPendiente + cob.saldoAFavor) > 0.01) throw new ErrorNegocio("El saldo a favor de este recibo ya se usó en otro recibo: anulá ese primero.");
+          if (saf) tx.patch("comprobantes", saf.id, { estado: "ANULADO", saldoPendiente: 0 });
+        }
+        for (const ch of cheques) tx.remove("cheques", ch.id);
+        for (const i of cob.imputaciones) {
+          desaplicarDeComprobante(tx, i.comprobanteId, i.importe);
+          const c = tx.find("comprobantes", i.comprobanteId);
+          const a = c?.acopioId ? tx.find("acopios", c.acopioId) : undefined;
+          if (a?.reciboIds.includes(cob.id)) tx.patch("acopios", a.id, { reciboIds: a.reciboIds.filter((x) => x !== cob.id) });
+        }
+        tx.patch("cobranzas", cob.id, { anulado: true, motivoAnulacion: motivo.trim() });
+        const cliente = tx.find("clientes", cob.clienteId);
+        tx.auditar("Anuló recibo", "Cobranza", cob.id, `${cob.numero} · ${cliente?.razonSocial ?? ""} · ${formatMoney(cob.total)} · ${motivo.trim()}`);
+      }),
+
+    /** Anula una orden de pago: las facturas de compra vuelven a tener saldo y los cheques de terceros vuelven a cartera. */
+    anularPagoProveedor: (id: string, motivo: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "ctacte.pagar");
+        const op = tx.must("pagosProveedores", id);
+        if (op.anulado) throw new ErrorNegocio("La orden de pago ya está anulada.");
+        if (!motivo.trim()) throw new ErrorNegocio("Indicá el motivo de la anulación.");
+        for (const ch of tx.get("cheques").filter((x) => x.pagoProveedorId === op.id))
+          tx.patch("cheques", ch.id, { estado: "EN_CARTERA", proveedorId: undefined, pagoProveedorId: undefined });
+        for (const i of op.imputaciones) {
+          desaplicarDeComprobante(tx, i.comprobanteId, i.importe);
+          const c = tx.find("comprobantes", i.comprobanteId);
+          const acp = c?.acopioProveedorId ? tx.find("acopiosProveedor", c.acopioProveedorId) : undefined;
+          if (acp?.ordenPagoIds.includes(op.id)) tx.patch("acopiosProveedor", acp.id, { ordenPagoIds: acp.ordenPagoIds.filter((x) => x !== op.id) });
+        }
+        tx.patch("pagosProveedores", op.id, { anulado: true, motivoAnulacion: motivo.trim() });
+        const prov = tx.find("proveedores", op.proveedorId);
+        tx.auditar("Anuló orden de pago", "PagoProveedor", op.id, `${op.numero} · ${prov?.razonSocial ?? ""} · ${formatMoney(op.total)} · ${motivo.trim()}`);
       }),
 
     /**

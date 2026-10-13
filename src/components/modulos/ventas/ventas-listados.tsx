@@ -25,6 +25,7 @@ import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print
 import { DateRangePicker } from "@/components/shared/filter-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AvisoAnulado, BotonAnularPago } from "@/components/modulos/cuentas/anular-pago";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/tabs";
@@ -323,11 +324,14 @@ export function RecibosView() {
   const cliente = useCliente();
   const puede = usePuede("ctacte.cobrar");
   const [nuevo, setNuevo] = React.useState(params.get("nuevo") === "1");
-  const [ver, setVer] = React.useState<Cobranza | null>(null);
+  const [verId, setVerId] = React.useState<string | null>(params.get("id"));
+  const ver = verId ? db.cobranzas.find((c) => c.id === verId) ?? null : null;
+  const setVer = (c: Cobranza | null) => setVerId(c?.id ?? null);
   const [periodo, setPeriodo] = React.useState<Periodo>(() => periodoDesdePreset("90D"));
   const [circuito, setCircuito] = React.useState("");
   const filas = db.cobranzas.filter((c) => (veC2 || c.circuito !== 2) && (!sucursal || c.sucursalId === sucursal) && c.fecha >= periodo.desde && c.fecha <= periodo.hasta && (!circuito || String(c.circuito) === circuito));
-  const total = filas.reduce((a, c) => a + c.total, 0);
+  const vigentes = filas.filter((c) => !c.anulado);
+  const total = vigentes.reduce((a, c) => a + c.total, 0);
   const imputadoA = (c: Cobranza) =>
     c.imputaciones
       .map((i) => {
@@ -337,21 +341,21 @@ export function RecibosView() {
       })
       .join(", ");
   const columnas: Column<Cobranza>[] = [
-    { key: "n", header: "Número", sortable: true, sortValue: (c) => c.numero, cell: (c) => <span className="whitespace-nowrap font-mono text-[12px]">{c.numero}</span> },
+    { key: "n", header: "Número", sortable: true, sortValue: (c) => c.numero, cell: (c) => <span className="flex items-center gap-2 whitespace-nowrap font-mono text-[12px]"><span className={c.anulado ? "text-muted line-through" : undefined}>{c.numero}</span>{c.anulado && <Badge variant="neutral">Anulado</Badge>}</span> },
     { key: "ci", header: "Circuito", cell: (c) => <CircuitoBadge circuito={c.circuito} corto /> },
     { key: "f", header: "Fecha", sortable: true, sortValue: (c) => c.fecha, cell: (c) => <span className="text-muted">{formatDate(c.fecha)}</span> },
     { key: "c", header: "Cliente", cell: (c) => <span className="block min-w-[150px]">{cliente(c.clienteId)?.nombreFantasia ?? cliente(c.clienteId)?.razonSocial}</span> },
     { key: "m", header: "Medios", cell: (c) => <span className="text-[12px] text-muted">{c.medios.map((m) => MEDIO_PAGO_LABEL[m.medio]).join(", ")}</span> },
     { key: "i", header: "Imputado a", cell: (c) => <span className="block max-w-[260px] truncate font-mono text-[11px] text-muted" title={imputadoA(c)}>{imputadoA(c) || "—"}</span> },
-    { key: "t", header: "Total", align: "right", sortable: true, sortValue: (c) => c.total, footer: <span className="tnum">{formatMoney(total, { decimals: false })}</span>, cell: (c) => <span className="tnum">{formatMoney(c.total, { decimals: false })}</span> },
+    { key: "t", header: "Total", align: "right", sortable: true, sortValue: (c) => c.total, footer: <span className="tnum">{formatMoney(total, { decimals: false })}</span>, cell: (c) => <span className={cn("tnum", c.anulado && "text-muted line-through")}>{formatMoney(c.total, { decimals: false })}</span> },
     { key: "af", header: "A favor", align: "right", cell: (c) => (c.saldoAFavor ? <span className="tnum text-success">{formatMoney(c.saldoAFavor, { decimals: false })}</span> : <span className="text-disabled">—</span>) },
   ];
   return (
     <>
       <PageHeader titulo="Recibos" descripcion="Entrada de fondos: cobros imputados a facturas y a acopios en cuenta corriente." acciones={puede && <Button onClick={() => setNuevo(true)}><Wallet /> Nuevo recibo</Button>} />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <KpiCard label="Cobrado en el período" valor={formatMoney(total, { compact: true })} acento subtexto={`${filas.length} recibos`} />
-        <KpiCard label="Cobros de acopios" valor={formatMoney(filas.filter((c) => c.imputaciones.some((i) => db.comprobantes.find((x) => x.id === i.comprobanteId)?.acopioId)).reduce((a, c) => a + c.total, 0), { compact: true })} />
+        <KpiCard label="Cobrado en el período" valor={formatMoney(total, { compact: true })} acento subtexto={`${vigentes.length} recibos`} />
+        <KpiCard label="Cobros de acopios" valor={formatMoney(vigentes.filter((c) => c.imputaciones.some((i) => db.comprobantes.find((x) => x.id === i.comprobanteId)?.acopioId)).reduce((a, c) => a + c.total, 0), { compact: true })} />
         <KpiCard label="Cheques en cartera" valor={String(db.cheques.filter((c) => c.estado === "EN_CARTERA").length)} subtexto={formatMoney(db.cheques.filter((c) => c.estado === "EN_CARTERA").reduce((a, c) => a + c.importe, 0), { compact: true })} />
       </div>
       <DataTable
@@ -372,7 +376,8 @@ export function RecibosView() {
       />
       <CobranzaDialog open={nuevo} onOpenChange={setNuevo} />
       {ver && (
-        <PrintPreview open onOpenChange={(v) => !v && setVer(null)} titulo={`Recibo ${ver.numero}`}>
+        <PrintPreview open onOpenChange={(v) => !v && setVer(null)} titulo={`Recibo ${ver.numero}${ver.anulado ? " · ANULADO" : ""}`} acciones={<BotonAnularPago tipo="recibo" doc={ver} onAnulado={() => setVer(null)} />}>
+          {ver.anulado && <AvisoAnulado motivo={ver.motivoAnulacion} />}
           <ReciboDocumento cobranza={ver} />
         </PrintPreview>
       )}

@@ -88,6 +88,13 @@ interface CambioRemoto {
   href: string | null;
 }
 
+/**
+ * Altas y ediciones de clientes, proveedores y obras no muestran el aviso flotante: aparecía justo
+ * donde el usuario iba a hacer clic y lo sacaba de lo que estaba haciendo. Los datos se refrescan igual.
+ */
+const SIN_AVISO = new Set(["Cliente", "Proveedor", "Obra", "Contador"]);
+const merecenAviso = (c: CambioRemoto) => c.tipos.some((t) => !SIN_AVISO.has(t));
+
 /** Polling de /api/cambios (2 s visible, 15 s oculta, al instante al volver el foco). */
 function useSincronizacion(actorId: string) {
   const pathname = usePathname();
@@ -142,7 +149,7 @@ function useSincronizacion(actorId: string) {
               const faltan = cols.filter((c) => !(c in datos));
               if (faltan.length) await refrescarColecciones(faltan);
             } else await refrescarColecciones(cols);
-            const ajenos = cambios.filter((c) => c.usuarioId && c.usuarioId !== actorId);
+            const ajenos = cambios.filter((c) => c.usuarioId && c.usuarioId !== actorId && merecenAviso(c));
             if (ajenos.length) pendientesAviso.current.push(...ajenos);
           }
           avisar();

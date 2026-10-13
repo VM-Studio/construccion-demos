@@ -719,6 +719,8 @@ export interface Cobranza extends Entidad {
   saldoAFavor?: number;
   usuarioId: string;
   observaciones?: string;
+  anulado?: boolean;
+  motivoAnulacion?: string;
 }
 
 /** Orden de pago (salida de fondos). */
@@ -732,6 +734,8 @@ export interface PagoProveedor extends Entidad {
   total: number;
   usuarioId: string;
   observaciones?: string;
+  anulado?: boolean;
+  motivoAnulacion?: string;
 }
 
 export interface Cheque extends Entidad {

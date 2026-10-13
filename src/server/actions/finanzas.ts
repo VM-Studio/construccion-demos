@@ -18,3 +18,11 @@ export async function cargarSaldoInicial(...args: Parameters<AccionesNegocio["ca
 export async function cambiarEstadoCheque(...args: Parameters<AccionesNegocio["cambiarEstadoCheque"]>) {
   return correr("cambiarEstadoCheque", args);
 }
+
+export async function anularCobranza(...args: Parameters<AccionesNegocio["anularCobranza"]>) {
+  return correr("anularCobranza", args);
+}
+
+export async function anularPagoProveedor(...args: Parameters<AccionesNegocio["anularPagoProveedor"]>) {
+  return correr("anularPagoProveedor", args);
+}

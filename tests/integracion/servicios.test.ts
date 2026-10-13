@@ -255,3 +255,47 @@ describe("Duplicar artículo y crear serie", () => {
     expect(aud?.detalle).toMatch(new RegExp(`Creó una serie de 3 artículos a partir de ${origen.codigo}`));
   });
 });
+
+describe("Eliminar cliente y anular recibo", () => {
+  it("un cliente sin documentos se elimina; con documentos se rechaza", async () => {
+    const { guardarCliente, eliminarCliente } = await import("@/server/servicios/clientes");
+    const sello = Date.now().toString(36);
+    const c = await guardarCliente(dueno, { codigo: "", razonSocial: `Borrar ${sello}`, tipo: "MAYORISTA", cuit: "", condicionIVA: "CF", circuitoHabitual: 2, email: "", telefono: "", direccion: "", localidad: "", listaPreciosId: "lst_pub", condicionPago: "CONTADO", limiteCredito: 0, sucursalPreferidaId: "suc_central", activo: true } as never);
+    expect(c.ok, c.ok ? "" : c.error).toBe(true);
+    const id = idDe(c.ok && c.data);
+    const r = await eliminarCliente(dueno, id);
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+    expect((await estado()).clientes.some((x) => x.id === id)).toBe(false);
+    const conDocs = await eliminarCliente(dueno, "cli_bencen");
+    expect(conDocs.ok).toBe(false);
+    expect((await estado()).clientes.some((x) => x.id === "cli_bencen")).toBe(true);
+  });
+
+  it("anular un recibo devuelve el saldo a la factura y deja la base consistente", async () => {
+    const { guardarCliente } = await import("@/server/servicios/clientes");
+    const { cargarSaldoInicial, registrarCobranza, anularCobranza } = await import("@/server/servicios/finanzas");
+    const { saldoCliente } = await import("@/domain/cuentasCorrientes");
+    const { verificarIntegridad } = await import("@/domain/integridad");
+    const sello = Date.now().toString(36);
+    const c = await guardarCliente(dueno, { codigo: "", razonSocial: `Recibo ${sello}`, tipo: "CORRALON", cuit: "", condicionIVA: "CF", circuitoHabitual: 2, email: "", telefono: "", direccion: "", localidad: "", listaPreciosId: "lst_pub", condicionPago: "CTA_CTE_30", limiteCredito: 0, sucursalPreferidaId: "suc_central", activo: true } as never);
+    const clienteId = idDe(c.ok && c.data);
+    const si = await cargarSaldoInicial(dueno, { tipo: "cliente", entidadId: clienteId, importe: 100000, fecha: hoy(), circuito: 2 });
+    expect(si.ok, si.ok ? "" : si.error).toBe(true);
+    const deuda = (await estado()).comprobantes.find((x) => x.clienteId === clienteId)!;
+    const rc = await registrarCobranza(dueno, { clienteId, circuito: 2, fecha: hoy(), medios: [{ medio: "EFECTIVO", importe: 130000 }], imputaciones: [{ comprobanteId: deuda.id, importe: 100000 }] });
+    expect(rc.ok, rc.ok ? "" : rc.error).toBe(true);
+    // Cobró 130.000: cancela la deuda y quedan 30.000 a favor.
+    expect(saldoCliente(clienteId, (await estado()).comprobantes)).toBe(-30000);
+    const cobId = (rc.ok && (rc.data as { cobranzaId: string }).cobranzaId) as string;
+    expect((await anularCobranza(dueno, cobId, "")).ok).toBe(false); // sin motivo
+    const an = await anularCobranza(dueno, cobId, "Cargado por error");
+    expect(an.ok, an.ok ? "" : an.error).toBe(true);
+    const db = await estado();
+    expect(saldoCliente(clienteId, db.comprobantes)).toBe(100000);
+    expect(db.comprobantes.find((x) => x.id === deuda.id)!.estado).toBe("PENDIENTE");
+    expect(db.cobranzas.find((x) => x.id === cobId)!.anulado).toBe(true);
+    expect((await anularCobranza(dueno, cobId, "otra vez")).ok).toBe(false);
+    const saldos = verificarIntegridad(db).chequeos.find((x) => x.nombre.startsWith("Saldos de comprobantes"))!;
+    expect(saldos.errores.filter((e) => e.includes(deuda.numero))).toEqual([]);
+  });
+});

@@ -99,8 +99,8 @@ export function verificarIntegridad(db: EstadoInicial): ResultadoIntegridad {
     const errores: string[] = [];
     const imputado = new Map<string, number>();
     const add = (id: string, x: number) => imputado.set(id, (imputado.get(id) ?? 0) + x);
-    for (const c of db.cobranzas) for (const i of c.imputaciones) add(i.comprobanteId, i.importe);
-    for (const p of db.pagosProveedores) for (const i of p.imputaciones) add(i.comprobanteId, i.importe);
+    for (const c of db.cobranzas) if (!c.anulado) for (const i of c.imputaciones) add(i.comprobanteId, i.importe);
+    for (const p of db.pagosProveedores) if (!p.anulado) for (const i of p.imputaciones) add(i.comprobanteId, i.importe);
     for (const nc of db.comprobantes) for (const i of nc.aplicadoA ?? []) add(i.comprobanteId, i.importe);
     for (const c of db.comprobantes) {
       if (c.estado === "ANULADO" || (c.tipo !== "FACTURA" && c.tipo !== "NOTA_DEBITO" && c.tipo !== "SALDO_INICIAL")) continue;
@@ -138,7 +138,7 @@ export function verificarIntegridad(db: EstadoInicial): ResultadoIntegridad {
           const recibido = db.ordenesCompra.filter((o) => o.acopioProveedorId === a.id).flatMap((o) => o.items).filter((i) => i.productoId === p.productoId).reduce((s, i) => s + i.cantidadRecibida, 0);
           if (Math.abs(p.pendiente - Math.max(0, p.pactado - recibido)) > EPS) errores.push(`${a.numero}: pendiente de retirar ≠ pactado − recibido`);
         }
-      const pagado = db.pagosProveedores.flatMap((o) => o.imputaciones).filter((i) => a.comprobanteCompraIds.includes(i.comprobanteId)).reduce((s, i) => s + i.importe, 0);
+      const pagado = db.pagosProveedores.filter((o) => !o.anulado).flatMap((o) => o.imputaciones).filter((i) => a.comprobanteCompraIds.includes(i.comprobanteId)).reduce((s, i) => s + i.importe, 0);
       if (Math.abs(pagado - a.pagado) > 1) errores.push(`${a.numero}: pagado ${a.pagado} ≠ órdenes de pago imputadas ${pagado}`);
     }
     chequeos.push({ nombre: "Acopios con proveedores: pendiente = pactado − recibido; pagado = OP", ok: !errores.length, detalle: `${db.acopiosProveedor.length} acopios con proveedores`, errores });

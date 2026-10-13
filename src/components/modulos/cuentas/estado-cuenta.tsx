@@ -61,11 +61,11 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
     });
   }
   if (tipo === "cliente")
-    for (const cob of db.cobranzas.filter((x) => x.clienteId === id))
-      out.push({ id: cob.id, fecha: cob.fecha, concepto: `Recibo · ${cob.medios.map((m) => MEDIO_PAGO_LABEL[m.medio]).join(", ")}`, numero: cob.numero, debe: 0, haber: cob.total });
+    for (const cob of db.cobranzas.filter((x) => !x.anulado && x.clienteId === id))
+      out.push({ id: cob.id, fecha: cob.fecha, concepto: `Recibo · ${cob.medios.map((m) => MEDIO_PAGO_LABEL[m.medio]).join(", ")}`, numero: cob.numero, href: `/ventas/recibos?id=${cob.id}`, debe: 0, haber: cob.total });
   else
-    for (const op of db.pagosProveedores.filter((x) => x.proveedorId === id))
-      out.push({ id: op.id, fecha: op.fecha, concepto: `Orden de pago · ${op.medios.map((m) => (m.chequeId ? "Cheque de terceros" : MEDIO_PAGO_LABEL[m.medio])).join(", ")}`, numero: op.numero, debe: 0, haber: op.total });
+    for (const op of db.pagosProveedores.filter((x) => !x.anulado && x.proveedorId === id))
+      out.push({ id: op.id, fecha: op.fecha, concepto: `Orden de pago · ${op.medios.map((m) => (m.chequeId ? "Cheque de terceros" : MEDIO_PAGO_LABEL[m.medio])).join(", ")}`, numero: op.numero, href: `/compras/ordenes-pago?id=${op.id}`, debe: 0, haber: op.total });
   // Las facturas anuladas: la NC espejo las compensa, se muestran ambas.
   out.sort((a, b) => a.fecha.localeCompare(b.fecha) || b.debe - a.debe);
   let saldo = 0;

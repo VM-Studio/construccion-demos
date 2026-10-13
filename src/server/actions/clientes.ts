@@ -14,3 +14,7 @@ export async function guardarObra(...args: Parameters<AccionesNegocio["guardarOb
 export async function importarClientes(...args: Parameters<AccionesNegocio["importarClientes"]>) {
   return correr("importarClientes", args);
 }
+
+export async function eliminarCliente(...args: Parameters<AccionesNegocio["eliminarCliente"]>) {
+  return correr("eliminarCliente", args);
+}

@@ -3,5 +3,7 @@ import { servicio } from "./base";
 
 export const registrarCobranza = servicio("registrarCobranza");
 export const registrarPagoProveedor = servicio("registrarPagoProveedor");
+export const anularCobranza = servicio("anularCobranza");
+export const anularPagoProveedor = servicio("anularPagoProveedor");
 export const cargarSaldoInicial = servicio("cargarSaldoInicial");
 export const cambiarEstadoCheque = servicio("cambiarEstadoCheque");

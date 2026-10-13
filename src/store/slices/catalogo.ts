@@ -265,6 +265,29 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         return nuevo.id;
       }),
 
+    /** Elimina un cliente sin documentos (y sus obras). Si ya operó, hay que desactivarlo. */
+    eliminarCliente: (id: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "clientes.editar");
+        const c = tx.must("clientes", id);
+        const docs: [string, number][] = [
+          ["notas de pedido", tx.get("notasPedido").filter((x) => x.clienteId === id).length],
+          ["cotizaciones", tx.get("cotizaciones").filter((x) => x.clienteId === id).length],
+          ["acopios", tx.get("acopios").filter((x) => x.clienteId === id).length],
+          ["remitos", tx.get("remitos").filter((x) => x.clienteId === id).length],
+          ["comprobantes", tx.get("comprobantes").filter((x) => x.clienteId === id).length],
+          ["recibos", tx.get("cobranzas").filter((x) => x.clienteId === id).length],
+          ["devoluciones", tx.get("devoluciones").filter((x) => x.clienteId === id).length],
+          ["despachos", tx.get("despachos").filter((x) => x.clienteId === id).length],
+          ["cheques", tx.get("cheques").filter((x) => x.clienteId === id).length],
+        ];
+        const con = docs.filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`);
+        if (con.length) throw new ErrorNegocio(`${c.razonSocial} ya tiene ${con.join(", ")}: no se puede eliminar. Desactivalo desde su ficha para que no aparezca al vender.`);
+        for (const o of tx.get("obras").filter((x) => x.clienteId === id)) tx.remove("obras", o.id);
+        tx.remove("clientes", id);
+        tx.auditar("Eliminó cliente", "Cliente", id, `${c.codigo} · ${c.razonSocial}`);
+      }),
+
     guardarCliente: (data: ClienteInput, id?: string) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "clientes.editar");

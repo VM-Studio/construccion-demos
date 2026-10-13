@@ -2,5 +2,6 @@
 import { servicio } from "./base";
 
 export const guardarCliente = servicio("guardarCliente");
+export const eliminarCliente = servicio("eliminarCliente");
 export const guardarObra = servicio("guardarObra");
 export const importarClientes = servicio("importarClientes");

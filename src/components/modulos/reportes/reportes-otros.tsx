@@ -102,7 +102,7 @@ export function ReporteCobranzas() {
   const suc = useSucursalActiva();
   const saldos = useSaldosClientes();
   const [periodo, setPeriodo] = usePeriodoReporte("30D");
-  const cobs = db.cobranzas.filter((c) => enPeriodo(c.fecha, periodo) && (!suc || c.sucursalId === suc));
+  const cobs = db.cobranzas.filter((c) => !c.anulado && enPeriodo(c.fecha, periodo) && (!suc || c.sucursalId === suc));
   const porMedio = new Map<string, number>();
   for (const c of cobs) for (const m of c.medios) porMedio.set(m.medio, (porMedio.get(m.medio) ?? 0) + m.importe);
   const porDia = new Map<string, number>();
@@ -112,7 +112,7 @@ export function ReporteCobranzas() {
     .map((c) => {
       const ant = antiguedadDeuda(db.comprobantes.filter((x) => x.clienteId === c.id), new Date());
       const dias: number[] = [];
-      for (const cob of db.cobranzas.filter((x) => x.clienteId === c.id))
+      for (const cob of db.cobranzas.filter((x) => !x.anulado && x.clienteId === c.id))
         for (const i of cob.imputaciones) {
           const f = db.comprobantes.find((x) => x.id === i.comprobanteId);
           if (f?.estado === "PAGADO") dias.push(Math.max(0, Math.round((new Date(cob.fecha).getTime() - new Date(f.fecha).getTime()) / 86_400_000)));

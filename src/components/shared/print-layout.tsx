@@ -112,12 +112,15 @@ export function PrintPreview({
   titulo,
   children,
   onPrint,
+  acciones,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   titulo: string;
   children: React.ReactNode;
   onPrint?: () => void;
+  /** Acciones extra a la izquierda del pie (ej. "Anular recibo"). */
+  acciones?: React.ReactNode;
 }) {
   const [montado, setMontado] = React.useState(false);
   React.useEffect(() => setMontado(true), []);
@@ -130,6 +133,7 @@ export function PrintPreview({
           description="Vista previa de impresión (A4)"
           footer={
             <>
+              {acciones}
               <Button variant="secondary" onClick={() => onOpenChange(false)}>
                 Cerrar
               </Button>

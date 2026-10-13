@@ -60,7 +60,8 @@ export type TipoMovimientoStock =
 export type TipoComprobante = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "SALDO_A_FAVOR" | "SALDO_INICIAL";
 export type LetraComprobante = "A" | "B";
 
-export type TipoCliente = "CONSTRUCTORA" | "CORRALON" | "FERRETERIA" | "PARTICULAR" | "ARQUITECTO";
+/** Vigentes: MAYORISTA, FERRETERIA, CORRALON, MELI, MADERERA. Los demás quedan solo por clientes ya cargados. */
+export type TipoCliente = "MAYORISTA" | "FERRETERIA" | "CORRALON" | "MELI" | "MADERERA" | "CONSTRUCTORA" | "PARTICULAR" | "ARQUITECTO";
 export type TipoProveedor = "FABRICANTE" | "DISTRIBUIDOR" | "TRANSPORTISTA" | "SERVICIOS";
 export type CondicionPago = "CONTADO" | "CTA_CTE_15" | "CTA_CTE_30" | "CTA_CTE_60" | "ANTICIPO";
 export type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "ECHEQ" | "TARJETA" | "MERCADOPAGO";
@@ -718,6 +719,8 @@ export interface Cobranza extends Entidad {
   saldoAFavor?: number;
   usuarioId: string;
   observaciones?: string;
+  anulado?: boolean;
+  motivoAnulacion?: string;
 }
 
 /** Orden de pago (salida de fondos). */
@@ -731,6 +734,8 @@ export interface PagoProveedor extends Entidad {
   total: number;
   usuarioId: string;
   observaciones?: string;
+  anulado?: boolean;
+  motivoAnulacion?: string;
 }
 
 export interface Cheque extends Entidad {

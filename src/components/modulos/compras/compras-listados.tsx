@@ -22,6 +22,9 @@ import { Impacto } from "@/capacitacion";
 import { cn } from "@/lib/utils";
 import { PagoDialog } from "@/components/modulos/cuentas/pago-dialog";
 import { OrdenPagoDocumento } from "@/components/modulos/cuentas/documentos";
+import { AvisoAnulado, BotonAnularPago } from "@/components/modulos/cuentas/anular-pago";
+import { Badge } from "@/components/ui/badge";
+import { useSearchParams } from "next/navigation";
 
 export function ComprobantesCompraView() {
   const db = useDb();
@@ -72,18 +75,21 @@ export function OrdenesPagoView() {
   const [elegir, setElegir] = React.useState(false);
   const [provId, setProvId] = React.useState("");
   const [pagar, setPagar] = React.useState<string | null>(null);
-  const [ver, setVer] = React.useState<PagoProveedor | null>(null);
+  const params = useSearchParams();
+  const [verId, setVerId] = React.useState<string | null>(params.get("id"));
+  const ver = verId ? db.pagosProveedores.find((o) => o.id === verId) ?? null : null;
+  const setVer = (o: PagoProveedor | null) => setVerId(o?.id ?? null);
   const filas = db.pagosProveedores.filter((o) => veC2 || o.circuito !== 2);
   const prov = (id: string) => db.proveedores.find((p) => p.id === id)?.razonSocial;
   const imputado = (o: PagoProveedor) => o.imputaciones.map((i) => { const c = db.comprobantes.find((x) => x.id === i.comprobanteId); return c?.acopioProveedorId ? `Acopio ${db.acopiosProveedor.find((a) => a.id === c.acopioProveedorId)?.numero}` : c?.numero; }).join(", ");
   const columnas: Column<PagoProveedor>[] = [
-    { key: "n", header: "Número", sortable: true, sortValue: (o) => o.numero, cell: (o) => <span className="whitespace-nowrap font-mono text-[12px]">{o.numero}</span> },
+    { key: "n", header: "Número", sortable: true, sortValue: (o) => o.numero, cell: (o) => <span className="flex items-center gap-2 whitespace-nowrap font-mono text-[12px]"><span className={o.anulado ? "text-muted line-through" : undefined}>{o.numero}</span>{o.anulado && <Badge variant="neutral">Anulada</Badge>}</span> },
     { key: "ci", header: "Circuito", cell: (o) => <CircuitoBadge circuito={o.circuito} corto /> },
     { key: "f", header: "Fecha", sortable: true, sortValue: (o) => o.fecha, cell: (o) => <span className="text-muted">{formatDate(o.fecha)}</span> },
     { key: "p", header: "Proveedor", cell: (o) => <span className="block min-w-[170px]">{prov(o.proveedorId)}</span> },
     { key: "m", header: "Medios", cell: (o) => <span className="text-[12px] text-muted">{o.medios.map((m) => (m.chequeId ? "Cheque de terceros" : MEDIO_PAGO_LABEL[m.medio])).join(", ")}</span> },
     { key: "i", header: "Imputado a", cell: (o) => <span className="block max-w-[260px] truncate font-mono text-[11px] text-muted" title={imputado(o)}>{imputado(o)}</span> },
-    { key: "t", header: "Total", align: "right", sortable: true, sortValue: (o) => o.total, footer: <span className="tnum">{formatMoney(filas.reduce((a, o) => a + o.total, 0), { decimals: false })}</span>, cell: (o) => <span className="tnum">{formatMoney(o.total, { decimals: false })}</span> },
+    { key: "t", header: "Total", align: "right", sortable: true, sortValue: (o) => o.total, footer: <span className="tnum">{formatMoney(filas.filter((o) => !o.anulado).reduce((a, o) => a + o.total, 0), { decimals: false })}</span>, cell: (o) => <span className={cn("tnum", o.anulado && "text-muted line-through")}>{formatMoney(o.total, { decimals: false })}</span> },
   ];
   return (
     <>
@@ -97,7 +103,8 @@ export function OrdenesPagoView() {
       </Dialog>
       {pagar && <PagoDialog open onOpenChange={(v) => !v && setPagar(null)} proveedorId={pagar} />}
       {ver && (
-        <PrintPreview open onOpenChange={(v) => !v && setVer(null)} titulo={`Orden de pago ${ver.numero}`}>
+        <PrintPreview open onOpenChange={(v) => !v && setVer(null)} titulo={`Orden de pago ${ver.numero}${ver.anulado ? " · ANULADA" : ""}`} acciones={<BotonAnularPago tipo="orden" doc={ver} onAnulado={() => setVer(null)} />}>
+          {ver.anulado && <AvisoAnulado motivo={ver.motivoAnulacion} />}
           <OrdenPagoDocumento pago={ver} />
         </PrintPreview>
       )}

@@ -58,7 +58,7 @@ export function crearSliceImportacion(set: SetFn, get: GetFn) {
         for (const { cliente, obras } of filas) {
           let data = cliente;
           if (!data.razonSocial.trim()) throw new ErrorNegocio("Hay clientes sin razón social.");
-          if (data.condicionIVA !== "CF" || data.cuit) {
+          if (data.cuit?.trim()) {
             const err = validarCUIT(data.cuit);
             if (err) throw new ErrorNegocio(`${data.razonSocial}: ${err}`);
           }

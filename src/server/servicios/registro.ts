@@ -54,6 +54,7 @@ export const REGISTRO: Registro = {
   importarArticulos: { modulo: "catalogo", permiso: "productos.editar", accionId: "importarArticulos", rutas: R.catalogo },
   // ── Clientes y proveedores ──
   guardarCliente: { modulo: "clientes", permiso: "clientes.editar", accionId: "crearCliente", rutas: R.clientes },
+  eliminarCliente: { modulo: "clientes", permiso: "clientes.editar", accionId: "eliminarCliente", rutas: R.clientes },
   guardarObra: { modulo: "clientes", permiso: ["ventas.editar", "clientes.editar"], accionId: "crearObra", rutas: R.clientes },
   importarClientes: { modulo: "clientes", permiso: "clientes.editar", accionId: "importarClientes", rutas: R.clientes },
   guardarProveedor: { modulo: "proveedores", permiso: "proveedores.editar", accionId: "crearProveedor", rutas: R.proveedores },
@@ -167,6 +168,8 @@ export const REGISTRO: Registro = {
   // ── Finanzas ──
   registrarCobranza: { modulo: "finanzas", permiso: "ctacte.cobrar", accionId: "registrarCobro", rutas: [...R.finanzas, ...R.acopios] },
   registrarPagoProveedor: { modulo: "finanzas", permiso: "ctacte.pagar", accionId: "crearOrdenPago", rutas: R.finanzas },
+  anularCobranza: { modulo: "finanzas", permiso: "ctacte.cobrar", accionId: "anularRecibo", rutas: [...R.finanzas, ...R.acopios] },
+  anularPagoProveedor: { modulo: "finanzas", permiso: "ctacte.pagar", accionId: "anularOrdenPago", rutas: R.finanzas },
   cargarSaldoInicial: { modulo: "finanzas", permiso: ["ctacte.cobrar", "ctacte.pagar"], accionId: "cargarSaldoInicial", rutas: R.finanzas },
   cambiarEstadoCheque: { modulo: "finanzas", permiso: "ctacte.cobrar", accionId: "cambiarEstadoCheque", rutas: R.finanzas },
   // ── Configuración ──

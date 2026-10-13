@@ -224,6 +224,20 @@ export function aplicarAComprobante(tx: Tx, comprobanteId: string, importe: numb
   }
 }
 
+/** Inverso de aplicarAComprobante: al anular un recibo u orden de pago, el saldo vuelve. */
+export function desaplicarDeComprobante(tx: Tx, comprobanteId: string, importe: number) {
+  const c = tx.find("comprobantes", comprobanteId);
+  if (!c) return;
+  if (c.estado !== "ANULADO") {
+    const saldo = r2(Math.min(c.total, c.saldoPendiente + importe));
+    tx.patch("comprobantes", c.id, { saldoPendiente: saldo, estado: estadoPorSaldo(c.total, saldo) });
+  }
+  if (c.acopioProveedorId) {
+    const acp = tx.find("acopiosProveedor", c.acopioProveedorId);
+    if (acp) tx.patch("acopiosProveedor", acp.id, { pagado: r2(Math.max(0, acp.pagado - importe)) });
+  }
+}
+
 /** Líneas pendientes de entrega de un cliente (o de todos). */
 export function pendientesDe(tx: Tx, clienteId?: string) {
   return lineasPendientes(tx.get("notasPedido"), tx.get("remitos")).filter((l) => !clienteId || l.clienteId === clienteId);

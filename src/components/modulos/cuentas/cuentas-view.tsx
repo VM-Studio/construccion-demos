@@ -75,13 +75,14 @@ function ClientesCC({ filtroInicial }: { filtroInicial?: string | null }) {
   const total = clientes.reduce((a, c) => a + (saldos.get(c.id)?.saldo ?? 0), 0);
   const vencido = clientes.reduce((a, c) => a + (saldos.get(c.id)?.vencido ?? 0), 0);
   const mes = diaLocal(new Date()).slice(0, 7);
-  const cobradoMes = db.cobranzas.filter((c) => ids.has(c.clienteId) && diaLocal(c.fecha).slice(0, 7) === mes).reduce((a, c) => a + c.total, 0);
+  const cobradoMes = db.cobranzas.filter((c) => !c.anulado && ids.has(c.clienteId) && diaLocal(c.fecha).slice(0, 7) === mes).reduce((a, c) => a + c.total, 0);
   const excedido = (c: Cliente) => c.limiteCredito > 0 && (saldos.get(c.id)?.saldo ?? 0) > c.limiteCredito;
 
   // Último cobro y días promedio de cobro (de facturas pagadas)
   const stats = React.useMemo(() => {
     const m = new Map<string, { ultimo?: string; dias: number[] }>();
     for (const cob of db.cobranzas) {
+      if (cob.anulado) continue;
       const x = m.get(cob.clienteId) ?? { dias: [] };
       if (!x.ultimo || cob.fecha > x.ultimo) x.ultimo = cob.fecha;
       for (const i of cob.imputaciones) {
@@ -187,7 +188,7 @@ function ProveedoresCC() {
   const total = db.proveedores.reduce((a, p) => a + (saldos.get(p.id)?.saldo ?? 0), 0);
   const vencido = db.proveedores.reduce((a, p) => a + (saldos.get(p.id)?.vencido ?? 0), 0);
   const mes = diaLocal(new Date()).slice(0, 7);
-  const pagadoMes = db.pagosProveedores.filter((p) => diaLocal(p.fecha).slice(0, 7) === mes).reduce((a, p) => a + p.total, 0);
+  const pagadoMes = db.pagosProveedores.filter((p) => !p.anulado && diaLocal(p.fecha).slice(0, 7) === mes).reduce((a, p) => a + p.total, 0);
   const proximo = (id: string) =>
     db.comprobantes
       .filter((c) => c.proveedorId === id && c.saldoPendiente > 0.009 && c.vencimiento)

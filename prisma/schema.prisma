@@ -132,6 +132,9 @@ enum TipoCliente {
   FERRETERIA
   PARTICULAR
   ARQUITECTO
+  MAYORISTA
+  MELI
+  MADERERA
 }
 
 enum TipoProveedor {
@@ -1183,20 +1186,23 @@ model ImputacionComprobante {
 
 /// Recibo (entrada de fondos). En el dominio: Cobranza.
 model Recibo {
-  id            String             @id @default(cuid())
-  numero        String             @unique
-  circuito      Int
-  clienteId     String
-  sucursalId    String?
-  fecha         DateTime
-  medios        MedioRecibo[]
-  imputaciones  ImputacionRecibo[]
-  total         Decimal            @db.Decimal(14, 2)
-  saldoAFavor   Decimal?           @db.Decimal(14, 2)
-  usuarioId     String
-  observaciones String?
-  creadoEn      DateTime           @default(now())
-  actualizadoEn DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  numero          String             @unique
+  circuito        Int
+  clienteId       String
+  sucursalId      String?
+  fecha           DateTime
+  medios          MedioRecibo[]
+  imputaciones    ImputacionRecibo[]
+  total           Decimal            @db.Decimal(14, 2)
+  saldoAFavor     Decimal?           @db.Decimal(14, 2)
+  usuarioId       String
+  observaciones   String?
+  /// Anulado: deja de imputar a las facturas (la numeración no se reutiliza).
+  anulado         Boolean            @default(false)
+  motivoAnulacion String?
+  creadoEn        DateTime           @default(now())
+  actualizadoEn   DateTime           @updatedAt
 
   @@index([clienteId])
   @@index([fecha])
@@ -1233,18 +1239,21 @@ model ImputacionRecibo {
 
 /// Orden de pago (salida de fondos). En el dominio: PagoProveedor.
 model OrdenPago {
-  id            String                @id @default(cuid())
-  numero        String                @unique
-  circuito      Int
-  proveedorId   String
-  fecha         DateTime
-  medios        MedioOrdenPago[]
-  imputaciones  ImputacionOrdenPago[]
-  total         Decimal               @db.Decimal(14, 2)
-  usuarioId     String
-  observaciones String?
-  creadoEn      DateTime              @default(now())
-  actualizadoEn DateTime              @updatedAt
+  id              String                @id @default(cuid())
+  numero          String                @unique
+  circuito        Int
+  proveedorId     String
+  fecha           DateTime
+  medios          MedioOrdenPago[]
+  imputaciones    ImputacionOrdenPago[]
+  total           Decimal               @db.Decimal(14, 2)
+  usuarioId       String
+  observaciones   String?
+  /// Anulada: deja de imputar a las facturas (la numeración no se reutiliza).
+  anulado         Boolean               @default(false)
+  motivoAnulacion String?
+  creadoEn        DateTime              @default(now())
+  actualizadoEn   DateTime              @updatedAt
 
   @@index([proveedorId])
   @@index([fecha])

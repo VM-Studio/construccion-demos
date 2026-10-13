@@ -1,9 +1,13 @@
 "use client";
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, Upload, Users } from "lucide-react";
+import { Download, Plus, Trash2, Upload, Users } from "lucide-react";
+import { toast } from "sonner";
+import { useStore } from "@/store";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Impacto, medir } from "@/capacitacion";
 import { useDb, usePendientes, usePuede, useSaldosClientes, useAcopiosResumen, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
-import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opciones } from "@/domain/estados";
+import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opcionesTipoCliente } from "@/domain/estados";
 import type { Cliente } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -60,6 +64,7 @@ export function ClientesView() {
   const params = useSearchParams();
   const sucursal = useSucursalActiva();
   const puedeCrear = usePuede("clientes.editar");
+  const [eliminar, setEliminar] = React.useState<Cliente | null>(null);
   const resumen = useResumenClientes();
   const [nuevo, setNuevo] = React.useState(params.get("nuevo") === "1");
   const [importar, setImportar] = React.useState(false);
@@ -100,6 +105,18 @@ export function ClientesView() {
     { key: "pe", header: "Pendiente entrega", align: "right", sortable: true, sortValue: (f) => f.pendiente, footer: <span className="tnum">{formatMoney(t.p, { decimals: false })}</span>, cell: (f) => (f.pendiente > 0.5 ? <span className="tnum">{formatMoney(f.pendiente, { decimals: false })}</span> : <span className="text-disabled">—</span>) },
     { key: "ve", header: "Vendedor", cell: (f) => <span className="whitespace-nowrap text-muted">{usr(f.c.vendedorId) ?? "—"}</span>, hideOnMobile: true },
     { key: "act", header: "Activo", cell: (f) => (f.c.activo ? <Badge variant="success">Activo</Badge> : <Badge>Inactivo</Badge>), hideOnMobile: true },
+    ...(puedeCrear
+      ? [{
+          key: "del",
+          header: "",
+          width: 44,
+          cell: (f: ResumenCliente) => (
+            <span onClick={(e) => e.stopPropagation()}>
+              <Button size="icon-sm" variant="ghost" aria-label={`Eliminar ${f.c.razonSocial}`} title="Eliminar cliente" className="text-muted hover:text-danger" onClick={() => setEliminar(f.c)}><Trash2 /></Button>
+            </span>
+          ),
+        }]
+      : []),
   ];
 
   const exportar = () =>
@@ -160,7 +177,7 @@ export function ClientesView() {
         }
         filters={
           <>
-            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opciones(TIPO_CLIENTE_LABEL)]} /></div>
+            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opcionesTipoCliente()]} /></div>
             <div className="w-[150px]"><Select size="sm" aria-label="Circuito" value={circuito} onValueChange={setCircuito} options={[{ value: "", label: "Ambos circuitos" }, { value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /></div>
             <div className="w-[160px]"><Select size="sm" aria-label="Vendedor" value={vendedor} onValueChange={setVendedor} options={[{ value: "", label: "Todos los vendedores" }, ...db.usuarios.filter((u) => u.rol === "VENTAS").map((u) => ({ value: u.id, label: u.nombre }))]} /></div>
             {check("Con acopio vigente", conAcopio, setConAcopio)}
@@ -170,6 +187,30 @@ export function ClientesView() {
         }
       />
       <ImportarCsvDialog tipo="clientes" open={importar} onOpenChange={setImportar} />
+      <ConfirmDialog
+        open={!!eliminar}
+        onOpenChange={(v) => !v && setEliminar(null)}
+        titulo={`Eliminar ${eliminar?.nombreFantasia ?? eliminar?.razonSocial ?? "cliente"}`}
+        descripcion="Se elimina el cliente y sus obras. Solo se puede si todavía no tiene ventas, acopios ni cuenta corriente."
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          if (!eliminar) return;
+          const c = eliminar;
+          const r = await medir("eliminarCliente", { clienteId: c.id }, () => useStore.getState().eliminarCliente(c.id));
+          if (!r.ok) {
+            toast.error(r.error);
+            return false;
+          }
+          toast.success(`Cliente ${c.razonSocial} eliminado`);
+          setEliminar(null);
+        }}
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-muted">Queda registrado en la auditoría.</p>
+          <Impacto accion="eliminarCliente" />
+        </div>
+      </ConfirmDialog>
       <NuevoClienteDialog open={nuevo} onOpenChange={setNuevo} onCreado={(id) => router.push(`/clientes/${id}`)} />
     </>
   );

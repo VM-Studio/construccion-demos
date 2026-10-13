@@ -12,5 +12,6 @@ const obraInput = z.object({
 });
 
 export const guardarCliente = z.tuple([clienteInput, id.optional()]);
+export const eliminarCliente = z.tuple([id]);
 export const guardarObra = z.tuple([obraInput, id.optional()]);
 export const importarClientes = z.tuple([lista(z.object({ cliente: clienteInput, obras: lista(texto, 200) }), MAX_FILAS_IMPORTACION)]);

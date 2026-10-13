@@ -34,5 +34,7 @@ const saldoInicialInput = z.object({
 
 export const registrarCobranza = z.tuple([cobranzaInput]);
 export const registrarPagoProveedor = z.tuple([pagoInput]);
+export const anularCobranza = z.tuple([id, texto]);
+export const anularPagoProveedor = z.tuple([id, texto]);
 export const cargarSaldoInicial = z.tuple([saldoInicialInput]);
 export const cambiarEstadoCheque = z.tuple([id, estadoCheque]);

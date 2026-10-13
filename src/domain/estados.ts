@@ -108,12 +108,23 @@ export const FORMA_PAGO_LABEL: Record<string, string> = { CONTADO: "Contado", CU
 export const ORIGEN_LABEL: Record<string, string> = { NUEVA: "Nueva", ACOPIO: "Acopio" };
 
 export const TIPO_CLIENTE_LABEL: Record<string, string> = {
-  CORRALON: "Corralón",
+  MAYORISTA: "Mayorista",
   FERRETERIA: "Ferretería",
+  CORRALON: "Corralón",
+  MELI: "MELI",
+  MADERERA: "Madereras",
+  // Solo para mostrar clientes cargados antes; ya no se ofrecen.
   CONSTRUCTORA: "Constructora",
   PARTICULAR: "Particular",
   ARQUITECTO: "Arquitecto",
 };
+
+/** Tipos que se ofrecen al cargar o filtrar clientes. */
+export const TIPOS_CLIENTE_VIGENTES = ["MAYORISTA", "FERRETERIA", "CORRALON", "MELI", "MADERERA"] as const;
+
+/** Opciones de tipo de cliente; `actual` suma un tipo anterior para no perderlo al editar. */
+export const opcionesTipoCliente = (actual?: string) =>
+  [...TIPOS_CLIENTE_VIGENTES, ...(actual && !(TIPOS_CLIENTE_VIGENTES as readonly string[]).includes(actual) ? [actual] : [])].map((value) => ({ value, label: TIPO_CLIENTE_LABEL[value] ?? value }));
 
 export const CONDICION_PAGO_LABEL: Record<string, string> = {
   CONTADO: "Contado",

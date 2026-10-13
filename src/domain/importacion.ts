@@ -484,7 +484,7 @@ export function validarFilaCliente(f: FilaSistema, db: DbImportacion, ctx: Conte
     condicionIVA = parsearCondicionIVA(f.condicion_iva);
     if (!condicionIVA) errores.push(`Condición de IVA desconocida: "${f.condicion_iva}".`);
   }
-  const cuit = validarCodigoYCuit(f, db.clientes, ctx, errores, condicionIVA !== "CF");
+  const cuit = validarCodigoYCuit(f, db.clientes, ctx, errores, false);
 
   let tipo: TipoCliente | null = condicionIVA === "CF" ? "PARTICULAR" : "CONSTRUCTORA";
   if (f.tipo) {

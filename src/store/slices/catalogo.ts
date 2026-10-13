@@ -269,7 +269,8 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "clientes.editar");
         if (!data.razonSocial.trim()) throw new ErrorNegocio("La razón social es obligatoria.");
-        if (data.condicionIVA !== "CF" || data.cuit) {
+        // CUIT/CUIL opcional (clientes sin factura); si se carga, tiene que ser válido.
+        if (data.cuit?.trim()) {
           const err = validarCUIT(data.cuit);
           if (err) throw new ErrorNegocio(err);
         }

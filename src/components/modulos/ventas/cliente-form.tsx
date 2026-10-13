@@ -81,7 +81,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
     e.preventDefault();
     const er: Record<string, string> = {};
     if (!f.razonSocial.trim()) er.razonSocial = "Ingresá la razón social o el nombre.";
-    if (f.condicionIVA !== "CF" || f.cuit.trim()) {
+    if (f.cuit.trim()) {
       const c = validarCUIT(f.cuit);
       if (c) er.cuit = c;
     }
@@ -101,7 +101,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <CuitPadron entidad="cliente" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={cliente?.id} disabled={ro} required={f.condicionIVA !== "CF"} error={err.cuit} autoFocus={!cliente} />
+        <CuitPadron entidad="cliente" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={cliente?.id} disabled={ro} error={err.cuit} autoFocus={!cliente} />
         <FormField label="Razón social / nombre" required error={err.razonSocial} htmlFor="cl-rs" className="sm:col-span-2">
           <Input id="cl-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} />
         </FormField>

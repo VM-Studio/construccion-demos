@@ -173,11 +173,11 @@ export function parsearCondicionPago(v: string): CondicionPago | null {
 export function parsearTipoCliente(v: string): TipoCliente | null {
   const k = normalizarClave(v);
   if (!k) return null;
-  if (k.startsWith("constructor") || k.includes("empresa")) return "CONSTRUCTORA";
+  if (k.startsWith("mayorist")) return "MAYORISTA";
   if (k.startsWith("corralon")) return "CORRALON";
   if (k.startsWith("ferreter")) return "FERRETERIA";
-  if (k.startsWith("particular") || k === "consumidor_final" || k === "persona") return "PARTICULAR";
-  if (k.startsWith("arquitect") || k.startsWith("estudio") || k.startsWith("ingenier")) return "ARQUITECTO";
+  if (k === "meli" || k.startsWith("mercado_libre") || k.startsWith("mercadolibre")) return "MELI";
+  if (k.startsWith("maderer")) return "MADERERA";
   return null;
 }
 
@@ -486,7 +486,7 @@ export function validarFilaCliente(f: FilaSistema, db: DbImportacion, ctx: Conte
   }
   const cuit = validarCodigoYCuit(f, db.clientes, ctx, errores, false);
 
-  let tipo: TipoCliente | null = condicionIVA === "CF" ? "PARTICULAR" : "CONSTRUCTORA";
+  let tipo: TipoCliente | null = "MAYORISTA";
   if (f.tipo) {
     tipo = parsearTipoCliente(f.tipo);
     if (!tipo) errores.push(`Tipo de cliente desconocido: "${f.tipo}".`);

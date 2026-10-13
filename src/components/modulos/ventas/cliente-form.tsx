@@ -9,7 +9,7 @@ import type { Cliente, CondicionIVA, CondicionPago, TipoCliente } from "@/domain
 import { validarCUIT, formatearCUIT } from "@/domain/cuit";
 import { completarDesdePadron, type DatosPadron } from "@/domain/padron";
 import { CuitPadron } from "@/components/shared/cuit-padron";
-import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, TIPO_CLIENTE_LABEL, opciones } from "@/domain/estados";
+import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, opcionesTipoCliente, opciones } from "@/domain/estados";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, NumberInput, Textarea } from "@/components/ui/input";
@@ -26,7 +26,7 @@ function vacio(sucursalId: string, vendedorId?: string): Form {
     codigo: "",
     razonSocial: "",
     nombreFantasia: "",
-    tipo: "PARTICULAR",
+    tipo: "MAYORISTA",
     cuit: "",
     condicionIVA: "CF",
     circuitoHabitual: 2,
@@ -66,15 +66,8 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
   const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" ? "lst_may" : t === "PARTICULAR" ? "lst_pub" : t === "ARQUITECTO" ? "lst_gen" : "lst_may");
   const aplicarPadron = React.useCallback(
     (d: DatosPadron, reemplazar: boolean) =>
-      setF((x) => {
-        const n: Form = { ...x, ...completarDesdePadron(x, d, { reemplazar, tocados: tocados.current }) };
-        if (reemplazar || !tocados.current.has("tipo")) {
-          n.tipo = d.tipoPersona === "FISICA" ? "PARTICULAR" : "CONSTRUCTORA";
-          if (!cliente && !tocados.current.has("listaPreciosId")) n.listaPreciosId = listaPorTipo(n.tipo);
-        }
-        return n;
-      }),
-    [cliente],
+      setF((x) => ({ ...x, ...completarDesdePadron(x, d, { reemplazar, tocados: tocados.current }) })),
+    [],
   );
 
   const submit = async (e: React.FormEvent) => {
@@ -117,7 +110,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
               set("tipo", t);
               if (!cliente && !tocados.current.has("listaPreciosId")) setF((x) => ({ ...x, listaPreciosId: listaPorTipo(t) }));
             }}
-            options={opciones(TIPO_CLIENTE_LABEL)}
+            options={opcionesTipoCliente(cliente?.tipo)}
           />
         </FormField>
         <FormField label="Condición IVA">

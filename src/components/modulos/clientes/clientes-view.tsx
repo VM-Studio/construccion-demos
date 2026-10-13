@@ -3,7 +3,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Plus, Upload, Users } from "lucide-react";
 import { useDb, usePendientes, usePuede, useSaldosClientes, useAcopiosResumen, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
-import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opciones } from "@/domain/estados";
+import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opcionesTipoCliente } from "@/domain/estados";
 import type { Cliente } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -160,7 +160,7 @@ export function ClientesView() {
         }
         filters={
           <>
-            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opciones(TIPO_CLIENTE_LABEL)]} /></div>
+            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opcionesTipoCliente()]} /></div>
             <div className="w-[150px]"><Select size="sm" aria-label="Circuito" value={circuito} onValueChange={setCircuito} options={[{ value: "", label: "Ambos circuitos" }, { value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /></div>
             <div className="w-[160px]"><Select size="sm" aria-label="Vendedor" value={vendedor} onValueChange={setVendedor} options={[{ value: "", label: "Todos los vendedores" }, ...db.usuarios.filter((u) => u.rol === "VENTAS").map((u) => ({ value: u.id, label: u.nombre }))]} /></div>
             {check("Con acopio vigente", conAcopio, setConAcopio)}

@@ -132,6 +132,9 @@ enum TipoCliente {
   FERRETERIA
   PARTICULAR
   ARQUITECTO
+  MAYORISTA
+  MELI
+  MADERERA
 }
 
 enum TipoProveedor {

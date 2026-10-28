@@ -31,6 +31,7 @@ import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { cn } from "@/lib/utils";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
 import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
+import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Producto, "id" | "creadoEn" | "actualizadoEn">;
 
@@ -279,9 +280,10 @@ function TabGeneral({
       else onSaved(r.data);
     } else toast.error(r.error);
   };
+  const [enviar, guardando] = useEnvio(submit);
   const guardarYDuplicar = () => {
     dupRef.current = true;
-    void submit();
+    void enviar();
   };
   // Atajo: Ctrl/Cmd + Shift + Enter = "Guardar y duplicar".
   const alTeclear = (e: React.KeyboardEvent) => {
@@ -293,7 +295,7 @@ function TabGeneral({
 
   const ro = !puedeEditar;
   return (
-    <form onSubmit={submit} onKeyDown={alTeclear} className="space-y-4">
+    <form onSubmit={enviar} onKeyDown={alTeclear} className="space-y-4">
       {origen && (
         <div className="rounded-control border border-border bg-subtle px-3 py-2 text-[13px]">
           Duplicando desde{" "}
@@ -495,11 +497,11 @@ function TabGeneral({
       {!ro && (
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
           {!producto && onGuardarYDuplicar && (
-            <Button type="button" variant="secondary" onClick={guardarYDuplicar} title="Ctrl/Cmd + Shift + Enter">
+            <Button type="button" variant="secondary" onClick={guardarYDuplicar} disabled={guardando} title="Ctrl/Cmd + Shift + Enter">
               <Copy /> Guardar y duplicar
             </Button>
           )}
-          <Button type="submit">
+          <Button type="submit" loading={guardando}>
             <Save />
             {producto ? "Guardar cambios" : origen ? "Crear artículo" : "Crear producto"}
           </Button>

@@ -3,8 +3,8 @@
  * Proveedor de datos del layout autenticado:
  * - Arranca con lo que mandó el servidor en el primer render (sin parpadeo).
  * - Cada colección es una clave SWR ["datos", coleccion] contra /api/datos.
- * - useSincronizacion(): consulta /api/cambios cada 3 s con la pestaña visible (15 s en segundo
- *   plano, al instante al volver el foco) y vuelve a pedir SOLO las colecciones afectadas.
+ * - useSincronizacion(): consulta /api/cambios cada 2 s con la pestaña visible (15 s en segundo
+ *   plano, al instante al volver el foco) y aplica SOLO las filas que cambiaron (delta).
  *   Si el cambio lo hizo otro usuario, muestra un aviso discreto (como mucho uno cada 5 s).
  */
 import * as React from "react";
@@ -18,6 +18,7 @@ import type { EstadoInicial } from "@/domain/types";
 import { establecerDatos, obtenerDb } from "./almacen";
 import { useStore } from "@/store";
 import { coleccionesDe } from "@/lib/sincronizacion/dependencias";
+import { coleccionesDelDelta, fusionar, type Delta } from "@/lib/sincronizacion/delta";
 
 export interface DatosIniciales {
   version: string;
@@ -60,15 +61,34 @@ export async function refrescarColecciones(cols: string[]) {
   if (mutadorGlobal) for (const k of pedidas) void mutadorGlobal(["datos", k], datos[k], { revalidate: false });
 }
 
-/** Aplica colecciones que ya vinieron del servidor (en la respuesta de /api/cambios). */
-function aplicarDatos(datos: Record<string, unknown>) {
-  const cols = Object.keys(datos).filter((c) => ES_COLECCION.has(c));
-  establecerDatos(datos as Partial<EstadoInicial>);
-  if (mutadorGlobal) for (const k of cols) void mutadorGlobal(["datos", k], datos[k], { revalidate: false });
+/** Aplica las filas que cambiaron (respuesta de una acción o de /api/cambios) sobre lo que ya hay. */
+function aplicarDelta(d: Delta) {
+  const actual = obtenerDb() as unknown as Record<string, unknown>;
+  const parcial: Record<string, unknown> = {};
+  for (const c of coleccionesDelDelta(d)) {
+    if (!ES_COLECCION.has(c)) continue;
+    parcial[c] = c in d.completas ? d.completas[c] : fusionar((actual[c] ?? []) as { id: string }[], d.filas[c], d.bajas[c]);
+  }
+  establecerDatos(parcial as Partial<EstadoInicial>);
+  if (mutadorGlobal) for (const [k, v] of Object.entries(parcial)) void mutadorGlobal(["datos", k], v, { revalidate: false });
 }
 
-/** Después de una acción propia: refresca lo que cambió sin esperar al polling. */
-export async function aplicarResultadoPropio(tipos: string[]) {
+/** Revalida en segundo plano lo que no viaja en el delta (kardex, auditoría, tipo de cambio). */
+function revalidarDerivadas(tipos: string[]) {
+  if (!mutadorGlobal) return;
+  for (const k of coleccionesDe(tipos)) if (!ES_COLECCION.has(k)) void mutadorGlobal((key) => Array.isArray(key) && key[0] === k);
+}
+
+/**
+ * Después de una acción propia: aplica el delta que vino en la respuesta (sin otro viaje al
+ * servidor). Si no vino (acciones que no pasan por el motor), vuelve a pedir lo afectado.
+ */
+export async function aplicarResultadoPropio(tipos: string[], delta?: Delta) {
+  if (delta) {
+    aplicarDelta(delta);
+    revalidarDerivadas(tipos);
+    return;
+  }
   await refrescarColecciones(coleccionesDe(tipos));
 }
 
@@ -132,23 +152,22 @@ function useSincronizacion(actorId: string) {
       if (enCurso) return;
       enCurso = true;
       try {
-        const r = await fetch(`/api/cambios?desde=${ultimoCambio}&datos=1`, { cache: "no-store" });
+        const r = await fetch(`/api/cambios?desde=${ultimoCambio}&delta=1`, { cache: "no-store" });
         if (r.status === 401) {
           window.location.href = "/login";
           return;
         }
         if (r.ok) {
-          const { ultimo, cambios, datos } = (await r.json()) as { ultimo: string; cambios: CambioRemoto[]; datos?: Record<string, unknown> };
+          const { ultimo, cambios, delta } = (await r.json()) as { ultimo: string; cambios: CambioRemoto[]; delta?: Delta };
           const primera = ultimoCambio === "0";
           ultimoCambio = ultimo;
           if (!primera && cambios.length) {
-            const cols = coleccionesDe(cambios.flatMap((c) => c.tipos));
-            if (datos) {
-              aplicarDatos(datos);
-              // Lo que no viaja en la respuesta (kardex, auditoría, claves derivadas) se revalida aparte.
-              const faltan = cols.filter((c) => !(c in datos));
-              if (faltan.length) await refrescarColecciones(faltan);
-            } else await refrescarColecciones(cols);
+            const tipos = cambios.flatMap((c) => c.tipos);
+            if (delta) {
+              // Solo las filas que cambiaron; lo que no viaja (kardex, auditoría) se revalida aparte.
+              aplicarDelta(delta);
+              revalidarDerivadas(tipos);
+            } else await refrescarColecciones(coleccionesDe(tipos));
             const ajenos = cambios.filter((c) => c.usuarioId && c.usuarioId !== actorId && merecenAviso(c));
             if (ajenos.length) pendientesAviso.current.push(...ajenos);
           }

@@ -35,7 +35,9 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers: HEADERS_SEGURIDAD }];
   },
   // Importaciones CSV grandes viajan en una server action.
-  experimental: { serverActions: { bodySizeLimit: "10mb" } },
+  // staleTimes: las páginas no traen datos del servidor (viven en el navegador y se sincronizan
+  // solas), así que volver a una ya visitada no necesita otro viaje: es instantáneo.
+  experimental: { serverActions: { bodySizeLimit: "10mb" }, staleTimes: { dynamic: 300, static: 300 } },
   // El adapter de Neon usa WebSocket nativo de Node (ws) en el servidor.
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-neon", "@neondatabase/serverless", "ws"],
   async redirects() {

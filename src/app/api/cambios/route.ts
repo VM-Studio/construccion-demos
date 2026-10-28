@@ -5,7 +5,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db";
 import { obtenerActorLigero } from "@/server/auth/actor";
-import { COLECCIONES_CLIENTE, estadoPara, seleccionar, type ColeccionCliente } from "@/server/lectura";
+import { COLECCIONES_CLIENTE, deltaPara, estadoPara, seleccionar, type ColeccionCliente } from "@/server/lectura";
+import type { Delta } from "@/lib/sincronizacion/delta";
 import { coleccionesDe } from "@/lib/sincronizacion/dependencias";
 import type { Usuario } from "@/domain/types";
 
@@ -26,15 +27,36 @@ export async function GET(req: Request) {
     LEFT JOIN LATERAL (SELECT * FROM "Cambio" WHERE "id" > ${desde} ORDER BY "id" LIMIT 200) c ON true`;
   const ultimo = String(filas[0]?.m ?? 0);
   const cambios = filas.filter((f) => f.id !== null).map((f) => ({ id: String(f.id), tipos: f.tipos ?? [], entidadIds: f.entidadIds ?? [], usuarioId: f.usuarioId, resumen: f.resumen, href: f.href }));
-  // Con ?datos=1 y cambios nuevos, se mandan en la misma respuesta las colecciones afectadas (ya
-  // filtradas por rol): el navegador se actualiza en un solo viaje en lugar de dos.
+  const params = new URL(req.url).searchParams;
+  // Con ?delta=1 y cambios nuevos, en la misma respuesta van SOLO las filas que cambiaron (ya
+  // filtradas por rol). Si un cambio no trae la lista completa de ids (más de 100 filas), esa
+  // colección viaja entera. ?datos=1 (navegadores con la versión anterior) manda colecciones enteras.
   let datos: Record<string, unknown> | undefined;
-  if (desde > BigInt(0) && cambios.length && new URL(req.url).searchParams.get("datos") === "1") {
+  let delta: Delta | undefined;
+  if (desde > BigInt(0) && cambios.length && params.get("delta") === "1") {
+    const ids = new Map<string, Set<string> | "todas">();
+    for (const c of cambios) {
+      const sinIds = !c.entidadIds.length || c.entidadIds.length >= 100;
+      for (const col of coleccionesDe(c.tipos)) {
+        if (!DEL_CLIENTE.has(col) || col === "config" || col === "numeradores") continue;
+        const previo = ids.get(col);
+        if (previo === "todas") continue;
+        if (sinIds) ids.set(col, "todas");
+        else {
+          const set = previo ?? new Set<string>();
+          for (const id of c.entidadIds) set.add(id);
+          ids.set(col, set);
+        }
+      }
+    }
+    const tipos = new Set(cambios.flatMap((c) => c.tipos));
+    delta = await deltaPara(actor as Usuario, ids, tipos.has("Configuracion"), tipos.has("Contador"));
+  } else if (desde > BigInt(0) && cambios.length && params.get("datos") === "1") {
     const cols = coleccionesDe(cambios.flatMap((c) => c.tipos)).filter((c) => DEL_CLIENTE.has(c)) as ColeccionCliente[];
     if (cols.length) datos = seleccionar((await estadoPara(actor as Usuario)).db, cols);
   }
   return NextResponse.json(
-    { ultimo, cambios, ...(datos ? { datos } : {}) },
+    { ultimo, cambios: cambios.map((c) => ({ id: c.id, tipos: c.tipos, usuarioId: c.usuarioId, resumen: c.resumen, href: c.href })), ...(datos ? { datos } : {}), ...(delta ? { delta } : {}) },
     { headers: { "Cache-Control": "no-store", "Server-Timing": `db;dur=${(performance.now() - t0).toFixed(1)}` } },
   );
 }

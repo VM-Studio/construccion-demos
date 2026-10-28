@@ -55,7 +55,8 @@ export interface Contexto {
   userAgent?: string;
 }
 
-export type ResultadoServidor<T = unknown> = { ok: true; data: T; efectos: Diferencia[]; tipos: string[] } | { ok: false; error: string; codigo?: string };
+/** `cambiados`: ids de las filas escritas, por colección (para mandarle al navegador solo eso). */
+export type ResultadoServidor<T = unknown> = { ok: true; data: T; efectos: Diferencia[]; tipos: string[]; cambiados?: Record<string, string[]> } | { ok: false; error: string; codigo?: string };
 
 class ConflictoVersion extends Error {}
 
@@ -214,7 +215,9 @@ export async function ejecutarAccion<N extends NombreAccion>(
               href: principal ? (hrefEntidad(principal.entidad, principal.entidadId) ?? null) : null,
             },
           });
-          return { sinCambios: false as const, idCambio: cambio.id, tipos, final, p };
+          const cambiados: Record<string, string[]> = {};
+          for (const c of cambios) if (c.coleccion !== "auditoria" && c.coleccion !== "movimientos") (cambiados[c.coleccion] ??= []).push(c.id);
+          return { sinCambios: false as const, idCambio: cambio.id, tipos, cambiados, final, p };
         },
         // Read Committed a propósito: el lock global ya serializa a todos los que escriben y, a
         // diferencia de Serializable (cuya foto se toma en la primera consulta, mientras se espera
@@ -227,7 +230,7 @@ export async function ejecutarAccion<N extends NombreAccion>(
         return { ok: true, data: r.data, efectos: [], tipos: [] };
       }
       actualizarCache(res.idCambio, res.final);
-      return { ok: true, data: res.p.r.data, efectos: res.p.efectos, tipos: res.tipos };
+      return { ok: true, data: res.p.r.data, efectos: res.p.efectos, tipos: res.tipos, cambiados: res.cambiados };
     } catch (e) {
       if (esReintentable(e) && intento < BACKOFF.length) {
         await espera(BACKOFF[intento]);

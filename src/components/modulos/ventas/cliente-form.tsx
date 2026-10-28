@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
 
@@ -90,9 +91,10 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
       onSaved(r.data);
     } else toast.error(r.error);
   };
+  const [enviar, guardando] = useEnvio(submit);
   const ro = !puede;
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <CuitPadron entidad="cliente" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={cliente?.id} disabled={ro} error={err.cuit} autoFocus={!cliente} />
         <FormField label="Razón social / nombre" required error={err.razonSocial} htmlFor="cl-rs" className="sm:col-span-2">
@@ -176,7 +178,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
       )}
       {!ro && (
         <div className="flex justify-end border-t border-border pt-4">
-          <Button type="submit"><Save /> {cliente ? "Guardar cambios" : "Crear cliente"}</Button>
+          <Button type="submit" loading={guardando}><Save /> {cliente ? "Guardar cambios" : "Crear cliente"}</Button>
         </div>
       )}
       {!ro && !cliente && <Impacto accion="crearCliente" />}

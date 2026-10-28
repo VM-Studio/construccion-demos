@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
 const VACIO: Form = { codigo: "", razonSocial: "", tipo: "FABRICANTE", cuit: "", condicionIVA: "RI", circuitoHabitual: 1, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 5, condicionPago: "CTA_CTE_30", unidadNegocioIds: ["un_cor"], activo: true, notas: "" };
@@ -59,9 +60,10 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
       onSaved(r.data);
     } else toast.error(r.error);
   };
+  const [enviar, guardando] = useEnvio(submit);
   const ro = !puede;
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={enviar} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <CuitPadron entidad="proveedor" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={proveedor?.id} disabled={ro} required error={err.cuit} autoFocus={!proveedor} />
         <FormField label="Razón social" required error={err.razonSocial} htmlFor="pv-rs" className="sm:col-span-2">
@@ -122,7 +124,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
       </label>
       {!ro && (
         <div className="flex justify-end border-t border-border pt-4">
-          <Button type="submit"><Save /> {proveedor ? "Guardar cambios" : "Crear proveedor"}</Button>
+          <Button type="submit" loading={guardando}><Save /> {proveedor ? "Guardar cambios" : "Crear proveedor"}</Button>
         </div>
       )}
       {!ro && !proveedor && <Impacto accion="crearProveedor" />}

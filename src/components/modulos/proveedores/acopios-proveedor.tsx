@@ -261,7 +261,7 @@ export function AcopioProveedorNuevo() {
                   {tcHoy ? `Al dólar de hoy (${formatMoney(tcHoy)}, ${formatDate(tc?.fecha ? `${tc.fecha}T12:00:00` : undefined)}). El acopio queda en pesos con el tipo de cambio del alta.` : "Sin tipo de cambio disponible: revisalo en Configuración → Parámetros."}
                 </p>
               )}
-              <Button className="w-full" disabled={!proveedorId || !(total > 0)} onClick={() => void crear()}><Factory /> Crear acopio con proveedor</Button>
+              <Button className="w-full" disabled={!proveedorId || !(total > 0)} onClick={() => crear()}><Factory /> Crear acopio con proveedor</Button>
               <Impacto accion="crearAcopioProveedor" />
             </CardContent>
           </Card>

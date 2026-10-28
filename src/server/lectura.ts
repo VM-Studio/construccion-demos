@@ -10,6 +10,7 @@ import { puede } from "@/domain/permisos";
 import type { EstadoInicial, Usuario } from "@/domain/types";
 import { obtenerEstado } from "./estado";
 import { vencimientoCertificado } from "./arca/config";
+import type { Delta } from "@/lib/sincronizacion/delta";
 
 type Coleccion = Exclude<keyof EstadoInicial, "config" | "numeradores">;
 
@@ -96,4 +97,37 @@ export async function estadoPara(actor: Usuario): Promise<{ version: bigint; db:
 
 export function seleccionar(db: EstadoInicial, colecciones: ColeccionCliente[]) {
   return Object.fromEntries(colecciones.map((c) => [c, db[c]]));
+}
+
+const DEL_CLIENTE = new Set<string>(COLECCIONES_CLIENTE);
+
+/**
+ * Delta para el actor sobre su vista ya filtrada: por cada colección, las filas de `ids` que ve
+ * (altas y cambios) y las que no (bajas, o que su rol no puede ver). `"todas"` manda la colección
+ * entera (cambios masivos cuya lista de ids no viaja completa).
+ */
+export async function deltaPara(actor: Usuario, ids: Map<string, Set<string> | "todas">, config = false, numeradores = false): Promise<Delta> {
+  const { version, db } = await estadoPara(actor);
+  const delta: Delta = { version: String(version), filas: {}, bajas: {}, completas: {} };
+  for (const [col, sel] of ids) {
+    if (!DEL_CLIENTE.has(col)) continue;
+    const vista = db[col as (typeof COLECCIONES_CLIENTE)[number]] as { id: string }[];
+    if (sel === "todas") {
+      delta.completas[col] = vista;
+      continue;
+    }
+    const porId = new Map(vista.map((x) => [x.id, x]));
+    const filas: { id: string }[] = [];
+    const bajas: string[] = [];
+    for (const id of sel) {
+      const x = porId.get(id);
+      if (x) filas.push(x);
+      else bajas.push(id);
+    }
+    if (filas.length) delta.filas[col] = filas;
+    if (bajas.length) delta.bajas[col] = bajas;
+  }
+  if (config) delta.completas.config = db.config;
+  if (numeradores) delta.completas.numeradores = db.numeradores;
+  return delta;
 }

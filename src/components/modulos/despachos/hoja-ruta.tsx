@@ -123,8 +123,8 @@ export function HojaRutaView() {
                         {puede && d.estado === "EN_VIAJE" && <Button size="sm" variant="secondary" onClick={() => entregar(d)}><CheckCircle2 /> Entregado</Button>}
                         {puede && h?.estado === "PLANIFICADA" && (
                           <span className={cn("flex")}>
-                            <Button size="icon-sm" variant="ghost" aria-label="Subir" onClick={() => void medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, -1))}><ArrowUp /></Button>
-                            <Button size="icon-sm" variant="ghost" aria-label="Bajar" onClick={() => void medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, 1))}><ArrowDown /></Button>
+                            <Button size="icon-sm" variant="ghost" aria-label="Subir" onClick={() => medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, -1))}><ArrowUp /></Button>
+                            <Button size="icon-sm" variant="ghost" aria-label="Bajar" onClick={() => medir("armarHojaRuta", {}, () => useStore.getState().moverEnHojaRuta(h.id, d.id, 1))}><ArrowDown /></Button>
                             <Button size="icon-sm" variant="ghost" aria-label="Quitar" onClick={async () => run(await medir("armarHojaRuta", {}, () => useStore.getState().quitarDeHojaRuta(d.id)))}><X /></Button>
                           </span>
                         )}

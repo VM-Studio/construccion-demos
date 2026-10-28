@@ -26,23 +26,54 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean;
 }
 
+/**
+ * Si `onClick` devuelve una promesa (una acción que guarda), el botón queda deshabilitado y con
+ * el indicador de carga hasta que termina: un segundo clic no puede duplicar la carga.
+ */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", loading, disabled, children, type = "button", ...props }, ref) => (
-    <button
-      ref={ref}
-      type={type}
-      disabled={disabled || loading}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-control font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
-        variants[variant],
-        sizes[size],
-        className,
-      )}
-      {...props}
-    >
-      {loading && <Loader2 className="animate-spin" />}
-      {children}
-    </button>
-  ),
+  ({ className, variant = "primary", size = "md", loading, disabled, children, type = "button", onClick, ...props }, ref) => {
+    const [enCurso, setEnCurso] = React.useState(false);
+    const ocupado = React.useRef(false);
+    const montado = React.useRef(true);
+    React.useEffect(() => {
+      montado.current = true;
+      return () => void (montado.current = false);
+    }, []);
+    const alClic = (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (ocupado.current) {
+        e.preventDefault();
+        return;
+      }
+      const r = onClick?.(e) as unknown;
+      if (r && typeof (r as Promise<unknown>).then === "function") {
+        ocupado.current = true;
+        setEnCurso(true);
+        void (r as Promise<unknown>).finally(() => {
+          ocupado.current = false;
+          if (montado.current) setEnCurso(false);
+        });
+      }
+    };
+    const cargando = loading || enCurso;
+    return (
+      <button
+        ref={ref}
+        type={type}
+        disabled={disabled || cargando}
+        aria-busy={cargando || undefined}
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-control font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+          variants[variant],
+          sizes[size],
+          className,
+        )}
+        onClick={alClic}
+        {...props}
+      >
+        {cargando && <Loader2 className="animate-spin" />}
+        {children}
+      </button>
+    );
+  },
 );
 Button.displayName = "Button";

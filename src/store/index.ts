@@ -47,17 +47,39 @@ type SetUI = (p: Partial<EstadoInterfaz> | ((s: EstadoInterfaz) => Partial<Estad
 type ResultadoDe<N extends NombreExpuesto> = ReturnType<AccionesNegocio[N]> extends { ok: true; data: infer D } | { ok: false } ? RespuestaAccion<D> : RespuestaAccion;
 export type AccionesCliente = { [N in NombreExpuesto]: (...args: Parameters<AccionesNegocio[N]>) => Promise<ResultadoDe<N>> };
 
-/** Llama a la server action y, si salió bien, refresca lo que cambió antes de devolver. */
-async function llamar(nombre: NombreExpuesto, args: unknown[]): Promise<RespuestaAccion> {
+/** Llama a la server action y, si salió bien, aplica lo que cambió antes de devolver. */
+async function ejecutarRemota(nombre: NombreExpuesto, args: unknown[]): Promise<RespuestaAccion> {
   const fn = (ACCIONES_SERVIDOR as unknown as Record<string, (...a: unknown[]) => Promise<RespuestaAccion>>)[nombre];
   try {
     const r = await fn(...args);
-    if (r.ok) await aplicarResultadoPropio(r.tipos).catch(() => undefined);
+    if (r.ok) await aplicarResultadoPropio(r.tipos, r.delta).catch(() => undefined);
     return r;
   } catch (e) {
     console.error(e);
     return { ok: false, error: "No hay conexión con el servidor. Revisá internet y probá de nuevo.", codigo: "RED" };
   }
+}
+
+/**
+ * Anti doble clic: la misma acción con los mismos datos, mientras la primera está en curso o en
+ * los 2 s siguientes, devuelve el mismo resultado en lugar de volver a guardar.
+ */
+const enVuelo = new Map<string, Promise<RespuestaAccion>>();
+const REPETIDA_MS = 2000;
+
+function llamar(nombre: NombreExpuesto, args: unknown[]): Promise<RespuestaAccion> {
+  let clave: string;
+  try {
+    clave = `${nombre}:${JSON.stringify(args)}`;
+  } catch {
+    return ejecutarRemota(nombre, args);
+  }
+  const previa = enVuelo.get(clave);
+  if (previa) return previa;
+  const p = ejecutarRemota(nombre, args);
+  enVuelo.set(clave, p);
+  void p.then((r) => setTimeout(() => enVuelo.get(clave) === p && enVuelo.delete(clave), r.ok ? REPETIDA_MS : 0));
+  return p;
 }
 
 const accionesNegocio = Object.fromEntries(NOMBRES_EXPUESTOS.map((n) => [n, (...args: unknown[]) => llamar(n, args)])) as unknown as AccionesCliente;

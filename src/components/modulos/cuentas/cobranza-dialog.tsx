@@ -2,14 +2,14 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertTriangle, History, Plus, Printer, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, History, Printer, Wand2 } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePuede, useVeCircuito2 } from "@/store/selectors";
 import { prerequisitos } from "@/domain/prerequisitos";
-import type { Circuito, MedioCobro, MedioPago } from "@/domain/types";
+import type { Circuito } from "@/domain/types";
 import { CIRCUITO_LABEL } from "@/domain/estados";
 import { imputarAutomaticamente, diasAtraso } from "@/domain/cuentasCorrientes";
-import { MEDIO_PAGO_LABEL, TIPO_COMPROBANTE_LABEL, opciones } from "@/domain/estados";
+import { TIPO_COMPROBANTE_LABEL } from "@/domain/estados";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, NumberInput } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import { SaldoInicialDialog } from "./saldo-inicial-dialog";
 import { PrintPreview } from "@/components/shared/print-layout";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
-import { cn, newId } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { medir } from "@/capacitacion";
 import { ReciboDocumento } from "./documentos";
 import { MediosEditor, mediosParaEnviar, nuevoMedio, pesosDe, type FilaMedio } from "@/components/shared/medios-editor";
@@ -92,7 +92,6 @@ export function CobranzaDialog({
   const imputado = Math.round(Object.values(imput).reduce((a, v) => a + (v || 0), 0) * 100) / 100;
   const aFavor = Math.round((total - imputado) * 100) / 100;
   const excedeSaldo = pendientes.some((c) => (imput[c.id] ?? 0) > c.saldoPendiente + 0.01);
-  const upMedio = (id: string, patch: Partial<FilaMedio>) => setMedios((ms) => ms.map((m) => (m._id === id ? { ...m, ...patch } : m)));
   const cliente = db.clientes.find((c) => c.id === clienteId);
 
   /** Picar una factura: se imputa su saldo y, si no se cargó importe, el cobro sugiere ese total. */

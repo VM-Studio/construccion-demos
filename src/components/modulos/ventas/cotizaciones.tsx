@@ -17,7 +17,7 @@ import type { Circuito, CondicionIVA, Cotizacion, EstadoInicial, ItemVenta, Mone
 import { precioLista } from "@/domain/precios";
 import { calcularTotales } from "@/domain/ventas";
 import { puede } from "@/domain/permisos";
-import { barrasPorTonelada, BARRAS_POR_TONELADA, diametroDe, esBarraDeHierro } from "@/domain/unidades";
+import { barrasPorTonelada, baseDesdeBarras, BARRAS_POR_TONELADA, diametroDe, esBarraDeHierro } from "@/domain/unidades";
 import { CONDICION_IVA_LABEL, nombreTipoCliente, opciones, opcionesTipoCliente } from "@/domain/estados";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -388,9 +388,11 @@ function CotizacionDialog({ cot, rapida: rapidaInicial, clienteInicial, onClose,
     setItems((its) => {
       const out = [...its];
       for (const l of lineas) {
+        const p = obtenerDb().productos.find((x) => x.id === l.productoId);
+        const b = p ? baseDesdeBarras(l.barras, p) : { cantidad: l.barras };
         const ex = out.find((i) => i.productoId === l.productoId);
-        if (ex) ex.cantidad = l.barras;
-        else out.push({ id: newId("l"), productoId: l.productoId, obraId: obraId || undefined, cantidad: l.barras, precio: precioDe(l.productoId), descuentoPct: 0 });
+        if (ex) Object.assign(ex, b);
+        else out.push({ id: newId("l"), productoId: l.productoId, obraId: obraId || undefined, ...b, precio: precioDe(l.productoId), descuentoPct: 0 });
       }
       return out.map((x) => ({ ...x }));
     });
@@ -723,7 +725,7 @@ export function AceptarCotizacionDialog({ cot, onClose }: { cot: Cotizacion; onC
           </div>
           {puedeFacturar && (
             <label className="flex items-center gap-2 text-[13px]">
-              <Switch checked={facturar} onCheckedChange={(v) => { setFacturar(v); if (!v) setCobrar(false); }} /> Emitir {circuito === 1 ? "factura" : "comprobante interno"} ahora
+              <Switch checked={facturar} onCheckedChange={(v) => { setFacturar(v); setCobrar(v && puedeCobrar && formaPago === "CONTADO"); }} /> Emitir {circuito === 1 ? "factura" : "comprobante interno"} ahora
             </label>
           )}
           {puedeCobrar && facturar && (

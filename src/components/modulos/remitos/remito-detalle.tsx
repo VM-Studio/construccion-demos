@@ -64,7 +64,6 @@ export function RemitoDetalle({ id }: { id: string }) {
   const devoluciones = db.devoluciones.filter((d) => d.notaPedidoId === r.notaPedidoId);
 
   const ctx = { remitoId: r.id, clienteId: r.clienteId, notaPedidoId: r.notaPedidoId, acopioId: r.acopioId, productoIds: r.items.map((i) => i.productoId), depositoIds: [r.depositoId] };
-  const proxima = r.estado === "INICIAL" && puedeOperar ? "iniciarPicking" : r.estado === "PICKING" && puedeOperar ? "marcarRemitoHecho" : r.estado === "HECHO" && !firmado && puedeOperar ? "subirRemitoFirmado" : null;
 
   const iniciarPicking = async () => {
     const x = await medir("iniciarPicking", ctx, () => useStore.getState().iniciarPicking(r.id));

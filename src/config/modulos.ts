@@ -156,7 +156,7 @@ export const MODULOS: Modulo[] = [
       p("parametros", "Parámetros", "/configuracion?tab=parametros", "config.ver"),
       p("tipos-cliente", "Tipos de cliente", "/configuracion?tab=tipos-cliente", "config.ver"),
       p("numeracion", "Numeración", "/configuracion?tab=numeracion", "config.ver"),
-      p("demo", "Datos del demo", "/configuracion?tab=demo", "config.ver"),
+      p("demo", "Datos y respaldo", "/configuracion?tab=demo", "config.ver"),
     ],
   },
 ];

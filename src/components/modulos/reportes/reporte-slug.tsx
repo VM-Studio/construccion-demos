@@ -6,6 +6,7 @@ import { REPORTES } from "./catalogo";
 import { ReporteRentabilidadClientes, ReporteRentabilidadPedidos, ReporteRentabilidadProductos, ReporteVentas } from "./reportes-ventas";
 import { ReporteDeudaMercaderia, ReporteMovimientos, ReporteStockCritico, ReporteValorizacion } from "./reportes-stock";
 import { ReporteAcopiosProveedores, ReportePendientes, ReporteRemitosPendientes, ReporteTiemposDespacho } from "./reportes-m7";
+import { ReporteHierrosToneladas, ReporteUltimasModificaciones } from "./reportes-reunion";
 import { ReporteAuditoria, ReporteCobranzas, ReporteCompras, ReporteDespachos } from "./reportes-otros";
 
 const COMPONENTES: Record<string, () => React.ReactNode> = {
@@ -25,6 +26,8 @@ const COMPONENTES: Record<string, () => React.ReactNode> = {
   despachos: ReporteDespachos,
   movimientos: ReporteMovimientos,
   auditoria: ReporteAuditoria,
+  "ultimas-modificaciones": ReporteUltimasModificaciones,
+  "hierros-toneladas": ReporteHierrosToneladas,
 };
 
 export function ReporteSlug({ slug }: { slug: string }) {

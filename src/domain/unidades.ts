@@ -25,9 +25,19 @@ export function aBase(cantidad: number, p: ConAlternativa | undefined, unidad?: 
   return esAlternativa(p, unidad) ? r3(cantidad * p!.factorAlternativa!) : cantidad;
 }
 
-/** Cantidad base expresada en `unidad` (sin redondear: se redondea al mostrar). */
+/** Cantidad base expresada en `unidad`. En unidades enteras (barras) se redondea al entero. */
 export function deBase(cantidadBase: number, p: ConAlternativa | undefined, unidad?: Unidad): number {
-  return esAlternativa(p, unidad) ? cantidadBase / p!.factorAlternativa! : cantidadBase;
+  if (!esAlternativa(p, unidad)) return cantidadBase;
+  const v = cantidadBase / p!.factorAlternativa!;
+  return unidad === "UN" ? Math.round(v * 10) / 10 : v;
+}
+
+/** Cantidad en la unidad base del artículo a partir de barras (calculadora de hierros). */
+export function baseDesdeBarras(barras: number, p: ConAlternativa & Pick<Producto, "nombre">): { cantidad: number; unidadVenta?: Unidad } {
+  if (p.unidad === "UN") return { cantidad: barras };
+  const bpt = barrasPorTonelada(p);
+  if (p.unidad === "TN" && bpt) return { cantidad: r3(barras / bpt), unidadVenta: esAlternativa(p, "UN") ? "UN" : undefined };
+  return { cantidad: barras };
 }
 
 /** Precio por unidad base → precio por `unidad`. */
@@ -61,7 +71,7 @@ export const BARRAS_POR_TONELADA: { diametro: number; barras: number }[] = [
 
 /** Diámetro en mm leído del nombre ("HIERRO 8 MM", "HIERRO DULCE DE 4.2 MM"). */
 export function diametroDe(nombre: string): number | null {
-  const m = /(\d+(?:[.,]\d+)?)\s*MM\b/i.exec(nombre);
+  const m = /(\d+(?:[.,]\d+)?)\s*MM\b/i.exec(nombre) ?? /HIERRO\D{0,20}?(\d+(?:[.,]\d+)?)\b/i.exec(nombre);
   return m ? Number(m[1].replace(",", ".")) : null;
 }
 
@@ -75,13 +85,14 @@ export function barrasPorToneladaDe(diametro: number | null): number | null {
 /** ¿Es una barra de hierro (rubro de hierros, se vende por unidad y el nombre tiene diámetro)? */
 export function esBarraDeHierro(p: Pick<Producto, "nombre" | "unidad" | "rubroId" | "unidadAlternativa">, rubros: Pick<Rubro, "id" | "nombre">[]): boolean {
   const rubro = rubros.find((r) => r.id === p.rubroId);
-  if (!rubro || !/hierro/i.test(rubro.nombre)) return false;
-  if (p.unidadAlternativa === "TN") return true;
-  return p.unidad === "UN" && /HIERRO/i.test(p.nombre) && !/MALLA|ALAMBRE|CLAVO/i.test(p.nombre) && diametroDe(p.nombre) != null;
+  if (!/hierro/i.test(rubro?.nombre ?? "") && !/HIERRO/i.test(p.nombre)) return false;
+  if (p.unidadAlternativa === "TN" || (p.unidad === "TN" && p.unidadAlternativa === "UN")) return true;
+  return (p.unidad === "UN" || p.unidad === "TN") && /HIERRO/i.test(p.nombre) && !/MALLA|ALAMBRE|CLAVO/i.test(p.nombre) && diametroDe(p.nombre) != null;
 }
 
 /** Barras por tonelada del artículo: lo configurado o lo sugerido por su diámetro. */
 export function barrasPorTonelada(p: ConAlternativa & Pick<Producto, "nombre">): number | null {
   if (tieneAlternativa(p) && p.unidadAlternativa === "TN" && p.unidad === "UN") return p.factorAlternativa;
+  if (tieneAlternativa(p) && p.unidadAlternativa === "UN" && p.unidad === "TN") return Math.round(1 / p.factorAlternativa);
   return barrasPorToneladaDe(diametroDe(p.nombre));
 }

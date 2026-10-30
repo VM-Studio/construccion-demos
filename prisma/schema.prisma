@@ -404,7 +404,7 @@ model Producto {
   /// Unidad alternativa de venta/ingreso (ej. hierro: stock en barras, también por tonelada).
   unidadAlternativa   Unidad?
   /// Cuántas unidades base equivale 1 unidad alternativa (ej. 1 TN = 375 barras del 6).
-  factorAlternativa   Decimal? @db.Decimal(14, 4)
+  factorAlternativa   Decimal? @db.Decimal(16, 8)
   creadoEn            DateTime @default(now())
   actualizadoEn       DateTime @updatedAt
 

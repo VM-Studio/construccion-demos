@@ -1,4 +1,5 @@
 "use client";
+import { tieneAlternativa } from "@/domain/unidades";
 
 import * as React from "react";
 import Link from "next/link";
@@ -139,7 +140,12 @@ export function PosicionTab({ filtroInicial }: { filtroInicial?: string | null }
         </div>
       ),
     },
-    { key: "f", header: "Físico", align: "right", sortable: true, sortValue: (p) => pos(p).fisico, cell: (p) => <span className="tnum">{n(pos(p).fisico)}</span> },
+    { key: "f", header: "Físico", align: "right", sortable: true, sortValue: (p) => pos(p).fisico, cell: (p) => (
+        <span className="tnum">
+          {n(pos(p).fisico)}
+          {tieneAlternativa(p.producto) && <span className="block text-[11px] text-muted">{formatQty(Math.round((pos(p).fisico / p.producto.factorAlternativa) * 1000) / 1000, p.producto.unidadAlternativa)}</span>}
+        </span>
+      ) },
     {
       key: "pe",
       header: "Pendiente de entrega",

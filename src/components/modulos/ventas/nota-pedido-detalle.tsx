@@ -27,13 +27,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { NumberInput, Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
-import { formatDate, formatMoney, formatPercent, formatQty } from "@/lib/format";
+import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { aDolares, formatUSD, textoTipoCambioAplicado } from "@/lib/tipo-cambio";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento } from "@/components/modulos/cuentas/documentos";
 import { ProgramarEntregaDialog, useFilasPendientes } from "./pendientes-tabla";
 import { lineasPendientes } from "@/domain/stock";
+import { presentarLinea } from "@/lib/lineas";
 
 /** Saldo del acopio antes y después de una NP (según el detalle corrido). */
 export function saldosDeNP(np: NotaPedido, db: ReturnType<typeof useDb>) {
@@ -192,12 +193,12 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                   <tbody>
                     {np.items.map((i) => {
                       const p = prod(i.productoId);
-                      const pend = pendienteLinea(i);
+                      const pend = np.estado === "ANULADA" ? 0 : pendienteLinea(i);
                       return (
                         <tr key={i.id} className="h-10 border-t border-border">
                           <td className="px-3"><span className="mr-1.5 font-mono text-[11px] text-muted">{p?.codigo}</span>{p?.nombre}</td>
                           <td className="px-3 text-[12px] text-muted">{db.obras.find((o) => o.id === i.obraId)?.nombre ?? "—"}</td>
-                          <td className="px-3 text-right tnum">{formatQty(i.cantidad, p?.unidad ?? "UN")}</td>
+                          <td className="px-3 text-right tnum">{presentarLinea(i, p).texto}</td>
                           <td className="px-3 text-right tnum">{i.entregados}</td>
                           <td className="px-3 text-right tnum text-muted">{i.devueltos ?? 0}</td>
                           <td className={cn("px-3 text-right font-medium tnum", pend > 0 && "text-warning")}>{pend}</td>
@@ -446,7 +447,8 @@ export function NotaPedidoDocumento({ np }: { np: NotaPedido }) {
         head={["Código", "Artículo", "Obra", "Cantidad", "Precio", "Subtotal"]}
         rows={np.items.map((i) => {
           const p = db.productos.find((x) => x.id === i.productoId);
-          return [p?.codigo, p?.nombre, db.obras.find((o) => o.id === i.obraId)?.nombre ?? "", formatQty(i.cantidad, p?.unidad ?? "UN"), m(i.precioUnitario), m(i.subtotal)];
+          const l = presentarLinea(i, p);
+          return [p?.codigo, p?.nombre, db.obras.find((o) => o.id === i.obraId)?.nombre ?? "", l.texto, m(l.precio), m(i.subtotal)];
         })}
         foot={["", "", "", "", "Total", m(np.total)]}
       />

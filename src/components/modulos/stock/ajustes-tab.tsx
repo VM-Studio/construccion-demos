@@ -97,7 +97,6 @@ function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boo
   const sinCargar = db.productos.filter((p) => p.activo && !items.some((i) => i.productoId === p.id));
 
   const accionId = inventario || soloInventario ? "inventarioInicial" : "crearAjuste";
-  const hayInventario = items.some((i) => i.motivo === INVENTARIO);
 
   const guardar = async () => {
     const r = await medir(accionId, { productoIds: items.map((i) => i.productoId), depositoIds: [deposito], n: items.length }, () => crear({ depositoId: deposito, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, signo: i.motivo === INVENTARIO ? 1 : i.signo, motivo: i.motivo, ...(i.motivo === INVENTARIO ? { costoUnitario: i.costoUnitario ?? 0 } : {}) })), observacion: obs || undefined }));

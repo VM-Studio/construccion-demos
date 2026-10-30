@@ -184,7 +184,6 @@ export function OCEditor({ id }: { id: string }) {
 
   const ctx = () => ({ proveedorId: proveedorId || undefined, productoIds: items.map((i) => i.productoId), depositoIds: [depositoId], acopioProveedorId: origen === "ACOPIO" ? acpId || undefined : undefined });
   const idConfirmar = origen === "ACOPIO" ? "confirmarOrdenCompraDeAcopio" : "confirmarOrdenCompra";
-  const idRecepcion = origen === "ACOPIO" ? "registrarRecepcionDeAcopio" : "registrarRecepcion";
 
   const guardar = async (silencioso = false): Promise<string | null> => {
     const r = await medir("crearOrdenCompra", ctx(), () => acciones.guardarOC(datos(), oc?.id));

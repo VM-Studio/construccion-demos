@@ -7,7 +7,7 @@ import { urlQrArca } from "@/lib/arca-qr";
 import { QrArca } from "@/components/shared/qr-arca";
 import { PrintLayout, PrintTable } from "@/components/shared/print-layout";
 import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, MEDIO_PAGO_LABEL, TIPO_COMPROBANTE_LABEL } from "@/domain/estados";
-import { formatDate, formatMoney, formatNumber, formatQty } from "@/lib/format";
+import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 
 function DatosCliente({ clienteId, comprador }: { clienteId?: string; comprador?: { nombre?: string; doc?: string } }) {
   const db = useDb();
@@ -19,12 +19,12 @@ function DatosCliente({ clienteId, comprador }: { clienteId?: string; comprador?
         <div className="text-[10px] font-semibold uppercase text-muted">Cliente</div>
         <div className="font-semibold">{comprador?.nombre || c.razonSocial}</div>
         <div>{comprador?.doc ? `CUIT/DNI ${comprador.doc}` : c.cuit ? `CUIT ${c.cuit}` : "Sin CUIT"} · {comprador?.nombre ? "Consumidor final" : CONDICION_IVA_LABEL[c.condicionIVA]}</div>
-        <div>{c.direccion}, {c.localidad}</div>
+        {[c.direccion, c.localidad].filter(Boolean).length > 0 && <div>{[c.direccion, c.localidad].filter(Boolean).join(", ")}</div>}
       </div>
       <div>
         <div className="text-[10px] font-semibold uppercase text-muted">Condiciones</div>
         <div>{CONDICION_PAGO_LABEL[c.condicionPago]}</div>
-        <div>{c.telefono} · {c.email}</div>
+        {[c.telefono, c.email].filter(Boolean).length > 0 && <div>{[c.telefono, c.email].filter(Boolean).join(" · ")}</div>}
       </div>
     </div>
   );

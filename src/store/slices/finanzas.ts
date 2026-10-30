@@ -201,7 +201,8 @@ export function crearSliceFinanzas(set: SetFn, get: GetFn) {
     registrarPagoProveedor: (data: PagoInput) =>
       ejecutar(get, set, (tx) => {
         exigir(tx, "ctacte.pagar");
-        const medios = normalizarMedios(data.medios);
+        // Cheques propios: alcanza con la referencia (banco / número).
+        const medios = normalizarMedios(data.medios, false);
         const total = r2(medios.reduce((a, m) => a + m.importe, 0));
         const imputaciones = data.imputaciones.filter((i) => i.importe > 0).map((i) => ({ ...i, importe: r2(i.importe) }));
         const imputado = r2(imputaciones.reduce((a, i) => a + i.importe, 0));

@@ -355,7 +355,7 @@ export function anularMovimientosDe(tx: Tx, referenciaId: string, motivo: string
 }
 
 /** Normaliza los medios: dólares → pesos con el tipo de cambio cargado; valida cheques. */
-export function normalizarMedios(medios: MedioCobro[]): MedioCobro[] {
+export function normalizarMedios(medios: MedioCobro[], validarCheques = true): MedioCobro[] {
   const out = medios
     .map((m) => {
       if (m.medio === "EFECTIVO" && m.moneda === "USD") {
@@ -371,8 +371,9 @@ export function normalizarMedios(medios: MedioCobro[]): MedioCobro[] {
     })
     .filter((m) => m.importe > 0);
   if (!out.length) throw new ErrorNegocio("Agregá al menos un medio de pago con importe.");
-  for (const m of out)
-    if ((m.medio === "CHEQUE" || m.medio === "ECHEQ") && !m.chequeId && (!m.banco || !m.numeroCheque || !m.fechaCobro))
+  if (validarCheques)
+    for (const m of out)
+      if ((m.medio === "CHEQUE" || m.medio === "ECHEQ") && !m.chequeId && (!m.banco || !m.numeroCheque || !m.fechaCobro))
       throw new ErrorNegocio("Para cheques completá banco, número y fecha de cobro.");
   return out;
 }

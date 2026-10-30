@@ -797,7 +797,10 @@ function UnidadAlternativaCampos({
 }) {
   const db = useDb();
   const esHierro = esBarraDeHierro({ nombre, unidad, rubroId, unidadAlternativa }, db.rubros);
-  const sugerido = esHierro && unidad === "UN" ? barrasPorToneladaDe(diametroDe(nombre)) : null;
+  const bptSug = esHierro ? barrasPorToneladaDe(diametroDe(nombre)) : null;
+  // Stock en barras: 1 TN = N barras. Stock en toneladas: 1 barra = 1/N TN (se carga N igual).
+  const sugerido = bptSug ? (unidad === "UN" ? bptSug : unidad === "TN" ? 1 / bptSug : null) : null;
+  const porToneladas = unidad === "TN" && unidadAlternativa === "UN";
   const activo = !!unidadAlternativa;
   return (
     <div className="rounded-card border border-border p-3">
@@ -810,15 +813,21 @@ function UnidadAlternativaCampos({
           <FormField label="Otra unidad">
             <Select disabled={ro} value={unidadAlternativa ?? "TN"} onValueChange={(v) => onChange(v as Unidad, factorAlternativa)} options={opciones(UNIDAD_LABEL).filter((o) => o.value !== unidad)} />
           </FormField>
-          <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
-            <div className="flex items-center gap-2">
-              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
-              <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
-            </div>
-          </FormField>
-          {sugerido && sugerido !== factorAlternativa && !ro && (
-            <Button size="sm" variant="ghost" onClick={() => onChange("TN", sugerido)}>
-              Usar {sugerido} barras por tonelada (Ø {diametroDe(nombre)} mm)
+          {porToneladas ? (
+            <FormField label="Barras por tonelada" htmlFor="p-factor">
+              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ? Math.round(1 / factorAlternativa) : 0} min={0} onValueChange={(v) => onChange("UN", v ? Math.round((1 / v) * 1e8) / 1e8 : undefined)} className="w-28" />
+            </FormField>
+          ) : (
+            <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
+              <div className="flex items-center gap-2">
+                <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
+                <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
+              </div>
+            </FormField>
+          )}
+          {sugerido && bptSug && Math.abs((factorAlternativa ?? 0) - sugerido) > 1e-9 && !ro && (
+            <Button size="sm" variant="ghost" onClick={() => onChange(unidad === "UN" ? "TN" : "UN", Math.round(sugerido * 1e8) / 1e8)}>
+              Usar {bptSug} barras por tonelada (Ø {diametroDe(nombre)} mm)
             </Button>
           )}
         </div>

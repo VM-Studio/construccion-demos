@@ -1,4 +1,4 @@
-import type { PrecioProducto, Producto } from "./types";
+import type { ListaPrecios, PrecioProducto, Producto } from "./types";
 
 export type Redondeo = 1 | 10 | 100;
 
@@ -120,4 +120,38 @@ export function aplicarCambiosPrecio(precios: PrecioProducto[], cambios: CambioP
     const n = map.get(key(p.productoId, p.listaPreciosId));
     return n !== undefined ? { ...p, precio: n, actualizadoEn: ahora } : p;
   });
+}
+
+// ───────────────────────── Listas especiales por cliente ─────────────────────────
+
+interface DatosPrecio {
+  precios: PrecioProducto[];
+  listasPrecios: ListaPrecios[];
+  productos: Pick<Producto, "id" | "rubroId" | "costoPromedio">[];
+}
+
+/**
+ * Precio de un artículo en una lista. Las listas generales tienen un precio por artículo. Las
+ * especiales de un cliente: precio cargado a mano → markup sobre costo del rubro (ej. hierro al
+ * 12 %) → lista base con su ajuste (ej. Mayorista − 3 %).
+ */
+export function precioLista(productoId: string, listaId: string, db: DatosPrecio): number {
+  const propio = db.precios.find((p) => p.productoId === productoId && p.listaPreciosId === listaId);
+  if (propio) return propio.precio;
+  const lista = db.listasPrecios.find((l) => l.id === listaId);
+  if (!lista?.clienteId) return 0;
+  const prod = db.productos.find((p) => p.id === productoId);
+  const regla = prod && lista.reglasRubro?.find((r) => r.rubroId === prod.rubroId);
+  if (prod && regla && prod.costoPromedio > 0) return calcularPrecioDesdeMarkup(prod.costoPromedio, regla.markupPct);
+  if (!lista.listaBaseId) return 0;
+  const base = obtenerPrecio(productoId, lista.listaBaseId, db.precios);
+  return base ? redondearPrecio(base * (1 + (lista.ajustePct ?? 0) / 100), 1) : 0;
+}
+
+/** De dónde sale el precio de una lista especial (para mostrarlo en la ficha). */
+export function origenPrecioEspecial(productoId: string, lista: ListaPrecios, db: DatosPrecio): "MANUAL" | "RUBRO" | "BASE" | "SIN_PRECIO" {
+  if (db.precios.some((p) => p.productoId === productoId && p.listaPreciosId === lista.id)) return "MANUAL";
+  const prod = db.productos.find((p) => p.id === productoId);
+  if (prod && lista.reglasRubro?.some((r) => r.rubroId === prod.rubroId) && prod.costoPromedio > 0) return "RUBRO";
+  return lista.listaBaseId && obtenerPrecio(productoId, lista.listaBaseId, db.precios) ? "BASE" : "SIN_PRECIO";
 }

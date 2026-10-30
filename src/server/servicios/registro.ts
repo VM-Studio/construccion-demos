@@ -135,6 +135,49 @@ export const REGISTRO: Registro = {
   },
   guardarCotizacion: { modulo: "ventas", permiso: "ventas.editar", accionId: "crearCotizacion", rutas: R.ventas },
   cambiarEstadoCotizacion: { modulo: "ventas", permiso: "ventas.editar", accionId: "crearCotizacion", rutas: R.ventas },
+  crearVenta: {
+    modulo: "ventas",
+    permiso: ["ventas.editar", "ventas.confirmar"],
+    accionId: "confirmarNotaPedidoNueva",
+    rutas: [...R.ventas, ...R.finanzas],
+    bloqueos: ([d]) => ({ ...stockDe(d.items.map((i) => i.productoId), [d.depositoId]), acopioIds: d.acopioId ? [d.acopioId] : [] }),
+  },
+  aceptarCotizacion: {
+    modulo: "ventas",
+    permiso: "ventas.confirmar",
+    accionId: "aceptarCotizacion",
+    rutas: [...R.ventas, ...R.finanzas, ...R.clientes],
+    bloqueos: ([id, a], db) => {
+      const c = db.cotizaciones.find((x) => x.id === id);
+      const suc = a.sucursalId ?? c?.sucursalId;
+      return stockDe(c?.items.map((i) => i.productoId) ?? [], [a.depositoId ?? db.sucursales.find((s) => s.id === suc)?.depositoId]);
+    },
+  },
+  rechazarCotizacion: { modulo: "ventas", permiso: "ventas.editar", accionId: "rechazarCotizacion", rutas: R.ventas },
+  recuperarCotizacion: { modulo: "ventas", permiso: "ventas.editar", accionId: "recuperarCotizacion", rutas: R.ventas },
+  eliminarCotizacion: { modulo: "ventas", permiso: "ventas.editar", accionId: "eliminarCotizacion", rutas: R.ventas },
+  anularVenta: {
+    modulo: "ventas",
+    permiso: "ventas.anular",
+    accionId: "anularVenta",
+    rutas: [...R.ventas, ...R.finanzas, ...R.remitos],
+    bloqueos: ([id], db) => {
+      const np = npDeposito(db, id);
+      return { ...stockDe(np?.items.map((i) => i.productoId) ?? [], [np?.depositoId]), acopioIds: np?.acopioId ? [np.acopioId] : [] };
+    },
+  },
+  recuperarVenta: { modulo: "ventas", permiso: "ventas.editar", accionId: "recuperarVenta", rutas: R.ventas },
+  anularFactura: {
+    modulo: "ventas",
+    permiso: "ventas.anular",
+    accionId: "anularFactura",
+    rutas: [...R.ventas, ...R.finanzas],
+    bloqueos: ([id], db) => {
+      const np = npDeposito(db, db.comprobantes.find((c) => c.id === id)?.notaPedidoId ?? "");
+      return { ...stockDe(np?.items.map((i) => i.productoId) ?? [], [np?.depositoId]), acopioIds: np?.acopioId ? [np.acopioId] : [] };
+    },
+  },
+  registrarResultadoArca: { modulo: "ventas", permiso: "ventas.ver", accionId: "autorizarArca", rutas: R.ventas },
   // ── Acopios ──
   crearAcopio: { modulo: "acopios", permiso: "acopios.editar", accionId: "crearAcopio", rutas: [...R.acopios, ...R.finanzas] },
   traspasarSaldo: { modulo: "acopios", permiso: "acopios.traspasar", accionId: "traspasarSaldoAcopio", rutas: R.acopios, bloqueos: ([o, d]) => ({ acopioIds: [o, d] }) },
@@ -172,6 +215,12 @@ export const REGISTRO: Registro = {
   anularPagoProveedor: { modulo: "finanzas", permiso: "ctacte.pagar", accionId: "anularOrdenPago", rutas: R.finanzas },
   cargarSaldoInicial: { modulo: "finanzas", permiso: ["ctacte.cobrar", "ctacte.pagar"], accionId: "cargarSaldoInicial", rutas: R.finanzas },
   cambiarEstadoCheque: { modulo: "finanzas", permiso: "ctacte.cobrar", accionId: "cambiarEstadoCheque", rutas: R.finanzas },
+  aplicarSaldoAFavor: { modulo: "finanzas", permiso: "ctacte.cobrar", accionId: "aplicarSaldoAFavor", rutas: R.finanzas },
+  guardarCaja: { modulo: "finanzas", permiso: "caja.administrar", accionId: "guardarCaja", rutas: ["/caja"] },
+  registrarMovimientoCaja: { modulo: "finanzas", permiso: "caja.operar", accionId: "movimientoCaja", rutas: ["/caja"] },
+  transferirEntreCajas: { modulo: "finanzas", permiso: "caja.operar", accionId: "transferenciaCaja", rutas: ["/caja"] },
+  anularMovimientoCaja: { modulo: "finanzas", permiso: "caja.operar", accionId: "anularMovimientoCaja", rutas: ["/caja"] },
+  registrarArqueo: { modulo: "finanzas", permiso: "caja.operar", accionId: "arqueoCaja", rutas: ["/caja"] },
   // ── Configuración ──
   actualizarConfig: { modulo: "configuracion", permiso: "config.ver", rutas: R.config },
   actualizarEmpresa: { modulo: "configuracion", permiso: "config.ver", rutas: R.config },

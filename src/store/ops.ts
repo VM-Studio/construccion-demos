@@ -3,7 +3,9 @@
  * Todas reciben la transacción y aplican reglas de `src/domain`.
  */
 import { addDays, parseISO } from "date-fns";
-import type { Circuito, Comprobante, ItemVenta, NotaPedido, Remito } from "@/domain/types";
+import type { Circuito, Cliente, Comprobante, CondicionIVA, ItemVenta, MedioCobro, MovimientoCaja, NotaPedido, Remito } from "@/domain/types";
+import { validarCUIT, buscarPorCuit } from "@/domain/cuit";
+import { cajaPorDefecto } from "@/domain/caja";
 import { calcularDisponible, calcularPendienteEntrega, calcularReservado, lineasPendientes } from "@/domain/stock";
 import { estadoDerivado, pendienteLinea, saldoDisponible } from "@/domain/acopios";
 import { diasCondicionPago, letraFacturaPara } from "@/domain/ventas";
@@ -181,7 +183,20 @@ export function marcarHecho(tx: Tx, remitoId: string, fecha = tx.ahora) {
 /** Factura de venta: F1 (letra A/B según condición de IVA) o F2 interna sin IVA. */
 export function crearFacturaVenta(
   tx: Tx,
-  o: { clienteId: string; sucursalId: string; circuito: Circuito; fecha?: string; total: number; neto?: number; npId?: string; acopioId?: string; items?: ItemVenta[]; vencimientoDias?: number; observaciones?: string },
+  o: {
+    clienteId: string;
+    sucursalId: string;
+    circuito: Circuito;
+    fecha?: string;
+    total: number;
+    neto?: number;
+    npId?: string;
+    acopioId?: string;
+    items?: ItemVenta[];
+    vencimientoDias?: number;
+    observaciones?: string;
+    datosFactura?: Pick<Comprobante, "ventaML" | "compradorNombre" | "compradorDoc">;
+  },
 ): Comprobante {
   const c = tx.must("clientes", o.clienteId);
   const fecha = o.fecha ?? tx.ahora;
@@ -205,6 +220,9 @@ export function crearFacturaVenta(
     estado: "PENDIENTE",
     items: o.items,
     observaciones: o.observaciones,
+    // F1 va a ARCA (factura electrónica); F2 es interna.
+    arcaEstado: o.circuito === 1 ? "PENDIENTE" : "NO_APLICA",
+    ...o.datosFactura,
     ...tx.meta(),
   };
   tx.insert("comprobantes", cmp);
@@ -241,4 +259,120 @@ export function desaplicarDeComprobante(tx: Tx, comprobanteId: string, importe: 
 /** Líneas pendientes de entrega de un cliente (o de todos). */
 export function pendientesDe(tx: Tx, clienteId?: string) {
   return lineasPendientes(tx.get("notasPedido"), tx.get("remitos")).filter((l) => !clienteId || l.clienteId === clienteId);
+}
+
+// ───────────────────────── Clientes desde ventas ─────────────────────────
+
+export interface DatosClienteVenta {
+  razonSocial: string;
+  cuit?: string;
+  condicionIVA?: CondicionIVA;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  localidad?: string;
+  tipo?: string;
+}
+
+/** Lista de precios sugerida para un tipo de cliente nuevo. */
+export function listaPorTipo(tx: Tx, tipo: string): string {
+  const ids = new Set(tx.get("listasPrecios").filter((l) => l.activa && !l.clienteId).map((l) => l.id));
+  const pref = tipo === "CONSUMIDOR_FINAL" || tipo === "PARTICULAR" ? "lst_pub" : tipo === "MAYORISTA" || tipo === "CONSTRUCTORA" ? "lst_may" : "lst_gen";
+  return ids.has(pref) ? pref : [...ids][0] ?? "lst_gen";
+}
+
+/**
+ * Alta de cliente desde una venta (cotización rápida aceptada, Mercado Libre). Si ya existe un
+ * cliente con ese CUIT se usa ese. El CUIT es opcional; si se carga tiene que ser válido.
+ */
+export function crearClienteDesdeVenta(tx: Tx, d: DatosClienteVenta): Cliente {
+  const razon = d.razonSocial.trim();
+  if (!razon) throw new ErrorNegocio("Cargá el nombre o la razón social del cliente.");
+  const cuit = (d.cuit ?? "").trim();
+  if (cuit) {
+    const err = validarCUIT(cuit);
+    if (err) throw new ErrorNegocio(err);
+    const existente = buscarPorCuit(tx.get("clientes"), cuit);
+    if (existente) return existente;
+  }
+  const tipo = d.tipo || (cuit ? "MAYORISTA" : "CONSUMIDOR_FINAL");
+  const max = tx.get("clientes").reduce((m, c) => Math.max(m, Number(c.codigo.replace(/\D/g, "")) || 0), 0);
+  const suc = tx.get("sucursales").find((s) => s.id === tx.find("usuarios", tx.usuarioId)?.sucursalId) ?? tx.get("sucursales")[0];
+  const cli: Cliente = {
+    id: newId("cli"),
+    codigo: `C${String(max + 1).padStart(4, "0")}`,
+    razonSocial: razon,
+    tipo,
+    cuit,
+    condicionIVA: d.condicionIVA ?? (cuit ? "RI" : "CF"),
+    circuitoHabitual: 1,
+    email: d.email?.trim() ?? "",
+    telefono: d.telefono?.trim() ?? "",
+    direccion: d.direccion?.trim() ?? "",
+    localidad: d.localidad?.trim() ?? "",
+    listaPreciosId: listaPorTipo(tx, tipo),
+    condicionPago: "CONTADO",
+    limiteCredito: 0,
+    sucursalPreferidaId: suc?.id ?? "suc_central",
+    activo: true,
+    ...tx.meta(),
+  };
+  tx.insert("clientes", cli);
+  tx.auditar("Creó cliente", "Cliente", cli.id, `${razon} · desde una venta`);
+  return cli;
+}
+
+// ───────────────────────── Caja chica ─────────────────────────
+
+/** Movimiento de caja de un medio en efectivo (cobro: entra; pago: sale). */
+export function movimientoCajaDeMedio(tx: Tx, m: MedioCobro, o: { signo: 1 | -1; fecha: string; concepto: string; referenciaTipo: "RECIBO" | "ORDEN_PAGO"; referenciaId: string; sucursalId?: string }) {
+  if (m.medio !== "EFECTIVO") return;
+  const caja = m.cajaId ? tx.find("cajas", m.cajaId) : cajaPorDefecto(tx.get("cajas"), o.sucursalId);
+  if (!caja) return;
+  if (!caja.activa) throw new ErrorNegocio(`La caja ${caja.nombre} está desactivada.`);
+  m.cajaId = caja.id;
+  const usd = m.moneda === "USD";
+  const mov: MovimientoCaja = {
+    id: newId("mcj"),
+    cajaId: caja.id,
+    fecha: o.fecha,
+    tipo: o.signo === 1 ? "INGRESO" : "EGRESO",
+    signo: o.signo,
+    moneda: usd ? "USD" : "ARS",
+    importe: usd ? r2(m.importeME ?? 0) : r2(m.importe),
+    concepto: o.concepto,
+    referenciaTipo: o.referenciaTipo,
+    referenciaId: o.referenciaId,
+    usuarioId: tx.usuarioId,
+    ...tx.meta(),
+  };
+  tx.insert("movimientosCaja", mov);
+}
+
+/** Anula los movimientos de caja generados por un recibo u orden de pago. */
+export function anularMovimientosDe(tx: Tx, referenciaId: string, motivo: string) {
+  for (const m of tx.get("movimientosCaja")) if (m.referenciaId === referenciaId && !m.anulado) tx.patch("movimientosCaja", m.id, { anulado: true, motivoAnulacion: motivo });
+}
+
+/** Normaliza los medios: dólares → pesos con el tipo de cambio cargado; valida cheques. */
+export function normalizarMedios(medios: MedioCobro[]): MedioCobro[] {
+  const out = medios
+    .map((m) => {
+      if (m.medio === "EFECTIVO" && m.moneda === "USD") {
+        if (!(m.importeME && m.importeME > 0)) throw new ErrorNegocio("Cargá cuántos dólares se recibieron.");
+        if (!(m.tipoCambio && m.tipoCambio > 0)) throw new ErrorNegocio("Cargá el tipo de cambio del día para los dólares.");
+        return { ...m, importe: r2(m.importeME * m.tipoCambio) };
+      }
+      const { moneda: _m, importeME: _i, tipoCambio: _t, ...resto } = m;
+      void _m;
+      void _i;
+      void _t;
+      return { ...resto };
+    })
+    .filter((m) => m.importe > 0);
+  if (!out.length) throw new ErrorNegocio("Agregá al menos un medio de pago con importe.");
+  for (const m of out)
+    if ((m.medio === "CHEQUE" || m.medio === "ECHEQ") && !m.chequeId && (!m.banco || !m.numeroCheque || !m.fechaCobro))
+      throw new ErrorNegocio("Para cheques completá banco, número y fecha de cobro.");
+  return out;
 }

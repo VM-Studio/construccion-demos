@@ -43,6 +43,9 @@ export const PERMISOS = {
   "margenes.ver": "Ver costos y márgenes",
   "credito.autorizar": "Autorizar excepciones de crédito",
   "circuito2.ver": "Ver circuito 2 (AC2 · Interno)",
+  "caja.ver": "Ver caja chica",
+  "caja.operar": "Registrar movimientos y arqueos de caja",
+  "caja.administrar": "Crear cajas y ajustar arqueos",
 } as const;
 
 export type Permiso = keyof typeof PERMISOS;
@@ -111,6 +114,7 @@ export const MATRIZ_PERMISOS: { modulo: string; acciones: Partial<Record<"ver" |
   { modulo: "Remitos", acciones: { ver: "remitos.ver", crear: "remitos.operar", confirmar: "remitos.operar", anular: "ventas.anular" } },
   { modulo: "Logística", acciones: { ver: "despachos.ver", crear: "despachos.operar", editar: "vehiculos.editar", confirmar: "despachos.operar", anular: "despachos.operar" } },
   { modulo: "Cuentas corrientes", acciones: { ver: "ctacte.ver", crear: "ctacte.cobrar", confirmar: "ctacte.pagar" } },
+  { modulo: "Caja chica", acciones: { ver: "caja.ver", crear: "caja.operar", editar: "caja.administrar", anular: "caja.operar" } },
   { modulo: "Reportes", acciones: { ver: "reportes.ver", margenes: "margenes.ver" } },
   { modulo: "Configuración", acciones: { ver: "config.ver", editar: "config.ver", crear: "config.usuarios" } },
 ];

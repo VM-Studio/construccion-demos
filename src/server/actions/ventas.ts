@@ -38,3 +38,39 @@ export async function guardarCotizacion(...args: Parameters<AccionesNegocio["gua
 export async function cambiarEstadoCotizacion(...args: Parameters<AccionesNegocio["cambiarEstadoCotizacion"]>) {
   return correr("cambiarEstadoCotizacion", args);
 }
+
+export async function crearVenta(...args: Parameters<AccionesNegocio["crearVenta"]>) {
+  return correr("crearVenta", args);
+}
+
+export async function anularVenta(...args: Parameters<AccionesNegocio["anularVenta"]>) {
+  return correr("anularVenta", args);
+}
+
+export async function recuperarVenta(...args: Parameters<AccionesNegocio["recuperarVenta"]>) {
+  return correr("recuperarVenta", args);
+}
+
+export async function anularFactura(...args: Parameters<AccionesNegocio["anularFactura"]>) {
+  return correr("anularFactura", args);
+}
+
+export async function registrarResultadoArca(...args: Parameters<AccionesNegocio["registrarResultadoArca"]>) {
+  return correr("registrarResultadoArca", args);
+}
+
+export async function aceptarCotizacion(...args: Parameters<AccionesNegocio["aceptarCotizacion"]>) {
+  return correr("aceptarCotizacion", args);
+}
+
+export async function rechazarCotizacion(...args: Parameters<AccionesNegocio["rechazarCotizacion"]>) {
+  return correr("rechazarCotizacion", args);
+}
+
+export async function recuperarCotizacion(...args: Parameters<AccionesNegocio["recuperarCotizacion"]>) {
+  return correr("recuperarCotizacion", args);
+}
+
+export async function eliminarCotizacion(...args: Parameters<AccionesNegocio["eliminarCotizacion"]>) {
+  return correr("eliminarCotizacion", args);
+}

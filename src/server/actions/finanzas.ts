@@ -26,3 +26,27 @@ export async function anularCobranza(...args: Parameters<AccionesNegocio["anular
 export async function anularPagoProveedor(...args: Parameters<AccionesNegocio["anularPagoProveedor"]>) {
   return correr("anularPagoProveedor", args);
 }
+
+export async function aplicarSaldoAFavor(...args: Parameters<AccionesNegocio["aplicarSaldoAFavor"]>) {
+  return correr("aplicarSaldoAFavor", args);
+}
+
+export async function guardarCaja(...args: Parameters<AccionesNegocio["guardarCaja"]>) {
+  return correr("guardarCaja", args);
+}
+
+export async function registrarMovimientoCaja(...args: Parameters<AccionesNegocio["registrarMovimientoCaja"]>) {
+  return correr("registrarMovimientoCaja", args);
+}
+
+export async function transferirEntreCajas(...args: Parameters<AccionesNegocio["transferirEntreCajas"]>) {
+  return correr("transferirEntreCajas", args);
+}
+
+export async function anularMovimientoCaja(...args: Parameters<AccionesNegocio["anularMovimientoCaja"]>) {
+  return correr("anularMovimientoCaja", args);
+}
+
+export async function registrarArqueo(...args: Parameters<AccionesNegocio["registrarArqueo"]>) {
+  return correr("registrarArqueo", args);
+}

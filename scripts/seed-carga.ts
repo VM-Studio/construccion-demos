@@ -47,7 +47,7 @@ const PASOS: [string, string][] = [
   ["2.000 clientes y 500 proveedores", `
     WITH s AS (SELECT min("id") suc FROM "Sucursal"), l AS (SELECT min("id") lista FROM "ListaPrecios")
     INSERT INTO "Cliente" ("id","codigo","razonSocial","tipo","cuit","condicionIVA","circuitoHabitual","email","telefono","direccion","localidad","listaPreciosId","condicionPago","limiteCredito","sucursalPreferidaId","actualizadoEn")
-    SELECT 'cg_c'||i, 'CGC'||lpad(i::text,5,'0'), 'Cliente de carga '||i||' S.A.', (ARRAY['CONSTRUCTORA','PARTICULAR','ARQUITECTO']::"TipoCliente"[])[1+i%3], '30'||lpad(i::text,8,'0')||'1',
+    SELECT 'cg_c'||i, 'CGC'||lpad(i::text,5,'0'), 'Cliente de carga '||i||' S.A.', (ARRAY['CONSTRUCTORA','PARTICULAR','ARQUITECTO']::text[])[1+i%3], '30'||lpad(i::text,8,'0')||'1',
       'RI', 1+i%2, 'cliente'||i||'@carga.test', '11'||lpad(i::text,8,'0'), 'Calle '||i, 'CABA', l.lista, 'CTA_CTE_30', 5000000, s.suc, now()
     FROM generate_series(1,2000) i, s, l;
     INSERT INTO "Proveedor" ("id","codigo","razonSocial","tipo","cuit","condicionIVA","circuitoHabitual","email","telefono","direccion","contacto","plazoEntregaDias","condicionPago","unidadNegocioIds","actualizadoEn")

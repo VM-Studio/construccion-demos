@@ -626,9 +626,38 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
         exigir(tx, "ventas.ver");
         const c = tx.must("comprobantes", comprobanteId);
         if (c.arcaEstado === "AUTORIZADO") return;
+        if (!r.ok && c.estado === "ANULADO") return;
         if (r.ok) {
           tx.patch("comprobantes", c.id, { arcaEstado: "AUTORIZADO", cae: r.cae, caeVencimiento: r.caeVencimiento, arcaPuntoVenta: r.puntoVenta, arcaNumero: r.numero, arcaTipo: r.tipo, arcaError: undefined });
           tx.auditar("Autorizó comprobante en ARCA", "Comprobante", c.id, `${c.numero} · CAE ${r.cae}`);
+          // Se anuló mientras ARCA la autorizaba: ya es fiscal, lleva nota de crédito.
+          if (c.tipo === "FACTURA" && c.estado === "ANULADO" && !tx.get("comprobantes").some((n) => n.tipo === "NOTA_CREDITO" && n.comprobanteOrigenId === c.id)) {
+            const nc: Comprobante = {
+              id: newId("cmp"),
+              tipo: "NOTA_CREDITO",
+              letra: c.letra,
+              circuito: c.circuito,
+              numero: tx.numero("NC", c.circuito, puntoVentaDe(tx, c.sucursalId ?? tx.get("sucursales")[0]?.id ?? "")),
+              clienteId: c.clienteId,
+              notaPedidoId: c.notaPedidoId,
+              comprobanteOrigenId: c.id,
+              aplicadoA: [{ comprobanteId: c.id, importe: c.total }],
+              sucursalId: c.sucursalId,
+              fecha: tx.ahora,
+              subtotal: c.subtotal,
+              iva: c.iva,
+              total: c.total,
+              saldoPendiente: 0,
+              estado: "PAGADO",
+              items: c.items,
+              observaciones: `Anulación de ${c.numero}${c.motivoAnulacion ? `: ${c.motivoAnulacion}` : ""}`,
+              arcaEstado: "PENDIENTE",
+              compradorNombre: c.compradorNombre,
+              compradorDoc: c.compradorDoc,
+              ...tx.meta(),
+            };
+            tx.insert("comprobantes", nc);
+          }
         } else {
           tx.patch("comprobantes", c.id, { arcaEstado: c.arcaEstado === "PENDIENTE" ? "PENDIENTE" : "RECHAZADO", arcaError: r.error.slice(0, 500) });
         }

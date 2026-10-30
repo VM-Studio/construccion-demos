@@ -31,7 +31,7 @@ import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { PendientesTabla } from "./pendientes-tabla";
 import { obtenerDb } from "@/lib/datos/almacen";
 import { aDolares, formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
@@ -249,7 +249,6 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                 </FormField>
                 <FormField label="Depósito">
                   <Select aria-label="Depósito" value={depositoId} disabled={!!acopio} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
-                  <ImpactoCampo campo="deposito" />
                 </FormField>
                 <FormField label="Fecha" htmlFor="np-f">
                   <Input id="np-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -264,7 +263,6 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <span className="text-[13px] font-medium">Origen</span>
                   <Segmented value={origen} onChange={(v) => { setOrigen(v); if (v === "NUEVA") setAcopioId(""); }} options={[{ value: "NUEVA", label: "Nueva" }, { value: "ACOPIO", label: "Acopio" }]} />
                 </div>
-                <ImpactoCampo campo={`origen.${origen}`} />
                 {origen === "ACOPIO" && (
                   <div className="mt-3">
                     {!clienteId ? (
@@ -303,7 +301,6 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   ) : (
                     <Segmented value={formaPago} onChange={setFormaPago} options={[{ value: "CONTADO", label: "Contado" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
                   )}
-                  <ImpactoCampo campo={`formaPago.${acopio ? "ACOPIO" : formaPago}`} />
                 </FormField>
                 <FormField label="Circuito">
                   {acopio ? (
@@ -311,11 +308,9 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   ) : (
                     <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
                   )}
-                  <ImpactoCampo campo={`circuito.${acopio ? acopio.circuito : circuito}`} />
                 </FormField>
                 <FormField label="Entrega">
                   <Segmented value={pendiente ? "P" : "I"} onChange={(v) => setPendiente(v === "P")} options={[{ value: "I", label: "Entrega inmediata" }, { value: "P", label: "Pendiente de entrega" }]} />
-                  <ImpactoCampo campo={pendiente ? "entrega.PENDIENTE" : "entrega.INMEDIATA"} />
                 </FormField>
               </div>
               {usdHabilitado && (
@@ -324,7 +319,6 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                     <Switch checked={enUSD} onCheckedChange={(v) => setMoneda(v ? "USD" : "ARS")} /> Precios en USD
                     {enUSD && <span className="font-normal text-muted">{dolar ? `Dólar de hoy ${formatMoney(dolar)}` : "Sin tipo de cambio disponible"}</span>}
                   </label>
-                  <ImpactoCampo campo={`moneda.${enUSD ? "USD" : "ARS"}`} />
                   {enUSD && <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted"><Info className="size-3.5" /> Se guarda en pesos; al confirmar queda el tipo de cambio del día.</p>}
                 </div>
               )}
@@ -472,7 +466,6 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <Save /> Guardar borrador
                 </Button>
               </div>
-              <Impacto accion={origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva"} />
             </CardContent>
           </Card>
         </aside>

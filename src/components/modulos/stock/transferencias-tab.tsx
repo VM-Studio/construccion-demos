@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/input";
 import { formatDate, formatDateTime, formatQty } from "@/lib/format";
 import { nombreUsuario } from "@/lib/referencias";
 import { newId } from "@/lib/utils";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export function TransferenciasTab({ abrirId, nuevo, productoInicial }: { abrirId?: string | null; nuevo?: boolean; productoInicial?: string | null }) {
   const db = useDb();
@@ -120,7 +120,6 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
           </FormField>
           <FormField label="Depósito destino" error={origen === destino ? "Debe ser distinto del origen." : undefined}>
             <Select value={destino} onValueChange={setDestino} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
-            <ImpactoCampo campo="transferencia.destino" />
           </FormField>
         </div>
         <ItemsGrid
@@ -137,7 +136,6 @@ function NuevaTransferencia({ open, onClose, productoInicial }: { open: boolean;
         <FormField label="Observación" htmlFor="trf-obs">
           <Textarea id="trf-obs" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej. Reposición para obra de la zona sur" />
         </FormField>
-        <Impacto accion="transferirStock" />
       </div>
     </EntitySheet>
   );
@@ -188,8 +186,6 @@ function DetalleTransferencia({ id, onClose }: { id?: string | null; onClose: ()
         }
       >
         <div className="space-y-4">
-          {puede && t.estado === "PENDIENTE" && <Impacto accion="transferirStock" />}
-          {puede && t.estado === "EN_TRANSITO" && <Impacto accion="recibirTransferencia" />}
           <table className="w-full text-table">
             <thead>
               <tr className="border-b border-border text-[12px] text-muted">

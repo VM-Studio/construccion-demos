@@ -8,7 +8,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { formatearTamano } from "@/components/shared/adjuntos-panel";
 import { cn } from "@/lib/utils";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 /**
  * "Subir remito firmado": zona de arrastre o click (foto o PDF), vista previa y subida a
@@ -94,7 +94,6 @@ export function SubirFirmadoDialog({ remitoId, open, onOpenChange }: { remitoId:
         </button>
         {file && <p className="mt-2 text-[12px] text-muted">{file.name} · {formatearTamano(file.size)}</p>}
         {error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
-        <Impacto accion="subirRemitoFirmado" className="mt-3" />
       </DialogContent>
     </Dialog>
   );

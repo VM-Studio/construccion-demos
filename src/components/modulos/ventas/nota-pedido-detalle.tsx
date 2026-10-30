@@ -17,7 +17,7 @@ import { AdjuntosPanel, ClipContador, useAdjuntos } from "@/components/shared/ad
 import { HistorialEntidad } from "@/components/shared/historial-entidad";
 import { PrintLayout, PrintPreview, PrintTable } from "@/components/shared/print-layout";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -153,8 +153,6 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
       />
       {(puedeGenerarRemito || puedeFacturarNP) && (
         <div className="mb-4 space-y-2">
-          {puedeGenerarRemito && <Impacto accion="generarRemito" />}
-          {puedeFacturarNP && <Impacto accion="facturarNotaPedido" />}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -336,7 +334,6 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
       >
         <div className="space-y-3">
           <p className="text-[13px] text-muted">Esta acción queda registrada en la auditoría.</p>
-          <Impacto accion="anularNotaPedido" />
         </div>
       </ConfirmDialog>
     </div>
@@ -395,7 +392,6 @@ export function DevolucionDialog({ np, open, onOpenChange }: { np: NotaPedido; o
             </tbody>
           </table>
           <FormField label="Motivo" required htmlFor="dev-m"><Input id="dev-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. sobrante de obra, material fallado…" /></FormField>
-          <Impacto accion="crearDevolucion" />
         </div>
       </DialogContent>
     </Dialog>

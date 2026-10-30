@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { cn, descargarArchivo } from "@/lib/utils";
 import { useStore } from "@/store";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useDb } from "@/store/selectors";
 import { consultarPadronAction } from "@/server/actions/padron";
 import { Progress } from "@/components/ui/progress";
@@ -396,7 +396,6 @@ export function ImportarCsvDialog({
               </section>
             </>
           )}
-          <Impacto accion={ACCION[tipo]} n={validas.length} />
         </div>
       </DialogContent>
     </Dialog>

@@ -180,6 +180,7 @@ export const REGISTRO: Registro = {
   guardarUnidadNegocio: { modulo: "configuracion", permiso: "config.ver", rutas: R.config },
   establecerNumeroInicial: { modulo: "configuracion", permiso: "config.usuarios", accionId: "establecerNumeroInicial", rutas: R.config },
   guardarMotivosAjuste: { modulo: "configuracion", permiso: "config.ver", rutas: R.config },
+  guardarTiposCliente: { modulo: "configuracion", permiso: "config.ver", rutas: R.config },
   registrarEvento: { modulo: "configuracion", permiso: "tablero.ver", rutas: [] },
 };
 

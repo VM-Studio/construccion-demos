@@ -9,7 +9,7 @@ import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { type ResultadoIntegridad } from "@/domain/integridad";
-import { Impacto, InterruptorCapacitacionConfig, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { filasNumeracion, formatearDoc } from "@/domain/numeracion";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { CodigoDoc } from "@/domain/types";
@@ -30,7 +30,7 @@ import { BRAND } from "@/config/brand";
 import { estadoPadronAction } from "@/server/actions/padron";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
-import { ImpactoCampo } from "@/capacitacion";
+
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { actualizarTipoCambioAhora, diaYFecha, fuenteLabel, noEsDeHoy, refrescarTipoCambio, useTipoCambio } from "@/lib/tipo-cambio";
@@ -422,7 +422,6 @@ function TipoCambioCard() {
               )}
             </div>
           )}
-          <ImpactoCampo campo="parametros.tipoCambio" />
         </div>
         <div className="min-w-0">
           <div className="mb-1.5 text-[12px] font-medium text-muted">Últimos 30 días</div>
@@ -615,7 +614,6 @@ function Numeracion() {
               <FormField label="Próximo número" htmlFor="num-u" error={invalido ? `Tiene que ser mayor a ${edit.ultimo} (último usado).` : undefined}>
                 <NumberInput id="num-u" value={edit.proximo} min={edit.ultimo + 1} onValueChange={(v) => setEdit({ ...edit, proximo: Math.round(v) })} />
               </FormField>
-              <Impacto accion="establecerNumeroInicial" />
               <p className="rounded-control bg-subtle px-3 py-2 text-[13px]">
                 El próximo documento sale como <span className="font-mono font-medium">{formatearDoc(edit.codigo, edit.circ, edit.pv, Math.max(1, edit.proximo))}</span>
               </p>
@@ -652,7 +650,6 @@ function DatosDemo() {
         <CardContent className="space-y-4 text-[13px]">
           <p className="text-muted">Los datos viven en la base de {BRAND.empresa} (PostgreSQL) y todos los usuarios trabajan sobre los mismos datos, en vivo.</p>
           <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
-          <InterruptorCapacitacionConfig />
           <div className="border-t border-border pt-3">
             <span className="block font-medium text-ink">Exportar respaldo</span>
             <span className="mb-2 block text-[12px] text-muted">Descarga un ZIP con una planilla CSV por tabla y un JSON con todos los datos (incluidos movimientos y auditoría). Queda registrado en la auditoría.</span>

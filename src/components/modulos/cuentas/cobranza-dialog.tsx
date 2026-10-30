@@ -22,7 +22,7 @@ import { PrintPreview } from "@/components/shared/print-layout";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { ReciboDocumento } from "./documentos";
 import { obtenerDb } from "@/lib/datos/almacen";
 
@@ -167,7 +167,6 @@ export function CobranzaDialog({
                   }}
                   options={[1, 2].map((c) => ({ value: String(c), label: CIRCUITO_LABEL[c as Circuito] }))}
                 />
-                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
             </div>
 
@@ -205,7 +204,6 @@ export function CobranzaDialog({
                         <Trash2 className="text-muted" />
                       </Button>
                     </div>
-                    {esCheque && <ImpactoCampo campo="cobro.medio.CHEQUE" />}
                     </div>
                   );
                 })}
@@ -279,7 +277,6 @@ export function CobranzaDialog({
             <FormField label="Observaciones" htmlFor="cob-obs">
               <Input id="cob-obs" value={obs} onChange={(e) => setObs(e.target.value)} />
             </FormField>
-            <Impacto accion="registrarCobro" />
           </div>
         </DialogContent>
       </Dialog>

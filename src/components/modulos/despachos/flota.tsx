@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/ui/form-field";
 import { formatDate, formatNumber } from "@/lib/format";
 import { pesoDespacho } from "./documentos";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export function FlotaTab({ onAbrirDespacho }: { onAbrirDespacho: (id: string) => void }) {
   const db = useDb();
@@ -85,7 +85,6 @@ function VehiculoSheet({ id, onClose, onAbrirDespacho }: { id: string; onClose: 
       </div>
       <label className="flex items-center gap-3 text-[13px]"><Switch disabled={!puede} checked={f.activo} onCheckedChange={(x) => setF({ ...f, activo: x })} /> Vehículo activo</label>
       {puede && <div className="flex justify-end"><Button onClick={guardar}><Save /> Guardar</Button></div>}
-      {puede && !v && <Impacto accion="crearVehiculo" />}
     </div>
   );
   return (
@@ -149,7 +148,6 @@ function ChoferSheet({ id, onClose }: { id: string; onClose: () => void }) {
             </Button>
           </div>
         )}
-        {puede && !c && <Impacto accion="crearChofer" />}
       </div>
     </EntitySheet>
   );

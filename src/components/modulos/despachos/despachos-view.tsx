@@ -24,7 +24,7 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { SubirFirmadoDialog } from "@/components/modulos/remitos/subir-firmado";
-import { Impacto, ImpactoCampo, medir, type Contexto } from "@/capacitacion";
+import { medir, type Contexto } from "@/capacitacion";
 
 /** Reloj que se actualiza cada `ms` para los minutos en curso. */
 export function useAhora(ms = 30_000) {
@@ -168,10 +168,6 @@ export function DespachosView() {
       </div>
       {puede && (
         <div className="mb-4 space-y-2 empty:hidden">
-          {esp > 0 && <Impacto accion="iniciarPreparacion" />}
-          {prep > 0 && <Impacto accion="finalizarDespacho" />}
-          {delDia.some((d) => d.estado === "EN_VIAJE") && <Impacto accion="marcarEntregado" />}
-          {esp + prep > 0 && <ImpactoCampo campo="despacho.posicion" className="mt-0" />}
         </div>
       )}
       <DataTable
@@ -208,7 +204,6 @@ function ReprogramarDialog({ d, onClose }: { d: Despacho; onClose: () => void })
         <div className="space-y-3">
           <FormField label="Nueva fecha" htmlFor="rp-f"><Input id="rp-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
           <FormField label="Motivo" htmlFor="rp-m"><Input id="rp-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. lluvia, el cliente pidió otro día" /></FormField>
-          <Impacto accion="programarEntrega" />
         </div>
       </DialogContent>
     </Dialog>

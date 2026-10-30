@@ -57,6 +57,7 @@ enum EstadoOC {
 
 enum EstadoCotizacion {
   BORRADOR
+  PENDIENTE
   ENVIADA
   ACEPTADA
   RECHAZADA
@@ -126,17 +127,6 @@ enum LetraComprobante {
   B
 }
 
-enum TipoCliente {
-  CONSTRUCTORA
-  CORRALON
-  FERRETERIA
-  PARTICULAR
-  ARQUITECTO
-  MAYORISTA
-  MELI
-  MADERERA
-}
-
 enum TipoProveedor {
   FABRICANTE
   DISTRIBUIDOR
@@ -159,6 +149,8 @@ enum MedioPago {
   ECHEQ
   TARJETA
   MERCADOPAGO
+  /// Comisión retenida (Mercado Libre / Mercado Pago): cancela la diferencia sin entrar plata.
+  COMISION
 }
 
 enum CondicionIVA {
@@ -409,6 +401,10 @@ model Producto {
   activo              Boolean  @default(true)
   codigoBarras        String?
   pesoKg              Decimal? @db.Decimal(14, 3)
+  /// Unidad alternativa de venta/ingreso (ej. hierro: stock en barras, también por tonelada).
+  unidadAlternativa   Unidad?
+  /// Cuántas unidades base equivale 1 unidad alternativa (ej. 1 TN = 375 barras del 6).
+  factorAlternativa   Decimal? @db.Decimal(14, 4)
   creadoEn            DateTime @default(now())
   actualizadoEn       DateTime @updatedAt
 
@@ -423,8 +419,18 @@ model ListaPrecios {
   descripcion      String
   markupPorDefecto Decimal  @db.Decimal(7, 2)
   activa           Boolean  @default(true)
+  /// Lista especial de un cliente (precios propios); null = lista general.
+  clienteId        String?
+  /// Lista especial: lista general de la que parte.
+  listaBaseId      String?
+  /// Lista especial: % sobre la lista base (negativo = descuento).
+  ajustePct        Decimal? @db.Decimal(7, 2)
+  /// Lista especial: [{ rubroId, markupPct }] markup sobre costo por rubro (ej. hierro al 12 %).
+  reglasRubro      Json?
   creadoEn         DateTime @default(now())
   actualizadoEn    DateTime @updatedAt
+
+  @@index([clienteId])
 }
 
 model PrecioProducto {
@@ -551,7 +557,8 @@ model Cliente {
   codigo              String            @unique
   razonSocial         String
   nombreFantasia      String?
-  tipo                TipoCliente
+  /// Código de Configuracion.tiposCliente (lista editable).
+  tipo                String
   cuit                String
   condicionIVA        CondicionIVA
   circuitoHabitual    Int
@@ -671,7 +678,14 @@ model Cotizacion {
   id                 String           @id @default(cuid())
   numero             String           @unique
   circuito           Int
-  clienteId          String
+  /// Null en cotizaciones rápidas a quien todavía no es cliente.
+  clienteId          String?
+  /// Cotización rápida: datos del interesado (se convierte en cliente al aceptarla).
+  prospectoNombre    String?
+  prospectoTelefono  String?
+  tipoCliente        String?
+  motivoRechazo      String?
+  fechaRespuesta     DateTime?
   obraId             String?
   sucursalId         String
   vendedorId         String
@@ -709,6 +723,8 @@ model ItemCotizacion {
   precioUnitario        Decimal    @db.Decimal(14, 2)
   costoUnitarioSnapshot Decimal    @db.Decimal(14, 4)
   descuentoPct          Decimal    @db.Decimal(7, 3)
+  /// Unidad en la que se vendió (si es la alternativa del artículo, ej. TN).
+  unidadVenta           Unidad?
 
   @@index([cotizacionId])
 }
@@ -750,6 +766,8 @@ model NotaPedido {
   moneda                  Moneda            @default(ARS)
   tipoCambioAplicado      Decimal?          @db.Decimal(14, 4)
   tipoCambioFecha         DateTime?
+  motivoAnulacion         String?
+  anuladaEn               DateTime?
   creadoEn                DateTime          @default(now())
   actualizadoEn           DateTime          @updatedAt
 
@@ -775,6 +793,7 @@ model ItemNP {
   costoUnitarioSnapshot Decimal    @db.Decimal(14, 4)
   descuentoPct          Decimal?   @db.Decimal(7, 3)
   subtotal              Decimal    @db.Decimal(14, 2)
+  unidadVenta           Unidad?
 
   @@index([notaPedidoId])
   @@index([productoId])
@@ -1143,6 +1162,19 @@ model Comprobante {
   estado              EstadoComprobante
   items               ItemComprobante[]
   observaciones       String?
+  motivoAnulacion     String?
+  /// Factura electrónica (ARCA WSFE): NO_APLICA (interno), PENDIENTE, AUTORIZADO, RECHAZADO.
+  arcaEstado          String?
+  cae                 String?
+  caeVencimiento      DateTime?
+  arcaPuntoVenta      Int?
+  arcaNumero          Int?
+  arcaTipo            Int?
+  arcaError           String?
+  /// Venta por Mercado Libre: número de venta y comprador.
+  ventaML             String?
+  compradorNombre     String?
+  compradorDoc        String?
   creadoEn            DateTime                @default(now())
   actualizadoEn       DateTime                @updatedAt
 
@@ -1166,6 +1198,7 @@ model ItemComprobante {
   precioUnitario        Decimal     @db.Decimal(14, 2)
   costoUnitarioSnapshot Decimal     @db.Decimal(14, 4)
   descuentoPct          Decimal     @db.Decimal(7, 3)
+  unidadVenta           Unidad?
 
   @@index([comprobanteId])
 }
@@ -1221,6 +1254,12 @@ model MedioRecibo {
   numeroCheque String?
   fechaCobro   DateTime?
   chequeId     String?
+  /// Efectivo en dólares: moneda, dólares recibidos y tipo de cambio cargado a mano (importe = pesos).
+  moneda       Moneda?
+  importeME    Decimal?  @db.Decimal(14, 2)
+  tipoCambio   Decimal?  @db.Decimal(14, 4)
+  /// Caja chica donde entra / de donde sale el efectivo.
+  cajaId       String?
 
   @@index([reciboId])
 }
@@ -1271,6 +1310,12 @@ model MedioOrdenPago {
   numeroCheque String?
   fechaCobro   DateTime?
   chequeId     String?
+  /// Efectivo en dólares: moneda, dólares recibidos y tipo de cambio cargado a mano (importe = pesos).
+  moneda       Moneda?
+  importeME    Decimal?  @db.Decimal(14, 2)
+  tipoCambio   Decimal?  @db.Decimal(14, 4)
+  /// Caja chica donde entra / de donde sale el efectivo.
+  cajaId       String?
 
   @@index([ordenPagoId])
 }
@@ -1326,6 +1371,8 @@ model Configuracion {
   categoriasAdjunto      Json
   /// { empresa, razonSocial, cuit, direccion, telefono, email }
   empresa                Json
+  /// [{ codigo, nombre, activo }] tipos de cliente editables.
+  tiposCliente           Json           @default("[]")
   creadoEn               DateTime       @default(now())
   actualizadoEn          DateTime       @updatedAt
 }
@@ -1400,4 +1447,68 @@ model ArcaTicket {
   token    String
   sign     String
   expira   DateTime
+}
+
+// ───────────────────────── Caja chica ─────────────────────────
+
+model Caja {
+  id            String   @id @default(cuid())
+  nombre        String
+  descripcion   String?
+  sucursalId    String?
+  activa        Boolean  @default(true)
+  orden         Int      @default(0)
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+/// Movimiento de caja: ingresos (cobros en efectivo), egresos (pagos, gastos), transferencias y
+/// préstamos entre cajas. Los de recibos y órdenes de pago se generan solos.
+model MovimientoCaja {
+  id                String   @id @default(cuid())
+  cajaId            String
+  fecha             DateTime
+  /// INGRESO | EGRESO | TRANSFERENCIA | PRESTAMO | DEVOLUCION_PRESTAMO | APERTURA | AJUSTE
+  tipo              String
+  /// 1 entra, -1 sale.
+  signo             Int
+  moneda            Moneda   @default(ARS)
+  importe           Decimal  @db.Decimal(14, 2)
+  concepto          String
+  categoria         String?
+  /// RECIBO | ORDEN_PAGO | MANUAL | ARQUEO
+  referenciaTipo    String?
+  referenciaId      String?
+  cajaRelacionadaId String?
+  /// Une las dos patas de una transferencia o préstamo.
+  grupoId           String?
+  usuarioId         String
+  anulado           Boolean  @default(false)
+  motivoAnulacion   String?
+  observaciones     String?
+  creadoEn          DateTime @default(now())
+  actualizadoEn     DateTime @updatedAt
+
+  @@index([cajaId])
+  @@index([fecha])
+  @@index([referenciaId])
+}
+
+/// Arqueo: lo que dice el sistema contra lo contado en el cajón.
+model ArqueoCaja {
+  id            String   @id @default(cuid())
+  cajaId        String
+  fecha         DateTime
+  moneda        Moneda   @default(ARS)
+  saldoSistema  Decimal  @db.Decimal(14, 2)
+  contado       Decimal  @db.Decimal(14, 2)
+  diferencia    Decimal  @db.Decimal(14, 2)
+  /// [{ denominacion, cantidad }]
+  billetes      Json?
+  usuarioId     String
+  observaciones String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@index([cajaId])
 }

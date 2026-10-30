@@ -12,7 +12,7 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { useAccionesDespacho, useAhora } from "./despachos-view";
-import { Impacto } from "@/capacitacion";
+
 
 /**
  * "Depósito en vivo": kanban Espera / Preparación / Finalizados de hoy con cronómetros, con el
@@ -55,8 +55,6 @@ export function DepositoEnVivo() {
               {c.titulo} <span className={cn("tnum", completa ? "text-[22px]" : "text-[16px]")}>{lista.length}</span>
             </h2>
             <div className={cn("flex-1 space-y-2.5 p-3", completa && "min-h-0 overflow-y-auto")}>
-              {puede && c.estados.includes("ESPERA") && lista.length > 0 && <Impacto accion="iniciarPreparacion" />}
-              {puede && c.estados.includes("PREPARACION") && lista.length > 0 && <Impacto accion="finalizarDespacho" />}
               {lista.map((d) => {
                 const cli = db.clientes.find((x) => x.id === d.clienteId);
                 const enEstado = d.estado === "ESPERA" ? minutosEspera(d, ahora) : d.estado === "PREPARACION" ? minutosPreparacion(d, ahora) : minutosTotal(d, ahora);

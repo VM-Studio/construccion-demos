@@ -9,6 +9,10 @@ const listaPreciosInput = z.object({
   descripcion: texto,
   markupPorDefecto: porcentaje,
   activa: z.boolean(),
+  clienteId: ref.optional(),
+  listaBaseId: ref.optional(),
+  ajustePct: z.number().finite().min(-100).max(1000).optional(),
+  reglasRubro: lista(z.object({ rubroId: ref, markupPct: z.number().finite().min(-100).max(1000) }), 200).optional(),
 });
 
 const rubroInput = z.object({

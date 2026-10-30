@@ -17,7 +17,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { OrdenPagoDocumento } from "./documentos";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 type Fila = MedioCobro & { _id: string };
 const deInput = (v: string) => {
@@ -94,7 +94,6 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
               <FormField label="Fecha" htmlFor="op-f" className="max-w-[200px]"><Input id="op-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
               <FormField label="Circuito" className="max-w-[200px]">
                 <Select aria-label="Circuito" value={String(circuito)} onValueChange={(v) => { setCircuito(Number(v) as 1 | 2); setImput({}); }} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
-                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
             </div>
             <div>
@@ -168,7 +167,6 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
               )}
               {Math.abs(imputado - total) > 0.01 && <p className="mt-2 text-[12px] text-danger">En pagos a proveedores lo imputado tiene que ser igual al total pagado.</p>}
             </div>
-            <Impacto accion="crearOrdenPago" />
           </div>
         </DialogContent>
       </Dialog>

@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Proveedor, "id" | "creadoEn" | "actualizadoEn">;
@@ -77,7 +77,6 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
         </FormField>
         <FormField label="Circuito habitual">
           <Select disabled={ro} value={String(f.circuitoHabitual)} onValueChange={(v) => set("circuitoHabitual", Number(v) as 1 | 2)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
-          <ImpactoCampo campo={`circuito.${f.circuitoHabitual}`} />
         </FormField>
         <FormField label="Contacto" htmlFor="pv-contacto">
           <Input id="pv-contacto" disabled={ro} value={f.contacto} onChange={(e) => set("contacto", e.target.value)} />
@@ -127,7 +126,6 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
           <Button type="submit" loading={guardando}><Save /> {proveedor ? "Guardar cambios" : "Crear proveedor"}</Button>
         </div>
       )}
-      {!ro && !proveedor && <Impacto accion="crearProveedor" />}
     </form>
   );
 }

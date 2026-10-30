@@ -31,7 +31,7 @@ import { PendientesTabla } from "@/components/modulos/ventas/pendientes-tabla";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { EstadoCuenta } from "@/components/modulos/cuentas/estado-cuenta";
 import { DescargarDesacopio } from "@/components/modulos/acopios/descargar-desacopio";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export function ClienteFicha({ id }: { id: string }) {
   const db = useDb();
@@ -227,7 +227,7 @@ function ResumenCliente({ id }: { id: string }) {
               </tbody>
             </table>
           </div>
-          {edit && !edit.id && <div className="border-t border-border p-3"><Impacto accion="crearObra" /></div>}
+          {edit && !edit.id && <div className="border-t border-border p-3"></div>}
         </Card>
         <Card>
           <CardHeader><CardTitle>Notas internas</CardTitle></CardHeader>

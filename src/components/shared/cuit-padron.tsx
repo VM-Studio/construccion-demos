@@ -8,7 +8,7 @@ import { consultarPadronAction } from "@/server/actions/padron";
 import { useDb } from "@/store/selectors";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
-import { ImpactoCampo } from "@/capacitacion";
+
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -139,7 +139,6 @@ export function CuitPadron({
         </div>
       )}
       {estado.tipo === "sin-datos" && <p className="text-[12px] text-muted">No se pudo consultar el padrón; completá los datos a mano.</p>}
-      <ImpactoCampo campo="padron.cuit" />
     </FormField>
   );
 }

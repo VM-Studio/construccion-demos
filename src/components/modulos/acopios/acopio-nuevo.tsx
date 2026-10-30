@@ -26,7 +26,7 @@ import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { ConstanciaAcopio } from "./acopio-detalle";
 import { obtenerDb } from "@/lib/datos/almacen";
 
@@ -155,13 +155,12 @@ export function AcopioNuevo() {
             </FormField>
             <FormField label="Circuito">
               <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
-              <ImpactoCampo campo={`circuito.${circuito}`} />
             </FormField>
             <FormField label="Sucursal"><Select aria-label="Sucursal" value={sucursalId} onValueChange={(v) => { setSucursalId(v); setDepositoId(db.sucursales.find((s) => s.id === v)?.depositoId ?? depositoId); }} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} /></FormField>
-            <FormField label="Depósito de entrega"><Select aria-label="Depósito" value={depositoId} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} /><ImpactoCampo campo="deposito" /></FormField>
+            <FormField label="Depósito de entrega"><Select aria-label="Depósito" value={depositoId} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} /></FormField>
             <FormField label="Vendedor"><Select aria-label="Vendedor" value={vendedorId} onValueChange={setVendedorId} options={[{ value: "", label: "Sin asignar" }, ...db.usuarios.filter((u) => u.rol === "VENTAS" || u.rol === "DUENO").map((u) => ({ value: u.id, label: u.nombre }))]} /></FormField>
             <FormField label="Fecha de creación" htmlFor="ac-f"><Input id="ac-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
-            <FormField label="Vencimiento" htmlFor="ac-v" hint={`Por defecto ${db.config.diasVencimientoAcopio} días`}><Input id="ac-v" type="date" value={vence} onChange={(e) => setVence(e.target.value)} /><ImpactoCampo campo="acopio.vencimiento" /></FormField>
+            <FormField label="Vencimiento" htmlFor="ac-v" hint={`Por defecto ${db.config.diasVencimientoAcopio} días`}><Input id="ac-v" type="date" value={vence} onChange={(e) => setVence(e.target.value)} /></FormField>
             <FormField label="Unidad de negocio"><Select aria-label="Unidad de negocio" value={un} onValueChange={(v) => { setUn(v); setAjustes({}); }} options={db.unidadesNegocio.map((u) => ({ value: u.id, label: u.nombre }))} /></FormField>
             <FormField label="Obras" className="sm:col-span-2 lg:col-span-3">
               <div className="flex flex-wrap gap-2">
@@ -178,7 +177,6 @@ export function AcopioNuevo() {
             <FormField label="Importe con IIBB"><div className="flex h-9 items-center font-semibold tnum">{formatMoney(conIIBB)}</div></FormField>
             <FormField label="Forma de pago" className="sm:col-span-2" hint={forma === "ANTICIPO" ? "Paga ahora: al crear se abre el recibo con el importe precargado" : "Lo paga después: la factura queda en su cuenta corriente"}>
               <Segmented value={forma} onChange={setForma} options={[{ value: "ANTICIPO", label: "Anticipo" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
-              <ImpactoCampo campo={`acopio.formaPago.${forma}`} />
             </FormField>
             <FormField label="Lista de precios a congelar"><Select aria-label="Lista de precios" value={lista} onValueChange={(v) => { setLista(v); setAjustes({}); }} options={db.listasPrecios.map((l) => ({ value: l.id, label: l.nombre }))} /></FormField>
             <FormField label="Observaciones" htmlFor="ac-o" className="sm:col-span-2 lg:col-span-3"><Input id="ac-o" value={obs} onChange={(e) => setObs(e.target.value)} /></FormField>
@@ -197,7 +195,6 @@ export function AcopioNuevo() {
               </dl>
               <Button variant="secondary" className="w-full" onClick={() => setVerPrecios(true)}><Eye /> Ver precios que se van a congelar</Button>
               <Button className="w-full" onClick={crear} disabled={!clienteId || !(importe > 0) || !obraIds.length || conPrecio === 0}><Boxes /> Crear acopio</Button>
-              <Impacto accion="crearAcopio" />
               {clienteId && importe > 0 && (!obraIds.length || conPrecio === 0) && <p className="text-[12px] text-muted">{!obraIds.length ? "Elegí al menos una obra." : "La lista elegida no tiene precios para congelar."}</p>}
               {acopioCreado && <Button variant="ghost" className="w-full" onClick={() => setConstancia(true)}><Printer /> Constancia de acopio</Button>}
             </CardContent>

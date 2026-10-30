@@ -18,7 +18,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { formatDate, formatMoney, formatQty } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export interface FilaPendiente extends LineaPendiente {
   key: string;
@@ -99,7 +99,6 @@ export function ProgramarEntregaDialog({ filas, open, onOpenChange, onListo }: {
           <FormField label="Fecha programada" htmlFor="pe-f">
             <Input id="pe-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </FormField>
-          <Impacto accion="programarEntrega" />
         </div>
       </DialogContent>
     </Dialog>
@@ -191,7 +190,6 @@ export function PendientesTabla({ lineas, mostrarCliente, vacio = "No hay entreg
           ) : undefined
         }
       />
-      {puede && elegidas.length > 0 && <Impacto accion="retiroEnMostrador" className="mt-2" />}
       <ProgramarEntregaDialog filas={programar ?? []} open={!!programar} onOpenChange={(v) => !v && setProgramar(null)} onListo={() => setSel(new Set())} />
     </>
   );

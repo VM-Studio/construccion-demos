@@ -75,7 +75,7 @@ export interface EstadoCapacitacion {
 
 export const CAPACITACION_INICIAL: EstadoCapacitacion = {
   // Activo por defecto (los dueños lo apagan desde Configuración); poner `false` para ocultarlo en todo el sistema.
-  modo: true,
+  modo: false,
   avisado: false,
   colapsados: {},
   bannersCerrados: {},

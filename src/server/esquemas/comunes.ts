@@ -48,12 +48,12 @@ export const rol = z.enum(["DUENO", "ADMINISTRACION", "VENTAS", "DEPOSITO"]);
 export const unidad = z.enum(["UN", "BOLSA", "M3", "M2", "ML", "KG", "LT", "PALLET", "CAJA", "ROLLO", "PLACA", "TN"]);
 export const codigoUnidadNegocio = z.enum(["FER", "COR"]);
 export const estadoOC = z.enum(["BORRADOR", "ENVIADA", "CONFIRMADA", "RECIBIDA_PARCIAL", "RECIBIDA", "CANCELADA"]);
-export const estadoCotizacion = z.enum(["BORRADOR", "ENVIADA", "ACEPTADA", "RECHAZADA", "VENCIDA"]);
+export const estadoCotizacion = z.enum(["BORRADOR", "PENDIENTE", "ENVIADA", "ACEPTADA", "RECHAZADA", "VENCIDA"]);
 export const estadoCheque = z.enum(["EN_CARTERA", "DEPOSITADO", "ENTREGADO", "RECHAZADO"]);
-export const tipoCliente = z.enum(["MAYORISTA", "FERRETERIA", "CORRALON", "MELI", "MADERERA", "CONSTRUCTORA", "PARTICULAR", "ARQUITECTO"]);
+export const tipoCliente = z.string().trim().min(1).max(40).regex(/^[A-Z0-9_]+$/);
 export const tipoProveedor = z.enum(["FABRICANTE", "DISTRIBUIDOR", "TRANSPORTISTA", "SERVICIOS"]);
 export const condicionPago = z.enum(["CONTADO", "CTA_CTE_15", "CTA_CTE_30", "CTA_CTE_60", "ANTICIPO"]);
-export const medioPago = z.enum(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "ECHEQ", "TARJETA", "MERCADOPAGO"]);
+export const medioPago = z.enum(["EFECTIVO", "TRANSFERENCIA", "CHEQUE", "ECHEQ", "TARJETA", "MERCADOPAGO", "COMISION"]);
 export const condicionIVA = z.enum(["RI", "MONOTRIBUTO", "EXENTO", "CF"]);
 export const formaPagoAcopio = z.enum(["ANTICIPO", "CUENTA_CORRIENTE"]);
 export const formaPagoVenta = z.enum(["CONTADO", "CUENTA_CORRIENTE", "ACOPIO"]);
@@ -81,6 +81,10 @@ export const medioCobro = z.object({
   numeroCheque: texto.optional(),
   fechaCobro: fechaOpcional,
   chequeId: ref.optional(),
+  moneda: moneda.optional(),
+  importeME: montoNoNegativo.optional(),
+  tipoCambio: z.number().finite().positive().max(1e7).optional(),
+  cajaId: ref.optional(),
 });
 
 export const imputacion = z.object({
@@ -97,6 +101,7 @@ export const itemVenta = z.object({
   precioUnitario: monto,
   costoUnitarioSnapshot: monto,
   descuentoPct: porcentaje,
+  unidadVenta: unidad.optional(),
 });
 
 /** Líneas de entrega parcial (remito, despacho, devolución). */
@@ -123,6 +128,8 @@ export const productoInput = z.object({
   pesoKg: cantidad.optional(),
   monedaCosto: moneda.optional(),
   costoUSD: montoNoNegativo.optional(),
+  unidadAlternativa: unidad.optional(),
+  factorAlternativa: z.number().finite().positive().max(1e7).optional(),
 });
 
 export const proveedorInput = z.object({

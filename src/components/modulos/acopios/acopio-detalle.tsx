@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRightLeft, Ban, CalendarClock, PackageOpen, Printer, SlidersHorizontal, Wallet } from "lucide-react";
 import { useStore } from "@/store";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useAcopiosResumen, useDb, usePendientes, usePuede } from "@/store/selectors";
 import type { Acopio } from "@/domain/types";
 import { numeroCorto } from "@/domain/numeracion";
@@ -236,7 +236,6 @@ function TraspasoDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: num
             <FormField label="Descripción" htmlFor="tr-d" hint="Se ve en el detalle del acopio (editable)">
               <Input id="tr-d" value={desc} onChange={(e) => setDesc(e.target.value)} />
             </FormField>
-            <Impacto accion="traspasarSaldoAcopio" />
           </div>
         )}
       </DialogContent>
@@ -261,7 +260,6 @@ function AjusteDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => void
           <FormField label="Tipo"><Select aria-label="Tipo de ajuste" value={signo} onValueChange={setSigno} options={[{ value: "1", label: "Suma al saldo" }, { value: "-1", label: "Resta del saldo" }]} /></FormField>
           <FormField label="Monto" htmlFor="aj-m"><NumberInput id="aj-m" value={monto} min={0} onValueChange={setMonto} /></FormField>
           <FormField label="Motivo" required htmlFor="aj-mo"><Input id="aj-mo" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. bonificación por demora en la entrega" /></FormField>
-          <Impacto accion="ajustarSaldoAcopio" />
         </div>
       </DialogContent>
     </Dialog>
@@ -281,8 +279,7 @@ function ExtenderDialog({ acopio, onClose }: { acopio: Acopio; onClose: () => vo
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="sm" title="Extender vencimiento" description={`Vence actualmente el ${formatDate(acopio.fechaVencimiento)}.`} footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={confirmar}>Extender</Button></>}>
         <div className="space-y-3">
-          <FormField label="Nueva fecha de vencimiento" htmlFor="ex-f"><Input id="ex-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /><ImpactoCampo campo="acopio.vencimiento" /></FormField>
-          <Impacto accion="extenderVencimientoAcopio" />
+          <FormField label="Nueva fecha de vencimiento" htmlFor="ex-f"><Input id="ex-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
         </div>
       </DialogContent>
     </Dialog>
@@ -302,7 +299,6 @@ function CancelarDialog({ acopio, saldo, onClose }: { acopio: Acopio; saldo: num
       <DialogContent size="sm" title={`Cancelar ${acopio.numero}`} description={saldo > 0 ? `El saldo de ${formatMoney(saldo)} vuelve al cliente con una nota de crédito.` : "El acopio no tiene saldo."} footer={<><Button variant="secondary" onClick={onClose}>Volver</Button><Button variant="danger" onClick={confirmar} disabled={!motivo.trim()}><Ban /> Cancelar acopio</Button></>}>
         <div className="space-y-3">
           <FormField label="Motivo" required htmlFor="ca-m"><Input id="ca-m" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. el cliente suspendió la obra" /></FormField>
-          <Impacto accion="cancelarAcopio" />
         </div>
       </DialogContent>
     </Dialog>

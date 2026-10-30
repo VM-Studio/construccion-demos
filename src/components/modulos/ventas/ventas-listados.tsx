@@ -37,7 +37,7 @@ import { PRESETS_LISTADO, periodoDesdePreset, type Periodo } from "@/lib/periodo
 import { cn, newId } from "@/lib/utils";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { ComprobanteDocumento, ReciboDocumento } from "@/components/modulos/cuentas/documentos";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { DevolucionDialog } from "./nota-pedido-detalle";
 import { obtenerDb } from "@/lib/datos/almacen";
 import { aDolares, formatUSD, textoTipoCambioAplicado, useTipoCambio } from "@/lib/tipo-cambio";
@@ -183,10 +183,9 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
               <SelectorCliente value={clienteId} disabled={!editable} onChange={elegirCliente} />
             </FormField>
             <FormField label="Obra"><ObraSelect clienteId={clienteId} value={obraId} onChange={setObraId} /></FormField>
-            <FormField label="Validez (días)" htmlFor="cot-v"><Input id="cot-v" type="number" min={1} value={validez} disabled={!editable} onChange={(e) => setValidez(Math.max(1, Number(e.target.value) || 1))} /><ImpactoCampo campo="cotizacion.validez" /></FormField>
+            <FormField label="Validez (días)" htmlFor="cot-v"><Input id="cot-v" type="number" min={1} value={validez} disabled={!editable} onChange={(e) => setValidez(Math.max(1, Number(e.target.value) || 1))} /></FormField>
             <FormField label="Circuito" className="sm:col-span-2">
               <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
-              <ImpactoCampo campo={`circuito.${circuito}`} />
             </FormField>
             {cliente?.facturaEnUSD && (
               <FormField label="Moneda" className="sm:col-span-2">
@@ -194,7 +193,6 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
                   <Switch checked={enUSD} disabled={!editable} onCheckedChange={(v) => setMoneda(v ? "USD" : "ARS")} /> Precios en USD
                   {enUSD && <span className="text-muted">{dolar ? `Dólar de hoy ${formatMoney(dolar)}` : "Sin tipo de cambio disponible"}</span>}
                 </label>
-                <ImpactoCampo campo={`moneda.${enUSD ? "USD" : "ARS"}`} />
               </FormField>
             )}
           </div>
@@ -219,8 +217,6 @@ function CotizacionDialog({ cot, clienteInicial, onClose }: { cot?: Cotizacion; 
               </p>
             );
           })()}
-          {editable && <Impacto accion="crearCotizacion" />}
-          {editable && (!actual || actual.estado !== "ACEPTADA") && <Impacto accion="convertirCotizacion" />}
         </div>
         {actual && (
           <PrintPreview open={imprimir} onOpenChange={setImprimir} titulo={`Cotización ${actual.numero}`}>

@@ -37,7 +37,7 @@ import { newId } from "@/lib/utils";
 import { totalesOC, totalesOCUSD } from "@/store/slices/compras";
 import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { OCDocumento } from "./oc-documento";
 import { RecepcionDialog } from "./recepcion-dialog";
 import { obtenerDb } from "@/lib/datos/almacen";
@@ -247,7 +247,6 @@ export function OCEditor({ id }: { id: string }) {
               </FormField>
               <FormField label="Depósito destino">
                 <Select disabled={!editable} value={depositoId} onValueChange={setDepositoId} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
-                <ImpactoCampo campo="oc.deposito" />
               </FormField>
               <FormField label="Fecha de emisión" htmlFor="oc-fecha">
                 <Input id="oc-fecha" type="date" disabled={!editable} value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -264,7 +263,6 @@ export function OCEditor({ id }: { id: string }) {
                 ) : (
                   <div className="flex h-9 items-center text-[13px]">{origen === "ACOPIO" ? "Retiro de acopio con proveedor" : "Compra nueva"}</div>
                 )}
-                <ImpactoCampo campo={`oc.origen.${origen}`} />
               </FormField>
               {origen === "NUEVA" && (
                 <FormField label="Moneda">
@@ -273,7 +271,6 @@ export function OCEditor({ id }: { id: string }) {
                   ) : (
                     <div className="flex h-9 items-center text-[13px]">{moneda === "USD" ? "Dólares (USD)" : "Pesos"}</div>
                   )}
-                  <ImpactoCampo campo={`moneda.${moneda}`} />
                 </FormField>
               )}
               <FormField label="Circuito">
@@ -282,7 +279,6 @@ export function OCEditor({ id }: { id: string }) {
                 ) : (
                   <div className="flex h-9 items-center"><CircuitoBadge circuito={circuito} /></div>
                 )}
-                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
               {origen === "ACOPIO" && (
                 <FormField label="Acopio con el proveedor" error={editable && proveedorId && !acpsProveedor.length ? "El proveedor no tiene acopios vigentes con saldo." : undefined}>
@@ -540,13 +536,6 @@ export function OCEditor({ id }: { id: string }) {
                   </p>
                 )}
               </div>
-              {editable ? (
-                <Impacto accion={oc?.estado === "BORRADOR" ? "enviarOrdenCompra" : "crearOrdenCompra"} />
-              ) : oc?.estado === "ENVIADA" && puedeConfirmar ? (
-                <Impacto accion={idConfirmar} />
-              ) : (oc?.estado === "CONFIRMADA" || oc?.estado === "RECIBIDA_PARCIAL") && puedeRecibir ? (
-                <Impacto accion={idRecepcion} />
-              ) : null}
             </CardContent>
           </Card>
         </aside>

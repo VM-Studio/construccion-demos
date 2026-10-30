@@ -5,7 +5,7 @@ import { Download, Plus, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useStore } from "@/store";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useDb, usePendientes, usePuede, useSaldosClientes, useAcopiosResumen, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
 import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opcionesTipoCliente } from "@/domain/estados";
 import type { Cliente } from "@/domain/types";
@@ -208,7 +208,6 @@ export function ClientesView() {
       >
         <div className="space-y-3">
           <p className="text-[13px] text-muted">Queda registrado en la auditoría.</p>
-          <Impacto accion="eliminarCliente" />
         </div>
       </ConfirmDialog>
       <NuevoClienteDialog open={nuevo} onOpenChange={setNuevo} onCreado={(id) => router.push(`/clientes/${id}`)} />

@@ -16,7 +16,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { fuenteLabel, useTipoCambio } from "@/lib/tipo-cambio";
 import { cn } from "@/lib/utils";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export type Alcance = "TODO" | "RUBRO" | "PROVEEDOR" | "MARCA" | "SELECCIONADOS";
 
@@ -270,7 +270,6 @@ export function ActualizacionMasivaDialog({
             {reales.length > 300 && <p className="mt-1 text-[12px] text-muted">Se muestran los primeros 300 cambios.</p>}
           </div>
         </div>
-        <Impacto accion="actualizarPreciosMasivo" n={reales.length} className="mt-4" />
       </DialogContent>
     </Dialog>
   );

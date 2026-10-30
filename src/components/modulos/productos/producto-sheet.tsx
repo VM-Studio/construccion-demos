@@ -29,7 +29,7 @@ import { LineaChart } from "@/components/charts";
 import { formatDate, formatDateTime, formatMoney, formatPercent, formatQty } from "@/lib/format";
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { cn } from "@/lib/utils";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 import { useEnvio } from "@/lib/use-envio";
 
@@ -385,7 +385,6 @@ function TabGeneral({
                 { value: "USD", label: "Dólares (USD)" },
               ]}
             />
-            <ImpactoCampo campo="producto.monedaCosto" />
           </FormField>
           {enUSD && (
             <FormField label="Costo USD" htmlFor="p-costo-usd" error={errores.costoUSD} hint="Sin IVA">
@@ -412,7 +411,7 @@ function TabGeneral({
         {verCostos && (
           <FormField label="Costo último" htmlFor="p-costo" error={errores.costoUltimo} hint={producto ? `Actualizado ${formatDate(producto.fechaUltimoCosto)}` : "Sin IVA"}>
             <NumberInput id="p-costo" disabled={ro || enUSD} value={f.costoUltimo} min={0} onValueChange={setCosto} className={resaltar("costoUltimo")} />
-            {enUSD ? <p className="mt-1 text-[12px] text-muted">En pesos: lo calcula el sistema desde el costo USD.</p> : <ImpactoCampo campo="producto.costo" />}
+            {enUSD ? <p className="mt-1 text-[12px] text-muted">En pesos: lo calcula el sistema desde el costo USD.</p> : null}
             {marca("costoUltimo")}
           </FormField>
         )}
@@ -423,7 +422,6 @@ function TabGeneral({
         )}
         <FormField label="Stock mínimo" htmlFor="p-min" hint="Total entre depósitos">
           <NumberInput id="p-min" disabled={ro} value={f.stockMinimo} min={0} onValueChange={(v) => set("stockMinimo", v)} className={resaltar("stockMinimo")} />
-          <ImpactoCampo campo="producto.stockMinimo" />
           {marca("stockMinimo")}
         </FormField>
       </div>
@@ -507,7 +505,6 @@ function TabGeneral({
           </Button>
         </div>
       )}
-      {!ro && <Impacto accion={accionId} />}
     </form>
   );
 }
@@ -592,7 +589,6 @@ function TabPrecios({ producto }: { producto: Producto }) {
           Recalcular desde markup
         </Button>
       )}
-      {puedeEditar && <Impacto accion="actualizarPrecio" />}
     </div>
   );
 }

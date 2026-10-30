@@ -21,7 +21,7 @@ import { diaLocal } from "@/lib/periodos";
 import { cn } from "@/lib/utils";
 import { pesoDespacho } from "./documentos";
 import { useAccionesDespacho } from "./despachos-view";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 /** Hoja de ruta: envíos del día por vehículo, conectada a los estados de despacho. */
 export function HojaRutaView() {
@@ -105,7 +105,6 @@ export function HojaRutaView() {
                 </CardHeader>
                 {h && puede && (h.estado === "PLANIFICADA" || h.estado === "EN_CURSO") && (
                   <div className="px-4 pb-3 empty:hidden">
-                    <Impacto accion={h.estado === "PLANIFICADA" ? "iniciarRecorrido" : "marcarEntregado"} />
                   </div>
                 )}
                 {paradas.length === 0 ? (

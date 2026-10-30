@@ -17,7 +17,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
@@ -150,7 +150,6 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
         </FormField>
         <FormField label="Límite de crédito" error={err.limiteCredito} htmlFor="cl-lim">
           <NumberInput id="cl-lim" disabled={ro} value={f.limiteCredito} min={0} onValueChange={(v) => set("limiteCredito", v)} />
-          <ImpactoCampo campo="cliente.limiteCredito" />
         </FormField>
         <FormField label="Sucursal preferida">
           <Select disabled={ro} value={f.sucursalPreferidaId} onValueChange={(v) => set("sucursalPreferidaId", v)} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} />
@@ -163,7 +162,6 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
             <Checkbox disabled={ro} checked={!!f.facturaEnUSD} onCheckedChange={(v) => set("facturaEnUSD", v === true)} /> Factura en USD
             <span className="text-[12px] text-muted">· habilita Precios en USD en cotizaciones y notas de pedido</span>
           </label>
-          <ImpactoCampo campo="cliente.facturaEnUSD" />
         </div>
       </div>
       {!compacto && (
@@ -181,7 +179,6 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
           <Button type="submit" loading={guardando}><Save /> {cliente ? "Guardar cambios" : "Crear cliente"}</Button>
         </div>
       )}
-      {!ro && !cliente && <Impacto accion="crearCliente" />}
     </form>
   );
 }

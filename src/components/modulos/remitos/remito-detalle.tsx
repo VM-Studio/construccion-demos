@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { DevolucionDialog, saldosDeNP } from "@/components/modulos/ventas/nota-pedido-detalle";
 import { RemitoDocumento } from "./remito-documento";
 import { SubirFirmadoDialog } from "./subir-firmado";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 const PASOS = ["INICIAL", "PICKING", "HECHO"] as const;
 const PASO_LABEL = { INICIAL: "Inicial", PICKING: "Picking", HECHO: "Hecho" };
@@ -143,8 +143,6 @@ export function RemitoDetalle({ id }: { id: string }) {
           </Button>
         )}
       </div>
-        {proxima && <Impacto accion={proxima} />}
-        <ImpactoCampo campo={`remito.estado.${r.estado}`} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">

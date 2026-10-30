@@ -13,7 +13,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { FormField } from "@/components/ui/form-field";
 import { formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { obtenerDb } from "@/lib/datos/almacen";
 
 const aIso = (v: string) => {
@@ -102,7 +102,6 @@ export function SaldoInicialDialog({ tipo, open, onOpenChange, entidadId }: { ti
           </FormField>
           <FormField label="Circuito" className="sm:col-span-2" hint={id ? "Por defecto, el circuito habitual de la cuenta" : undefined}>
             <Segmented value={String(circuito) as "1" | "2"} onChange={(v) => setCircuito(Number(v) as Circuito)} options={[{ value: "1", label: "AC1 · Fiscal" }, ...(veC2 ? [{ value: "2" as const, label: "AC2 · Interno" }] : [])]} />
-            <ImpactoCampo campo={`circuito.${circuito}`} />
           </FormField>
           <FormField label="Fecha" required htmlFor="si-f">
             <Input id="si-f" type="date" value={fecha} max={hoy} onChange={(e) => setFecha(e.target.value)} />
@@ -113,7 +112,6 @@ export function SaldoInicialDialog({ tipo, open, onOpenChange, entidadId }: { ti
           <FormField label="Observación" htmlFor="si-o" className="sm:col-span-2">
             <Input id="si-o" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Saldo inicial (sistema anterior)" />
           </FormField>
-          <Impacto accion="cargarSaldoInicial" className="sm:col-span-2" />
         </div>
       </DialogContent>
     </Dialog>

@@ -11,7 +11,8 @@ export const ESTADOS: Record<string, { label: string; variant: BadgeVariant }> =
   "OC.CANCELADA": { label: "Cancelada", variant: "neutral" },
   // Cotizaciones
   "COTIZACION.BORRADOR": { label: "Borrador", variant: "neutral" },
-  "COTIZACION.ENVIADA": { label: "Enviada", variant: "info" },
+  "COTIZACION.PENDIENTE": { label: "Pendiente", variant: "warning" },
+  "COTIZACION.ENVIADA": { label: "Pendiente", variant: "warning" },
   "COTIZACION.ACEPTADA": { label: "Aceptada", variant: "success" },
   "COTIZACION.RECHAZADA": { label: "Rechazada", variant: "danger" },
   "COTIZACION.VENCIDA": { label: "Vencida", variant: "danger" },
@@ -111,20 +112,25 @@ export const TIPO_CLIENTE_LABEL: Record<string, string> = {
   MAYORISTA: "Mayorista",
   FERRETERIA: "Ferretería",
   CORRALON: "Corralón",
-  MELI: "MELI",
-  MADERERA: "Madereras",
-  // Solo para mostrar clientes cargados antes; ya no se ofrecen.
+  MELI: "Mercado Libre",
+  MADERERA: "Maderera",
   CONSTRUCTORA: "Constructora",
+  CONSUMIDOR_FINAL: "Consumidor final",
   PARTICULAR: "Particular",
   ARQUITECTO: "Arquitecto",
 };
 
-/** Tipos que se ofrecen al cargar o filtrar clientes. */
-export const TIPOS_CLIENTE_VIGENTES = ["MAYORISTA", "FERRETERIA", "CORRALON", "MELI", "MADERERA"] as const;
+type TiposConfig = { codigo: string; nombre: string; activo: boolean }[] | undefined;
 
-/** Opciones de tipo de cliente; `actual` suma un tipo anterior para no perderlo al editar. */
-export const opcionesTipoCliente = (actual?: string) =>
-  [...TIPOS_CLIENTE_VIGENTES, ...(actual && !(TIPOS_CLIENTE_VIGENTES as readonly string[]).includes(actual) ? [actual] : [])].map((value) => ({ value, label: TIPO_CLIENTE_LABEL[value] ?? value }));
+/** Nombre de un tipo de cliente según la lista editable de Configuración. */
+export const nombreTipoCliente = (codigo: string | undefined, tipos: TiposConfig) => (codigo ? (tipos?.find((t) => t.codigo === codigo)?.nombre ?? TIPO_CLIENTE_LABEL[codigo] ?? codigo) : "—");
+
+/** Opciones de tipo de cliente (los activos de Configuración); `actual` suma uno inactivo para no perderlo al editar. */
+export const opcionesTipoCliente = (tipos: TiposConfig, actual?: string) => {
+  const lista = (tipos ?? []).filter((t) => t.activo || t.codigo === actual).map((t) => ({ value: t.codigo, label: t.nombre }));
+  if (actual && !lista.some((o) => o.value === actual)) lista.push({ value: actual, label: TIPO_CLIENTE_LABEL[actual] ?? actual });
+  return lista;
+};
 
 export const CONDICION_PAGO_LABEL: Record<string, string> = {
   CONTADO: "Contado",
@@ -148,6 +154,7 @@ export const MEDIO_PAGO_LABEL: Record<string, string> = {
   ECHEQ: "eCheq",
   TARJETA: "Tarjeta",
   MERCADOPAGO: "Mercado Pago",
+  COMISION: "Comisión / retención",
 };
 
 export const UNIDAD_LABEL: Record<string, string> = {

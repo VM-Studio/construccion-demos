@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SerieDialog } from "./serie-dialog";
 import { calcularPrecioDesdeMarkup, markupEfectivo } from "@/domain/precios";
 import { opciones, UNIDAD_LABEL } from "@/domain/estados";
+import { barrasPorToneladaDe, diametroDe, esBarraDeHierro } from "@/domain/unidades";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { SelectorProveedor } from "@/components/shared/alta-rapida";
@@ -260,6 +261,8 @@ function TabGeneral({
         proveedorHabitualId: f.proveedorHabitualId,
         codigoBarras: f.codigoBarras || undefined,
         pesoKg: f.pesoKg,
+        unidadAlternativa: f.unidadAlternativa,
+        factorAlternativa: f.unidadAlternativa ? f.factorAlternativa : undefined,
         monedaCosto: f.monedaCosto ?? "ARS",
         costoUSD: enUSD ? f.costoUSD : undefined,
         costoUltimo: f.costoUltimo,
@@ -353,6 +356,15 @@ function TabGeneral({
           {marca("pesoKg")}
         </FormField>
       </div>
+      <UnidadAlternativaCampos
+        ro={ro}
+        nombre={f.nombre}
+        unidad={f.unidad}
+        rubroId={f.rubroId}
+        unidadAlternativa={f.unidadAlternativa}
+        factorAlternativa={f.factorAlternativa}
+        onChange={(u, fa) => setF((x) => ({ ...x, unidadAlternativa: u, factorAlternativa: fa }))}
+      />
       <div className="grid gap-4 sm:grid-cols-3">
         <FormField label="Proveedor habitual" className="sm:col-span-2">
           <div className={cn("flex items-center gap-1", resaltar("proveedorHabitualId"))}>
@@ -533,7 +545,7 @@ function TabPrecios({ producto }: { producto: Producto }) {
             </tr>
           </thead>
           <tbody>
-            {db.listasPrecios.map((l) => {
+            {db.listasPrecios.filter((l) => !l.clienteId).map((l) => {
               const reg = db.precios.find((p) => p.productoId === producto.id && p.listaPreciosId === l.id);
               const precio = editando[l.id] ?? reg?.precio ?? 0;
               const mk = markupEfectivo(precio, producto.costoPromedio);
@@ -764,3 +776,53 @@ function TabCostos({ producto }: { producto: Producto }) {
   );
 }
 
+
+/** Unidad alternativa: hierro en barras que también se ingresa y vende por tonelada. */
+function UnidadAlternativaCampos({
+  ro,
+  nombre,
+  unidad,
+  rubroId,
+  unidadAlternativa,
+  factorAlternativa,
+  onChange,
+}: {
+  ro: boolean;
+  nombre: string;
+  unidad: Unidad;
+  rubroId: string;
+  unidadAlternativa?: Unidad;
+  factorAlternativa?: number;
+  onChange: (u: Unidad | undefined, f: number | undefined) => void;
+}) {
+  const db = useDb();
+  const esHierro = esBarraDeHierro({ nombre, unidad, rubroId, unidadAlternativa }, db.rubros);
+  const sugerido = esHierro && unidad === "UN" ? barrasPorToneladaDe(diametroDe(nombre)) : null;
+  const activo = !!unidadAlternativa;
+  return (
+    <div className="rounded-card border border-border p-3">
+      <label className="flex items-center gap-2 text-[13px] font-medium">
+        <Switch disabled={ro} checked={activo} onCheckedChange={(v) => onChange(v ? (unidad === "TN" ? "UN" : "TN") : undefined, v ? (sugerido ?? factorAlternativa) : undefined)} />
+        También se ingresa y se vende por otra unidad
+      </label>
+      {activo && (
+        <div className="mt-3 grid items-end gap-3 sm:grid-cols-[160px_auto_1fr]">
+          <FormField label="Otra unidad">
+            <Select disabled={ro} value={unidadAlternativa ?? "TN"} onValueChange={(v) => onChange(v as Unidad, factorAlternativa)} options={opciones(UNIDAD_LABEL).filter((o) => o.value !== unidad)} />
+          </FormField>
+          <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
+            <div className="flex items-center gap-2">
+              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
+              <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
+            </div>
+          </FormField>
+          {sugerido && sugerido !== factorAlternativa && !ro && (
+            <Button size="sm" variant="ghost" onClick={() => onChange("TN", sugerido)}>
+              Usar {sugerido} barras por tonelada (Ø {diametroDe(nombre)} mm)
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

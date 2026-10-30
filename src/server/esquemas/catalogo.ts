@@ -57,3 +57,5 @@ export const aplicarCambiosPrecios = z.tuple([lista(cambioPrecio, MAX_CAMBIOS_PR
 export const guardarLista = z.tuple([listaPreciosInput, id.optional()]);
 export const guardarRubro = z.tuple([rubroInput, id.optional()]);
 export const importarArticulos = z.tuple([lista(productoInput, MAX_FILAS_IMPORTACION)]);
+
+export const quitarPrecioLista = z.tuple([id, id]);

@@ -94,7 +94,7 @@ export function ReporteValorizacion() {
       descripcion="Cuánto vale el stock por depósito y rubro, a costo promedio y a costo último, y el margen potencial embebido a precio de venta."
       filtros={
         <>
-          <Select size="sm" className="w-[190px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.map((l) => ({ value: l.id, label: `Venta a lista ${l.nombre}` }))} />
+          <Select size="sm" className="w-[190px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.filter((l) => !l.clienteId).map((l) => ({ value: l.id, label: `Venta a lista ${l.nombre}` }))} />
           <Segmented value={moneda} onChange={setMoneda} options={[{ value: "ARS", label: "ARS" }, { value: "USD", label: "USD" }]} />
         </>
       }

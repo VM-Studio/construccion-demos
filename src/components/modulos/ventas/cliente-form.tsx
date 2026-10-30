@@ -64,7 +64,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
     tocados.current.add(k as string);
     setF((x) => ({ ...x, [k]: v }));
   };
-  const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" ? "lst_may" : t === "PARTICULAR" ? "lst_pub" : t === "ARQUITECTO" ? "lst_gen" : "lst_may");
+  const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" || t === "MAYORISTA" ? "lst_may" : t === "PARTICULAR" || t === "CONSUMIDOR_FINAL" ? "lst_pub" : "lst_gen");
   const aplicarPadron = React.useCallback(
     (d: DatosPadron, reemplazar: boolean) =>
       setF((x) => ({ ...x, ...completarDesdePadron(x, d, { reemplazar, tocados: tocados.current }) })),
@@ -112,7 +112,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
               set("tipo", t);
               if (!cliente && !tocados.current.has("listaPreciosId")) setF((x) => ({ ...x, listaPreciosId: listaPorTipo(t) }));
             }}
-            options={opcionesTipoCliente(cliente?.tipo)}
+            options={opcionesTipoCliente(db.config.tiposCliente, cliente?.tipo)}
           />
         </FormField>
         <FormField label="Condición IVA">
@@ -143,7 +143,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
           <Input id="cl-cp" disabled={ro} value={f.codigoPostal ?? ""} onChange={(e) => set("codigoPostal", e.target.value || undefined)} />
         </FormField>
         <FormField label="Lista de precios">
-          <Select disabled={ro} value={f.listaPreciosId} onValueChange={(v) => set("listaPreciosId", v)} options={db.listasPrecios.map((l) => ({ value: l.id, label: l.nombre }))} />
+          <Select disabled={ro} value={f.listaPreciosId} onValueChange={(v) => set("listaPreciosId", v)} options={db.listasPrecios.filter((l) => !l.clienteId || l.id === f.listaPreciosId).map((l) => ({ value: l.id, label: l.nombre }))} />
         </FormField>
         <FormField label="Condición de pago">
           <Select disabled={ro} value={f.condicionPago} onValueChange={(v) => set("condicionPago", v as CondicionPago)} options={opciones(CONDICION_PAGO_LABEL)} />

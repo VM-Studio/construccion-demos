@@ -92,7 +92,7 @@ function crearDerivado(tx: Tx, origen: Producto, c: DuplicarProductoInput, reser
   const nuevo: Producto = { ...data, id: newId("prod"), ...tx.meta() };
   tx.insert("productos", nuevo);
   for (const d of tx.get("depositos")) tx.insert("stock", { id: newId("stk"), productoId: nuevo.id, depositoId: d.id, cantidadFisica: 0, ...tx.meta() });
-  const listas = tx.get("listasPrecios");
+  const listas = tx.get("listasPrecios").filter((l) => !l.clienteId);
   const calculados = preciosParaCosto(origen, tx.get("precios"), listas, nuevo.costoUltimo);
   for (const l of listas) {
     const precio = c.precios?.[l.id] ?? calculados[l.id];
@@ -152,7 +152,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         tx.insert("productos", nuevo);
         for (const d of tx.get("depositos"))
           tx.insert("stock", { id: newId("stk"), productoId: nuevo.id, depositoId: d.id, cantidadFisica: 0, ...tx.meta() });
-        for (const l of tx.get("listasPrecios"))
+        for (const l of tx.get("listasPrecios").filter((x) => !x.clienteId))
           tx.insert("precios", {
             id: newId("pre"),
             productoId: nuevo.id,
@@ -197,6 +197,17 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         });
         tx.auditar("Creó serie de artículos", "Producto", origen.id, `Creó una serie de ${creados.length} artículos a partir de ${origen.codigo}: ${creados.map((p) => p.codigo).join(", ")}`);
         return { ids: creados.map((p) => p.id), codigos: creados.map((p) => p.codigo) };
+      }),
+
+    /** Quita el precio cargado a mano de una lista especial (vuelve a calcularse por la regla). */
+    quitarPrecioLista: (productoId: string, listaPreciosId: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "precios.editar");
+        const l = tx.must("listasPrecios", listaPreciosId);
+        if (!l.clienteId) throw new ErrorNegocio("Solo se quitan precios de listas especiales.");
+        const p = tx.get("precios").find((x) => x.productoId === productoId && x.listaPreciosId === listaPreciosId);
+        if (p) tx.remove("precios", p.id);
+        tx.auditar("Quitó precio especial", "Cliente", l.clienteId, `${tx.find("productos", productoId)?.codigo ?? ""} · ${l.nombre}`);
       }),
 
     actualizarPrecio: (productoId: string, listaPreciosId: string, precio: number) =>
@@ -334,6 +345,24 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "precios.editar");
         if (!data.nombre.trim()) throw new ErrorNegocio("El nombre es obligatorio.");
+        if (data.clienteId) {
+          // Lista especial de un cliente: el cliente pasa a usarla; al desactivarla vuelve a su lista base.
+          const cli = tx.must("clientes", data.clienteId);
+          if (data.listaBaseId && tx.find("listasPrecios", data.listaBaseId)?.clienteId) throw new ErrorNegocio("La lista base tiene que ser una lista general.");
+          if (id) {
+            tx.patch("listasPrecios", id, data);
+            if (!data.activa && cli.listaPreciosId === id) tx.patch("clientes", cli.id, { listaPreciosId: data.listaBaseId ?? "lst_gen" });
+            if (data.activa && cli.listaPreciosId !== id) tx.patch("clientes", cli.id, { listaPreciosId: id });
+            tx.auditar("Editó lista especial", "Cliente", cli.id, `${data.nombre}${data.activa ? "" : " · desactivada"}`);
+            return id;
+          }
+          if (tx.get("listasPrecios").some((l) => l.clienteId === cli.id)) throw new ErrorNegocio("El cliente ya tiene una lista especial.");
+          const lista: ListaPrecios = { ...data, id: newId("lst"), ...tx.meta() };
+          tx.insert("listasPrecios", lista);
+          tx.patch("clientes", cli.id, { listaPreciosId: lista.id });
+          tx.auditar("Creó lista especial", "Cliente", cli.id, `${data.nombre} · base ${tx.find("listasPrecios", data.listaBaseId ?? "")?.nombre ?? "—"}`);
+          return lista.id;
+        }
         if (id) {
           tx.patch("listasPrecios", id, data);
           tx.auditar("Editó lista de precios", "ListaPrecios", id, data.nombre);

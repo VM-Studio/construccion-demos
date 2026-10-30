@@ -1,4 +1,4 @@
-import type { Circuito, Cliente, Comprobante, CondicionIVA, Cotizacion, DevolucionNP, FormaPagoVenta, ItemNP, ItemVenta, MedioCobro, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Remito, Unidad } from "@/domain/types";
+import type { Circuito, Cliente, Comprobante, Cotizacion, DevolucionNP, FormaPagoVenta, ItemNP, ItemVenta, MedioCobro, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Remito, Unidad } from "@/domain/types";
 import { pendienteLinea, precioCongelado, validarRetiro, retiradoAcopio, pagadoAcopio } from "@/domain/acopios";
 import { calcularTotales } from "@/domain/ventas";
 import { saldoCliente } from "@/domain/cuentasCorrientes";
@@ -11,6 +11,8 @@ import {
   actualizarEstadoNP,
   aplicarAComprobante,
   crearFacturaVenta,
+  CLIENTE_MELI,
+  clienteMercadoLibre,
   crearClienteDesdeVenta,
   crearRemitoNP,
   disponible,
@@ -549,7 +551,9 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
      */
     crearVenta: (data: NotaPedidoInput, opts: OpcionesConfirmacion | undefined, extras: ExtrasVenta, id?: string) =>
       ejecutar(get, set, (tx) => {
-        const np = confirmar(tx, guardar(tx, data, id).id, opts);
+        const datos = data.clienteId === CLIENTE_MELI ? { ...data, clienteId: clienteMercadoLibre(tx).id } : data;
+        if (data.clienteId === CLIENTE_MELI && !extras.datosFactura?.compradorNombre?.trim()) throw new ErrorNegocio("Cargá el nombre del comprador.");
+        const np = confirmar(tx, guardar(tx, datos, id).id, opts);
         return completarVenta(tx, np.id, extras);
       }),
 

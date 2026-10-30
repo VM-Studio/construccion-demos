@@ -56,6 +56,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
   const puedeCobrar = usePuede("ctacte.cobrar");
   const puedeAnular = usePuede("ventas.anular");
   const [anular, setAnular] = React.useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = React.useState("");
   const [imprimir, setImprimir] = React.useState(false);
   const [cobrar, setCobrar] = React.useState(false);
   const [devolver, setDevolver] = React.useState(false);
@@ -142,7 +143,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                 <Button variant="ghost" onClick={() => setDevolver(true)}><Undo2 /> Devolución</Button>
               )}
               <Button variant="ghost" onClick={() => setImprimir(true)}><Printer /> Imprimir</Button>
-              {puedeAnular && !np.items.some((i) => i.entregados > 0) && (
+              {puedeAnular && (
                 <Button variant="ghost" onClick={() => setAnular(true)}>
                   <Ban /> Anular
                 </Button>
@@ -153,6 +154,14 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
       />
       {(puedeGenerarRemito || puedeFacturarNP) && (
         <div className="mb-4 space-y-2">
+        </div>
+      )}
+      {np.estado === "ANULADA" && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger">
+          <span>Venta anulada{np.anuladaEn ? ` el ${formatDate(np.anuladaEn)}` : ""}{np.motivoAnulacion ? ` · ${np.motivoAnulacion}` : ""}</span>
+          {puedeEditar && np.origen !== "ACOPIO" && (
+            <Button size="sm" variant="secondary" onClick={async () => { const r = await useStore.getState().recuperarVenta(np.id); if (!r.ok) toast.error(r.error); else router.push("/ventas/cotizaciones"); }}>Recuperar</Button>
+          )}
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -326,15 +335,26 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
       <ConfirmDialog
         open={anular}
         onOpenChange={setAnular}
-        titulo={`Anular ${np.numero}`}
-        descripcion={np.acopioId ? "El monto vuelve al saldo del acopio y se anulan los remitos y despachos pendientes." : "Se anulan los remitos y despachos pendientes."}
-        confirmLabel="Anular"
+        titulo={`¿Anular la venta ${np.numero}?`}
+        descripcion={[
+          factura ? `Se anula la factura ${factura.numero}${factura.arcaEstado === "AUTORIZADO" ? " con nota de crédito" : ""} y los cobros aplicados.` : "",
+          np.items.some((i) => i.entregados > 0) ? "Lo entregado vuelve al stock con un remito de devolución." : "",
+          np.acopioId ? "El monto vuelve al saldo del acopio." : "",
+          "Queda en Ventas anuladas y se puede recuperar.",
+        ].filter(Boolean).join(" ")}
+        confirmLabel="Anular venta"
         variant="danger"
-        onConfirm={async () => run(await medir("anularNotaPedido", ctx, () => useStore.getState().anularNotaPedido(np.id, "Anulada por el usuario")), "Nota de pedido anulada")}
+        onConfirm={async () => {
+          if (!motivoAnulacion.trim()) {
+            toast.error("Indicá el motivo.");
+            return false;
+          }
+          return run(await useStore.getState().anularVenta(np.id, motivoAnulacion.trim()), "Venta anulada");
+        }}
       >
-        <div className="space-y-3">
-          <p className="text-[13px] text-muted">Esta acción queda registrada en la auditoría.</p>
-        </div>
+        <FormField label="Motivo" required htmlFor="anv-m">
+          <Input id="anv-m" value={motivoAnulacion} onChange={(e) => setMotivoAnulacion(e.target.value)} placeholder="Ej. el cliente se arrepintió" />
+        </FormField>
       </ConfirmDialog>
     </div>
   );

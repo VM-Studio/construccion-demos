@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, Info, Plus, Save, ShieldAlert, Users } fro
 import { useStore } from "@/store";
 import { useAcopiosResumen, useDb, usePendientes, usePuede, useUnidadNegocio, useUsuario } from "@/store/selectors";
 import type { Circuito, FormaPagoVenta, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Producto } from "@/domain/types";
-import { obtenerPrecio } from "@/domain/precios";
+import { precioLista } from "@/domain/precios";
 import { calcularTotales } from "@/domain/ventas";
 import { precioCongelado } from "@/domain/acopios";
 import { puede } from "@/domain/permisos";
@@ -34,6 +34,7 @@ import { AvisoFaltantes } from "@/components/shared/aviso-faltantes";
 import { medir } from "@/capacitacion";
 import { PendientesTabla } from "./pendientes-tabla";
 import { obtenerDb } from "@/lib/datos/almacen";
+import { MediosEditor, mediosParaEnviar, nuevoMedio, pesosDe, type FilaMedio } from "@/components/shared/medios-editor";
 import { aDolares, formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 
 interface Linea extends LineaBase {
@@ -79,8 +80,8 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const { valor: dolar } = useTipoCambio();
   const [items, setItems] = React.useState<Linea[]>(
     () =>
-      borrador?.items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct ?? 0 })) ??
-      cotizacion?.items.map((i) => ({ id: newId("l"), productoId: i.productoId, obraId: i.obraId ?? cotizacion.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct })) ??
+      borrador?.items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct ?? 0, unidadVenta: i.unidadVenta })) ??
+      cotizacion?.items.map((i) => ({ id: newId("l"), productoId: i.productoId, obraId: i.obraId ?? cotizacion.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct, unidadVenta: i.unidadVenta })) ??
       [],
   );
   const [nuevaObra, setNuevaObra] = React.useState(false);
@@ -134,7 +135,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     productoId: p.id,
     obraId: items.at(-1)?.obraId ?? obrasPermitidas?.[0] ?? db.obras.find((o) => o.clienteId === clienteId && o.activa)?.id,
     cantidad: 1,
-    precio: acopio ? (precioCongelado(acopio, p.id)?.precio ?? 0) : obtenerPrecio(p.id, lista, db.precios),
+    precio: acopio ? (precioCongelado(acopio, p.id)?.precio ?? 0) : precioLista(p.id, lista, db),
     descuentoPct: 0,
   });
   const congelados = React.useMemo(() => new Set(acopio?.preciosCongelados.map((p) => p.productoId) ?? []), [acopio]);
@@ -142,6 +143,19 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
 
   const ivaPct = acopio || circuito === 2 ? 0 : db.config.ivaPct;
   const t = calcularTotales(items.map((i) => ({ cantidad: i.cantidad, precioUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct })), acopio ? 0 : descuento, ivaPct);
+  // Venta en un paso: facturar y cobrar en el momento (como en el sistema anterior).
+  const puedeFacturar = puede(usuario, "ventas.facturar");
+  const puedeCobrar = puede(usuario, "ctacte.cobrar");
+  const [facturar, setFacturar] = React.useState(puedeFacturar);
+  const [cobrar, setCobrar] = React.useState(puedeFacturar && puedeCobrar && formaPago === "CONTADO");
+  const [medios, setMedios] = React.useState<FilaMedio[]>(() => [nuevoMedio("EFECTIVO", 0)]);
+  const cobrado = medios.reduce((a, m) => a + pesosDe(m), 0);
+  React.useEffect(() => {
+    setMedios((ms) => (ms.length === 1 && ms[0].medio === "EFECTIVO" && ms[0].moneda !== "USD" ? [{ ...ms[0], importe: t.total }] : ms));
+  }, [t.total]);
+  React.useEffect(() => {
+    setCobrar(puedeFacturar && puedeCobrar && formaPago === "CONTADO");
+  }, [formaPago, puedeFacturar, puedeCobrar]);
   const monto = acopio ? t.subtotal : t.total;
   const costo = items.reduce((a, i) => a + i.cantidad * (acopio ? (precioCongelado(acopio, i.productoId)?.costoSnapshot ?? 0) : (prod(i.productoId)?.costoPromedio ?? 0)), 0);
   const margen = t.neto - costo;
@@ -164,7 +178,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     origen,
     acopioId: acopio?.id,
     formaPago: (acopio ? "ACOPIO" : formaPago) as FormaPagoVenta,
-    items: items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precioUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct })),
+    items: items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precioUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct, unidadVenta: i.unidadVenta })),
     descuentoPct: acopio ? 0 : descuento,
     pendienteEntrega: pendiente,
     modalidadEntrega: pendiente ? modalidad : "RETIRA",
@@ -188,16 +202,16 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     if (!clienteId) return toast.error("Elegí un cliente.");
     if (!items.length) return toast.error("Agregá al menos un artículo.");
     if (origen === "ACOPIO" && !acopio) return toast.error("Elegí el acopio del que se retira.");
-    const r = await medir(origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva", contextoMedir(), () => useStore.getState().crearNotaPedido(datos(), opts, borrador?.id));
+    if (cobrar && cobrado <= 0) return toast.error("Cargá el importe cobrado o desactivá el cobro.");
+    const extras = { retiraAhora: !pendiente, facturar: !acopio && facturar, cobro: !acopio && facturar && cobrar ? { medios: mediosParaEnviar(medios) } : undefined };
+    const r = await medir(origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva", contextoMedir(), () => useStore.getState().crearVenta(datos(), opts, extras, borrador?.id));
     if (!r.ok) {
       if (r.codigo && ["SIN_DISPONIBLE", "SALDO_ACOPIO", "IMPAGO", "CREDITO"].includes(r.codigo)) setBloqueo({ codigo: r.codigo, error: r.error, opts });
       else toast.error(r.error);
       return;
     }
-    const np = obtenerDb().notasPedido.find((n) => n.id === r.data)!;
-    toast.success(`Nota de pedido ${np.numero} confirmada`, { description: acopio ? `Saldo del acopio luego del retiro: ${formatMoney(saldoDespues)}` : undefined });
     setBloqueo(null);
-    router.replace(`/ventas/notas-pedido/${r.data}`);
+    router.replace(`/ventas/notas-pedido/${r.data.npId}`);
   };
 
   const faltante = React.useMemo(() => {
@@ -459,8 +473,20 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                 </div>
               )}
               <div className="flex flex-col gap-2">
+                {!acopio && puedeFacturar && (
+                  <div className="space-y-2 rounded-control border border-border p-3 text-[13px]">
+                    <label className="flex items-center gap-2"><Switch checked={facturar} onCheckedChange={(v) => { setFacturar(v); if (!v) setCobrar(false); }} /> Emitir {circuito === 1 ? "factura F1" : "comprobante F2"}</label>
+                    {facturar && puedeCobrar && <label className="flex items-center gap-2"><Switch checked={cobrar} onCheckedChange={setCobrar} /> Registrar el cobro ahora</label>}
+                    {facturar && cobrar && (
+                      <>
+                        <MediosEditor medios={medios} onChange={setMedios} sucursalId={sucursalId} />
+                        <p className={cn("text-right text-[12px]", Math.abs(cobrado - t.total) > 0.01 ? "text-warning" : "text-muted")}>Cobrado {formatMoney(cobrado)} de {formatMoney(t.total)}</p>
+                      </>
+                    )}
+                  </div>
+                )}
                 <Button onClick={() => confirmar()} disabled={!clienteId || !items.length}>
-                  <CheckCircle2 /> Confirmar
+                  <CheckCircle2 /> {pendiente ? "Confirmar venta" : "Confirmar y entregar"}
                 </Button>
                 <Button variant="secondary" onClick={guardarBorrador} disabled={!clienteId || !items.length}>
                   <Save /> Guardar borrador

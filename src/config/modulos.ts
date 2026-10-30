@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Factory, FileText, LayoutDashboard, PackagePlus, Settings, ShoppingCart, Truck, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, Boxes, Factory, FileText, LayoutDashboard, PackagePlus, Settings, ShoppingCart, Truck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { puede, type Permiso } from "@/domain/permisos";
 import { REPORTES } from "@/components/modulos/reportes/catalogo";
 
@@ -62,8 +62,17 @@ export const MODULOS: Modulo[] = [
       p("recibos", "Recibos (entrada de fondos)", "/ventas/recibos", "ctacte.ver"),
       p("listas-precios", "Listas de precios", "/ventas/listas-precios", "productos.ver"),
       p("devoluciones", "Devoluciones", "/ventas/devoluciones", "ventas.ver"),
+      p("mercado-libre", "Mercado Libre", "/ventas/mercado-libre", "ventas.ver"),
+      p("anuladas", "Ventas anuladas", "/ventas/anuladas", "ventas.ver"),
       p("cheques", "Cartera de cheques", "/cuentas-corrientes/cheques", "ctacte.ver"),
     ],
+  },
+  {
+    id: "caja",
+    nombre: "Caja chica",
+    icono: Wallet,
+    descripcion: "Efectivo de cada caja, ingresos, egresos y arqueos",
+    paginas: [p("caja", "Caja chica", "/caja", "caja.ver")],
   },
   {
     id: "proveedores",
@@ -145,6 +154,7 @@ export const MODULOS: Modulo[] = [
       p("unidades", "Unidades de negocio", "/configuracion?tab=unidades", "config.ver"),
       p("usuarios", "Usuarios y roles", "/configuracion?tab=usuarios", "config.ver"),
       p("parametros", "Parámetros", "/configuracion?tab=parametros", "config.ver"),
+      p("tipos-cliente", "Tipos de cliente", "/configuracion?tab=tipos-cliente", "config.ver"),
       p("numeracion", "Numeración", "/configuracion?tab=numeracion", "config.ver"),
       p("demo", "Datos del demo", "/configuracion?tab=demo", "config.ver"),
     ],

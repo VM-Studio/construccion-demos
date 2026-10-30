@@ -49,7 +49,8 @@ export const REGISTRO: Registro = {
   crearSerieProductos: { modulo: "catalogo", permiso: "productos.editar", accionId: "crearSerieProductos", rutas: R.catalogo },
   actualizarPrecio: { modulo: "catalogo", permiso: "precios.editar", accionId: "actualizarPrecio", rutas: R.catalogo },
   aplicarCambiosPrecios: { modulo: "catalogo", permiso: "precios.editar", accionId: "actualizarPreciosMasivo", rutas: R.catalogo },
-  guardarLista: { modulo: "catalogo", permiso: "precios.editar", rutas: R.catalogo },
+  guardarLista: { modulo: "catalogo", permiso: "precios.editar", rutas: [...R.catalogo, ...R.clientes] },
+  quitarPrecioLista: { modulo: "catalogo", permiso: "precios.editar", rutas: R.catalogo },
   guardarRubro: { modulo: "catalogo", permiso: "productos.editar", rutas: R.catalogo },
   importarArticulos: { modulo: "catalogo", permiso: "productos.editar", accionId: "importarArticulos", rutas: R.catalogo },
   // ── Clientes y proveedores ──

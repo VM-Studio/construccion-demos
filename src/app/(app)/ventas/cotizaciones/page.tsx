@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { CotizacionesView } from "@/components/modulos/ventas/ventas-listados";
+import { CotizacionesView } from "@/components/modulos/ventas/cotizaciones";
 import { RequierePermiso } from "@/components/shared/requiere-permiso";
 
 export const metadata: Metadata = { title: "Cotizaciones de venta" };

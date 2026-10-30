@@ -8,7 +8,8 @@ import { useDb, usePosiciones, posicionEn } from "@/store/selectors";
 import { calcularTotales } from "@/domain/ventas";
 import { formatMoney, formatQty, unidadCorta } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { Producto } from "@/domain/types";
+import type { Producto, Unidad } from "@/domain/types";
+import { aBase, deBase, esAlternativa, precioABase, precioEn, tieneAlternativa } from "@/domain/unidades";
 import { ProductoPicker } from "./producto-picker";
 
 export interface LineaBase {
@@ -17,6 +18,8 @@ export interface LineaBase {
   cantidad: number;
   precio?: number;
   descuentoPct?: number;
+  /** Unidad en que se carga la línea (la alternativa del artículo, ej. TN). Cantidad y precio quedan en la base. */
+  unidadVenta?: Unidad;
 }
 
 export interface ColumnaExtra<T> {
@@ -128,11 +131,34 @@ export function ItemsGrid<T extends LineaBase>({
                   </td>
                   <td className="px-3 py-2">
                     {readOnly ? (
-                      <div className="text-right tnum">{formatQty(i.cantidad, p.unidad)}</div>
+                      <div className="text-right tnum">{esAlternativa(p, i.unidadVenta) ? formatQty(Math.round(deBase(i.cantidad, p, i.unidadVenta) * 1000) / 1000, i.unidadVenta!) : formatQty(i.cantidad, p.unidad)}</div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <NumberInput aria-label={`Cantidad de ${p.nombre}`} value={i.cantidad} min={0} onValueChange={(v) => update(i.id, { cantidad: v } as Partial<T>)} className="h-8" />
-                        <span className="w-9 shrink-0 text-[11px] text-muted">{unidadCorta(p.unidad)}</span>
+                        <NumberInput
+                          aria-label={`Cantidad de ${p.nombre}`}
+                          value={Math.round(deBase(i.cantidad, p, i.unidadVenta) * 1000) / 1000}
+                          min={0}
+                          onValueChange={(v) => update(i.id, { cantidad: aBase(v, p, i.unidadVenta) } as Partial<T>)}
+                          className="h-8"
+                        />
+                        {tieneAlternativa(p) ? (
+                          <select
+                            aria-label={`Unidad de ${p.nombre}`}
+                            value={i.unidadVenta === p.unidadAlternativa ? p.unidadAlternativa : p.unidad}
+                            onChange={(e) => update(i.id, { unidadVenta: e.target.value === p.unidad ? undefined : (e.target.value as Unidad) } as Partial<T>)}
+                            className="h-8 w-14 shrink-0 rounded-control border border-border-strong bg-surface px-1 text-[11px]"
+                          >
+                            <option value={p.unidad}>{unidadCorta(p.unidad)}</option>
+                            <option value={p.unidadAlternativa}>{unidadCorta(p.unidadAlternativa)}</option>
+                          </select>
+                        ) : (
+                          <span className="w-9 shrink-0 text-[11px] text-muted">{unidadCorta(p.unidad)}</span>
+                        )}
+                      </div>
+                    )}
+                    {tieneAlternativa(p) && i.cantidad > 0 && (
+                      <div className="mt-0.5 text-right text-[11px] text-muted tnum">
+                        = {esAlternativa(p, i.unidadVenta) ? formatQty(i.cantidad, p.unidad) : formatQty(Math.round((i.cantidad / p.factorAlternativa) * 1000) / 1000, p.unidadAlternativa)}
                       </div>
                     )}
                   </td>
@@ -145,11 +171,11 @@ export function ItemsGrid<T extends LineaBase>({
                     <td className="px-3 py-2">
                       {readOnly || precioFijo?.(i) ? (
                         <div className="pt-1.5 text-right tnum" title={precioFijo?.(i)}>
-                          {formatMoney(i.precio ?? 0)}
+                          {formatMoney(precioEn(i.precio ?? 0, p, i.unidadVenta))}
                           {precioFijo?.(i) && <span className="block text-[10px] text-muted">congelado</span>}
                         </div>
                       ) : (
-                        <NumberInput aria-label={`${precioLabel} de ${p.nombre}`} value={i.precio ?? 0} min={0} onValueChange={(v) => update(i.id, { precio: v } as Partial<T>)} className="h-8" />
+                        <NumberInput aria-label={`${precioLabel} de ${p.nombre}`} value={precioEn(i.precio ?? 0, p, i.unidadVenta)} min={0} onValueChange={(v) => update(i.id, { precio: precioABase(v, p, i.unidadVenta) } as Partial<T>)} className="h-8" />
                       )}
                     </td>
                   )}

@@ -24,9 +24,10 @@ import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { medir } from "@/capacitacion";
 import { ReciboDocumento } from "./documentos";
+import { MediosEditor, mediosParaEnviar, nuevoMedio, pesosDe, type FilaMedio } from "@/components/shared/medios-editor";
+import { Checkbox } from "@/components/ui/checkbox";
 import { obtenerDb } from "@/lib/datos/almacen";
 
-type FilaMedio = MedioCobro & { _id: string };
 
 const hoy = () => diaLocal(new Date());
 const deInput = (v: string) => {
@@ -82,17 +83,27 @@ export function CobranzaDialog({
     const c = comprobanteId ? db.comprobantes.find((x) => x.id === comprobanteId) : undefined;
     setCircuito(c?.circuito ?? db.clientes.find((x) => x.id === cli)?.circuitoHabitual ?? 1);
     const imp = importeSugerido ?? c?.saldoPendiente ?? 0;
-    setMedios([{ _id: newId("m"), medio: "TRANSFERENCIA", importe: Math.round(imp * 100) / 100 }]);
+    setMedios([nuevoMedio("EFECTIVO", imp)]);
     setImput(c ? { [c.id]: Math.round(Math.min(imp, c.saldoPendiente) * 100) / 100 } : {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const total = Math.round(medios.reduce((a, m) => a + (m.importe || 0), 0) * 100) / 100;
+  const total = Math.round(medios.reduce((a, m) => a + pesosDe(m), 0) * 100) / 100;
   const imputado = Math.round(Object.values(imput).reduce((a, v) => a + (v || 0), 0) * 100) / 100;
   const aFavor = Math.round((total - imputado) * 100) / 100;
   const excedeSaldo = pendientes.some((c) => (imput[c.id] ?? 0) > c.saldoPendiente + 0.01);
   const upMedio = (id: string, patch: Partial<FilaMedio>) => setMedios((ms) => ms.map((m) => (m._id === id ? { ...m, ...patch } : m)));
   const cliente = db.clientes.find((c) => c.id === clienteId);
+
+  /** Picar una factura: se imputa su saldo y, si no se cargó importe, el cobro sugiere ese total. */
+  const picar = (id: string, saldo: number, si: boolean) => {
+    const nuevo = { ...imput };
+    if (si) nuevo[id] = saldo;
+    else delete nuevo[id];
+    setImput(nuevo);
+    const totalImp = Math.round(Object.values(nuevo).reduce((a, v) => a + (v || 0), 0) * 100) / 100;
+    setMedios((ms) => (ms.length === 1 && ms[0].moneda !== "USD" ? [{ ...ms[0], importe: totalImp }] : ms));
+  };
 
   const auto = () => {
     const r = imputarAutomaticamente(total, pendientes);
@@ -104,10 +115,7 @@ export function CobranzaDialog({
       clienteId,
       circuito,
       fecha: deInput(fecha),
-      medios: medios.map(({ _id, ...m }) => {
-        void _id;
-        return m;
-      }),
+      medios: mediosParaEnviar(medios),
       imputaciones: Object.entries(imput).map(([comprobanteId, importe]) => ({ comprobanteId, importe })),
       observaciones: obs || undefined,
     }));
@@ -171,48 +179,13 @@ export function CobranzaDialog({
             </div>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-[13px] font-semibold">Medios de pago</h4>
-                <Button size="sm" variant="ghost" onClick={() => setMedios([...medios, { _id: newId("m"), medio: "EFECTIVO", importe: 0 }])}>
-                  <Plus /> Agregar medio
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {medios.map((m) => {
-                  const esCheque = m.medio === "CHEQUE" || m.medio === "ECHEQ";
-                  return (
-                    <div key={m._id}>
-                    <div className="grid gap-2 rounded-control border border-border p-2 sm:grid-cols-[160px_150px_1fr_auto]">
-                      <Select size="sm" aria-label="Medio" value={m.medio} onValueChange={(v) => upMedio(m._id, { medio: v as MedioPago })} options={opciones(MEDIO_PAGO_LABEL)} />
-                      <NumberInput aria-label="Importe" value={m.importe} min={0} className="h-8" onValueChange={(v) => upMedio(m._id, { importe: v })} />
-                      {esCheque ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          <Input className="h-8 text-[13px]" aria-label="Banco" placeholder="Banco" value={m.banco ?? ""} onChange={(e) => upMedio(m._id, { banco: e.target.value })} />
-                          <Input className="h-8 text-[13px]" aria-label="Número de cheque" placeholder="Número" value={m.numeroCheque ?? ""} onChange={(e) => upMedio(m._id, { numeroCheque: e.target.value })} />
-                          <Input className="h-8 text-[13px]" aria-label="Fecha de cobro" type="date" value={m.fechaCobro ? diaLocal(m.fechaCobro) : ""} onChange={(e) => upMedio(m._id, { fechaCobro: e.target.value ? deInput(e.target.value) : undefined })} />
-                        </div>
-                      ) : (
-                        <Input
-                          className="h-8 text-[13px]"
-                          aria-label="Referencia"
-                          placeholder={m.medio === "TRANSFERENCIA" ? "CBU / alias / número de operación" : m.medio === "TARJETA" ? "Tarjeta y cupón" : "Referencia (opcional)"}
-                          value={m.referencia ?? ""}
-                          onChange={(e) => upMedio(m._id, { referencia: e.target.value })}
-                        />
-                      )}
-                      <Button size="icon-sm" variant="ghost" aria-label="Quitar medio" disabled={medios.length === 1} onClick={() => setMedios(medios.filter((x) => x._id !== m._id))}>
-                        <Trash2 className="text-muted" />
-                      </Button>
-                    </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <h4 className="mb-2 text-[13px] font-semibold">¿Cómo paga?</h4>
+              <MediosEditor medios={medios} onChange={setMedios} sucursalId={cliente?.sucursalPreferidaId} />
             </div>
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-[13px] font-semibold">Imputación</h4>
+                <h4 className="text-[13px] font-semibold">¿Qué factura paga?</h4>
                 <Button size="sm" variant="secondary" onClick={auto} disabled={!pendientes.length || total <= 0}>
                   <Wand2 /> Imputar automáticamente
                 </Button>
@@ -233,6 +206,7 @@ export function CobranzaDialog({
                   <table className="w-full min-w-[640px] text-table">
                     <thead className="bg-[#FAFAF8]">
                       <tr className="text-[12px] text-muted">
+                        <th className="h-9 w-8 px-2" />
                         <th className="h-9 px-3 text-left font-medium">Comprobante</th>
                         <th className="h-9 px-3 text-left font-medium">Fecha</th>
                         <th className="h-9 px-3 text-left font-medium">Vencimiento</th>
@@ -245,7 +219,10 @@ export function CobranzaDialog({
                       {pendientes.map((c) => {
                         const atraso = diasAtraso(c, new Date());
                         return (
-                          <tr key={c.id} className="border-t border-border">
+                          <tr key={c.id} className={cn("border-t border-border", (imput[c.id] ?? 0) > 0 && "bg-subtle")}>
+                            <td className="px-2 py-1.5">
+                              <Checkbox aria-label={`Pagar ${c.numero}`} checked={(imput[c.id] ?? 0) > 0} onCheckedChange={(v) => picar(c.id, c.saldoPendiente, !!v)} />
+                            </td>
                             <td className="px-3 py-1.5">
                               <span className="text-muted">{c.acopioId ? `Acopio ${db.acopios.find((a) => a.id === c.acopioId)?.numero ?? ""} ·` : TIPO_COMPROBANTE_LABEL[c.tipo]}</span> <span className="font-mono text-[12px]">{c.numero}</span>
                             </td>

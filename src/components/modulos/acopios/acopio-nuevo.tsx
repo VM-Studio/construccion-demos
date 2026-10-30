@@ -178,7 +178,7 @@ export function AcopioNuevo() {
             <FormField label="Forma de pago" className="sm:col-span-2" hint={forma === "ANTICIPO" ? "Paga ahora: al crear se abre el recibo con el importe precargado" : "Lo paga después: la factura queda en su cuenta corriente"}>
               <Segmented value={forma} onChange={setForma} options={[{ value: "ANTICIPO", label: "Anticipo" }, { value: "CUENTA_CORRIENTE", label: "Cuenta corriente" }]} />
             </FormField>
-            <FormField label="Lista de precios a congelar"><Select aria-label="Lista de precios" value={lista} onValueChange={(v) => { setLista(v); setAjustes({}); }} options={db.listasPrecios.map((l) => ({ value: l.id, label: l.nombre }))} /></FormField>
+            <FormField label="Lista de precios a congelar"><Select aria-label="Lista de precios" value={lista} onValueChange={(v) => { setLista(v); setAjustes({}); }} options={db.listasPrecios.filter((l) => !l.clienteId).map((l) => ({ value: l.id, label: l.nombre }))} /></FormField>
             <FormField label="Observaciones" htmlFor="ac-o" className="sm:col-span-2 lg:col-span-3"><Input id="ac-o" value={obs} onChange={(e) => setObs(e.target.value)} /></FormField>
           </CardContent>
         </Card>

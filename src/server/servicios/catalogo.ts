@@ -9,3 +9,4 @@ export const aplicarCambiosPrecios = servicio("aplicarCambiosPrecios");
 export const guardarLista = servicio("guardarLista");
 export const guardarRubro = servicio("guardarRubro");
 export const importarArticulos = servicio("importarArticulos");
+export const quitarPrecioLista = servicio("quitarPrecioLista");

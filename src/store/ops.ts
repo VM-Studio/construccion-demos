@@ -376,3 +376,33 @@ export function normalizarMedios(medios: MedioCobro[]): MedioCobro[] {
       throw new ErrorNegocio("Para cheques completá banco, número y fecha de cobro.");
   return out;
 }
+
+/** Cliente genérico de las ventas por Mercado Libre (el comprador real va en la factura). */
+export const CLIENTE_MELI = "__MELI__";
+export function clienteMercadoLibre(tx: Tx): Cliente {
+  const ex = tx.get("clientes").find((c) => c.codigo === "MELI");
+  if (ex) return ex;
+  const suc = tx.get("sucursales")[0];
+  const cli: Cliente = {
+    id: newId("cli"),
+    codigo: "MELI",
+    razonSocial: "Mercado Libre (ventas online)",
+    tipo: "MELI",
+    cuit: "",
+    condicionIVA: "CF",
+    circuitoHabitual: 1,
+    email: "",
+    telefono: "",
+    direccion: "",
+    localidad: "",
+    listaPreciosId: listaPorTipo(tx, "CONSUMIDOR_FINAL"),
+    condicionPago: "CONTADO",
+    limiteCredito: 0,
+    sucursalPreferidaId: suc?.id ?? "suc_central",
+    activo: true,
+    ...tx.meta(),
+  };
+  tx.insert("clientes", cli);
+  tx.auditar("Creó cliente", "Cliente", cli.id, cli.razonSocial);
+  return cli;
+}

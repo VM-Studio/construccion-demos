@@ -1,6 +1,6 @@
 /** Esquemas de entrada (tupla de argumentos) de las acciones del módulo ventas. */
 import { z } from "zod";
-import { cantidad, circuito, condicionIVA, estadoCotizacion, fecha, fechaOpcional, formaPagoVenta, id, imputacion, itemVenta, lineaEntrega, lista, medioCobro, modalidadEntrega, moneda, monto, origenVenta, porcentaje, ref, texto, unidad } from "./comunes";
+import { cantidad, circuito, condicionIVA, estadoCotizacion, fecha, fechaOpcional, formaPagoVenta, id, itemVenta, lineaEntrega, lista, medioCobro, modalidadEntrega, moneda, monto, origenVenta, porcentaje, ref, texto, unidad } from "./comunes";
 
 const itemNPInput = z.object({
   id: ref.optional(),

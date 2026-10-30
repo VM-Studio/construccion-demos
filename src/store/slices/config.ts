@@ -108,5 +108,23 @@ export function crearSliceConfig(set: SetFn, get: GetFn) {
         tx.auditar("Actualizó motivos de ajuste", "Configuracion", "motivos", `${motivos.length} motivos`);
       }),
 
+    /** Lista editable de tipos de cliente. No se puede borrar un tipo que tenga clientes: se desactiva. */
+    guardarTiposCliente: (tipos: Configuracion["tiposCliente"]) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "config.ver");
+        const codigos = new Set<string>();
+        for (const t of tipos) {
+          if (!t.nombre.trim()) throw new ErrorNegocio("Todos los tipos necesitan un nombre.");
+          if (codigos.has(t.codigo)) throw new ErrorNegocio(`El código ${t.codigo} está repetido.`);
+          codigos.add(t.codigo);
+        }
+        if (!tipos.some((t) => t.activo)) throw new ErrorNegocio("Dejá al menos un tipo de cliente activo.");
+        const usados = new Set(tx.get("clientes").map((c) => c.tipo));
+        const borrado = (tx.config.tiposCliente ?? []).find((t) => !codigos.has(t.codigo) && usados.has(t.codigo));
+        if (borrado) throw new ErrorNegocio(`Hay clientes con el tipo "${borrado.nombre}": desactivalo en lugar de borrarlo.`);
+        tx.setConfig({ tiposCliente: tipos.map((t) => ({ ...t, nombre: t.nombre.trim() })) });
+        tx.auditar("Actualizó tipos de cliente", "Configuracion", "tiposCliente", tipos.map((t) => t.nombre).join(", "));
+      }),
+
   };
 }

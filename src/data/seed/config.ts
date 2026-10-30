@@ -27,6 +27,17 @@ export function configInicial(): EstadoInicial["config"] {
       { codigo: "MUESTRA", nombre: "Muestra", activo: true },
       { codigo: "OTRO", nombre: "Otro", activo: true },
     ],
+    tiposCliente: [
+      { codigo: "MAYORISTA", nombre: "Mayorista", activo: true },
+      { codigo: "FERRETERIA", nombre: "Ferretería", activo: true },
+      { codigo: "CORRALON", nombre: "Corralón", activo: true },
+      { codigo: "CONSTRUCTORA", nombre: "Constructora", activo: true },
+      { codigo: "CONSUMIDOR_FINAL", nombre: "Consumidor final", activo: true },
+      { codigo: "MELI", nombre: "Mercado Libre", activo: true },
+      { codigo: "MADERERA", nombre: "Maderera", activo: true },
+      { codigo: "PARTICULAR", nombre: "Particular", activo: false },
+      { codigo: "ARQUITECTO", nombre: "Arquitecto", activo: false },
+    ],
     empresa: {
       empresa: BRAND.empresa,
       razonSocial: BRAND.razonSocial,

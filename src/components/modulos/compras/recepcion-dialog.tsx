@@ -18,7 +18,7 @@ import { FormField } from "@/components/ui/form-field";
 import { ActualizacionMasivaDialog } from "@/components/modulos/productos/actualizacion-masiva";
 import { formatMoney, formatPercent, formatQty, unidadCorta } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 
 interface Linea {
@@ -245,7 +245,6 @@ export function RecepcionDialog({ ordenCompraId, open, onOpenChange, onDone }: {
             <FormField label="Observaciones" htmlFor="rec-obs">
               <Input id="rec-obs" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej. 2 bolsas rotas, el chofer firmó la diferencia" />
             </FormField>
-            <Impacto accion={accionId} />
           </div>
         </DialogContent>
       </Dialog>

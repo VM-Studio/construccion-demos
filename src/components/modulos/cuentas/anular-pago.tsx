@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Textarea } from "@/components/ui/textarea";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { formatMoney } from "@/lib/format";
 
 /** Botón "Anular" de un recibo o una orden de pago: pide el motivo y devuelve el saldo a las facturas. */
@@ -57,7 +57,6 @@ export function BotonAnularPago({ tipo, doc, onAnulado }: { tipo: "recibo"; doc:
             <Textarea id="anular-motivo" rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: cobro cargado por error" autoFocus />
           </FormField>
           <p className="text-[13px] text-muted">Queda visible como anulado y registrado en la auditoría.</p>
-          <Impacto accion={accion} />
         </div>
       </ConfirmDialog>
     </>

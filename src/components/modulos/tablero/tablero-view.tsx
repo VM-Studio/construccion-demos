@@ -10,7 +10,6 @@ import { useDb, usePuede, useSucursalActiva, useSaldosClientes, useAcopiosResume
 import { minutosPreparacion, promedio } from "@/domain/despachos";
 import { useAlertas } from "@/store/alertas";
 import { PageHeader } from "@/components/shared/page-header";
-import { GuiaCargaInicial } from "@/components/modulos/inicio/guia-carga";
 import { estaVacio } from "@/domain/prerequisitos";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { DateRangePicker } from "@/components/shared/filter-bar";
@@ -93,7 +92,6 @@ export function TableroView() {
         acciones={<DateRangePicker value={periodo} onChange={setPeriodo} />}
       />
 
-      <GuiaCargaInicial />
 
       {/* Fila 1 — KPIs */}
       {esOperativo ? (

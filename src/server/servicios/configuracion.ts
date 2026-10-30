@@ -8,5 +8,6 @@ export const guardarUsuario = servicio("guardarUsuario");
 export const guardarUnidadNegocio = servicio("guardarUnidadNegocio");
 export const establecerNumeroInicial = servicio("establecerNumeroInicial");
 export const guardarMotivosAjuste = servicio("guardarMotivosAjuste");
+export const guardarTiposCliente = servicio("guardarTiposCliente");
 export const registrarEvento = servicio("registrarEvento");
 

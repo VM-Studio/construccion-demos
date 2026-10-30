@@ -163,7 +163,7 @@ export function ProductosView() {
   ];
 
   const exportar = () => {
-    const head = ["Código", "Producto", "Marca", "Rubro", "Unidad", ...(verCostos ? ["Costo promedio", "Costo último"] : []), ...db.listasPrecios.map((l) => `Precio ${l.nombre}`), "Físico", "Comprometido", "Disponible", "Mínimo", "Proveedor"];
+    const head = ["Código", "Producto", "Marca", "Rubro", "Unidad", ...(verCostos ? ["Costo promedio", "Costo último"] : []), ...db.listasPrecios.filter((l) => !l.clienteId).map((l) => `Precio ${l.nombre}`), "Físico", "Comprometido", "Disponible", "Mínimo", "Proveedor"];
     const rows = filas.map((p) => {
       const pos = posiciones.get(p.id);
       return [
@@ -173,7 +173,7 @@ export function ProductosView() {
         rubroNombre.get(p.rubroId) ?? "",
         UNIDAD_LABEL[p.unidad],
         ...(verCostos ? [p.costoPromedio, p.costoUltimo] : []),
-        ...db.listasPrecios.map((l) => obtenerPrecio(p.id, l.id, db.precios)),
+        ...db.listasPrecios.filter((l) => !l.clienteId).map((l) => obtenerPrecio(p.id, l.id, db.precios)),
         pos?.fisico ?? 0,
         pos?.comprometido ?? 0,
         pos?.disponible ?? 0,
@@ -252,7 +252,7 @@ export function ProductosView() {
         }
         actions={
           <>
-            <Select size="sm" className="w-[150px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.map((l) => ({ value: l.id, label: `Lista ${l.nombre}` }))} />
+            <Select size="sm" className="w-[150px]" aria-label="Lista de precios" value={lista} onValueChange={setLista} options={db.listasPrecios.filter((l) => !l.clienteId).map((l) => ({ value: l.id, label: `Lista ${l.nombre}` }))} />
             {seleccion.size > 0 && puedePrecios && (
               <Button size="sm" variant="secondary" onClick={() => setMasiva(true)}>
                 Actualizar {seleccion.size} seleccionados

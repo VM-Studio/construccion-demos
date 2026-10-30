@@ -88,7 +88,9 @@ const UNIDAD_LABEL: Record<string, [string, string]> = {
 /** Cantidad con unidad: `120 bolsas`, `4,5 m³`. */
 export function formatQty(n: number, unidad: string): string {
   const [sing, plural] = UNIDAD_LABEL[unidad] ?? [unidad.toLowerCase(), unidad.toLowerCase()];
-  return `${formatNumber(n)} ${Math.abs(n) === 1 ? sing : plural}`;
+  // Toneladas con 3 decimales (0,237 TN = 237 kg); el resto con 2.
+  const dec = unidad === "TN" ? 3 : 2;
+  return `${formatNumber(n, dec)} ${Math.abs(n) === 1 ? sing : plural}`;
 }
 
 export function unidadCorta(unidad: string): string {

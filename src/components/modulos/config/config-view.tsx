@@ -9,7 +9,7 @@ import { useDb, usePuede, useUsuario } from "@/store/selectors";
 import type { ListaPrecios, Rol, Rubro, Sucursal } from "@/domain/types";
 import { MATRIZ_PERMISOS, ROL_LABEL, puede, PERMISOS_POR_ROL } from "@/domain/permisos";
 import { type ResultadoIntegridad } from "@/domain/integridad";
-import { Impacto, InterruptorCapacitacionConfig, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { filasNumeracion, formatearDoc } from "@/domain/numeracion";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { CodigoDoc } from "@/domain/types";
@@ -30,9 +30,11 @@ import { BRAND } from "@/config/brand";
 import { estadoPadronAction } from "@/server/actions/padron";
 import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
-import { ImpactoCampo } from "@/capacitacion";
+
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { obtenerDb } from "@/lib/datos/almacen";
+import { calcularActualizacionMasiva } from "@/domain/precios";
 import { actualizarTipoCambioAhora, diaYFecha, fuenteLabel, noEsDeHoy, refrescarTipoCambio, useTipoCambio } from "@/lib/tipo-cambio";
 
 const ok = <R extends { ok: boolean; error?: string }>(r: R | Promise<R>, msg: string) =>
@@ -46,7 +48,8 @@ const TITULOS: Record<string, [string, string]> = {
   usuarios: ["Usuarios y roles", "Usuarios del sistema y matriz de permisos por rol."],
   parametros: ["Parámetros", "IVA, vencimiento de acopios, avisos y adjuntos."],
   numeracion: ["Numeración", "Último número usado por código de documento, circuito y punto de venta."],
-  demo: ["Datos", "Respaldo, verificación de integridad, guía de carga y modo capacitación."],
+  demo: ["Datos", "Respaldo y verificación de integridad."],
+  "tipos-cliente": ["Tipos de cliente", "Lista de tipos para clientes y cotizaciones: agregar, renombrar, desactivar o borrar."],
 };
 
 /** Configuración: cada página del módulo es una sección (`?tab=`), navegada desde la barra lateral. */
@@ -65,6 +68,7 @@ export function ConfigView() {
       {tab === "parametros" && <Parametros />}
       {tab === "numeracion" && <Numeracion />}
       {tab === "demo" && <DatosDemo />}
+      {tab === "tipos-cliente" && <TiposCliente />}
     </>
   );
 }
@@ -230,6 +234,7 @@ function Listas() {
   const db = useDb();
   const [edit, setEdit] = React.useState<ListaPrecios | "nueva" | null>(null);
   const [f, setF] = React.useState({ nombre: "", descripcion: "", markupPorDefecto: 30, activa: true });
+  const [recalcular, setRecalcular] = React.useState(true);
   React.useEffect(() => {
     if (edit) setF(edit === "nueva" ? { nombre: "", descripcion: "", markupPorDefecto: 30, activa: true } : { nombre: edit.nombre, descripcion: edit.descripcion, markupPorDefecto: edit.markupPorDefecto, activa: edit.activa });
   }, [edit]);
@@ -242,14 +247,33 @@ function Listas() {
   ];
   return (
     <>
-      <DataTable rows={db.listasPrecios} columns={columnas} getRowId={(l) => l.id} onRowClick={setEdit} actions={<Button size="sm" onClick={() => setEdit("nueva")}><Plus /> Nueva lista</Button>} />
+      <DataTable rows={db.listasPrecios.filter((l) => !l.clienteId)} columns={columnas} getRowId={(l) => l.id} onRowClick={setEdit} actions={<Button size="sm" onClick={() => setEdit("nueva")}><Plus /> Nueva lista</Button>} />
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
-        <DialogContent title={edit === "nueva" ? "Nueva lista de precios" : "Editar lista"} description={edit === "nueva" ? "Se generan los precios de todos los productos con costo promedio + markup." : undefined} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={async () => { const r = await useStore.getState().guardarLista(f, edit === "nueva" ? undefined : (edit as ListaPrecios).id); ok(r, "Lista guardada"); if (r.ok) setEdit(null); }}><Save /> Guardar</Button></>}>
+        <DialogContent title={edit === "nueva" ? "Nueva lista de precios" : "Editar lista"} description={edit === "nueva" ? "Se generan los precios de todos los productos con costo promedio + markup." : undefined} footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button
+                onClick={async () => {
+                  const previa = edit === "nueva" ? undefined : (edit as ListaPrecios);
+                  const r = await useStore.getState().guardarLista(f, previa?.id);
+                  ok(r, "Lista guardada");
+                  if (!r.ok) return;
+                  // Nuevo markup: recalcula los precios de la lista desde el costo de cada artículo.
+                  if (previa && recalcular && previa.markupPorDefecto !== f.markupPorDefecto) {
+                    const d = obtenerDb();
+                    const cambios = calcularActualizacionMasiva(d.precios, d.productos, { productoIds: d.productos.map((p) => p.id), listaIds: [previa.id] }, { tipo: "MARKUP", markups: { [previa.id]: f.markupPorDefecto } });
+                    if (cambios.length) ok(await useStore.getState().aplicarCambiosPrecios(cambios, `Markup ${f.nombre} ${previa.markupPorDefecto} % → ${f.markupPorDefecto} %`), `${cambios.length} precios recalculados`);
+                  }
+                  setEdit(null);
+                }}
+              >
+                <Save /> Guardar
+              </Button></>}>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Nombre" required htmlFor="l-n"><Input id="l-n" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
             <FormField label="Markup por defecto (%)" htmlFor="l-m"><NumberInput id="l-m" value={f.markupPorDefecto} min={0} onValueChange={(v) => setF({ ...f, markupPorDefecto: v })} /></FormField>
             <FormField label="Descripción" htmlFor="l-d" className="sm:col-span-2"><Input id="l-d" value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} /></FormField>
             <label className="flex items-center gap-3 text-[13px]"><Switch checked={f.activa} onCheckedChange={(v) => setF({ ...f, activa: v })} /> Activa</label>
+            {edit !== "nueva" && edit && f.markupPorDefecto !== edit.markupPorDefecto && (
+              <label className="flex items-center gap-3 text-[13px] sm:col-span-2"><Switch checked={recalcular} onCheckedChange={setRecalcular} /> Recalcular todos los precios de la lista con el {f.markupPorDefecto} %</label>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -422,7 +446,6 @@ function TipoCambioCard() {
               )}
             </div>
           )}
-          <ImpactoCampo campo="parametros.tipoCambio" />
         </div>
         <div className="min-w-0">
           <div className="mb-1.5 text-[12px] font-medium text-muted">Últimos 30 días</div>
@@ -615,7 +638,6 @@ function Numeracion() {
               <FormField label="Próximo número" htmlFor="num-u" error={invalido ? `Tiene que ser mayor a ${edit.ultimo} (último usado).` : undefined}>
                 <NumberInput id="num-u" value={edit.proximo} min={edit.ultimo + 1} onValueChange={(v) => setEdit({ ...edit, proximo: Math.round(v) })} />
               </FormField>
-              <Impacto accion="establecerNumeroInicial" />
               <p className="rounded-control bg-subtle px-3 py-2 text-[13px]">
                 El próximo documento sale como <span className="font-mono font-medium">{formatearDoc(edit.codigo, edit.circ, edit.pv, Math.max(1, edit.proximo))}</span>
               </p>
@@ -632,7 +654,6 @@ function DatosDemo() {
   const [res, setRes] = React.useState<ResultadoIntegridad | null>(null);
   const [verificando, setVerificando] = React.useState(false);
   const esDueno = puede(usuario, "config.usuarios");
-  const guiaOculta = useStore((s) => !!s.ui.guiaOculta[s.ui.usuarioId ?? ""]);
   const verificar = async () => {
     setVerificando(true);
     try {
@@ -651,8 +672,6 @@ function DatosDemo() {
         <CardHeader><CardTitle>Datos y ayudas</CardTitle></CardHeader>
         <CardContent className="space-y-4 text-[13px]">
           <p className="text-muted">Los datos viven en la base de {BRAND.empresa} (PostgreSQL) y todos los usuarios trabajan sobre los mismos datos, en vivo.</p>
-          <label className="flex items-center gap-3"><Switch checked={!guiaOculta} onCheckedChange={(v) => useStore.getState().setGuiaOculta(!v)} /> Mostrar la guía de carga inicial en Inicio y en el Tablero</label>
-          <InterruptorCapacitacionConfig />
           <div className="border-t border-border pt-3">
             <span className="block font-medium text-ink">Exportar respaldo</span>
             <span className="mb-2 block text-[12px] text-muted">Descarga un ZIP con una planilla CSV por tabla y un JSON con todos los datos (incluidos movimientos y auditoría). Queda registrado en la auditoría.</span>
@@ -686,5 +705,54 @@ function DatosDemo() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Tipos de cliente: lista editable (se usan en clientes, cotizaciones y reportes). */
+function TiposCliente() {
+  const db = useDb();
+  const [tipos, setTipos] = React.useState(db.config.tiposCliente);
+  const [nuevo, setNuevo] = React.useState("");
+  const [guardando, setGuardando] = React.useState(false);
+  React.useEffect(() => setTipos(db.config.tiposCliente), [db.config.tiposCliente]);
+  const usados = (codigo: string) => db.clientes.filter((c) => c.tipo === codigo).length;
+  const codigoDe = (nombre: string) => nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "TIPO";
+  const agregar = () => {
+    const nombre = nuevo.trim();
+    if (!nombre) return;
+    let codigo = codigoDe(nombre);
+    while (tipos.some((t) => t.codigo === codigo)) codigo = `${codigo}_2`;
+    setTipos([...tipos, { codigo, nombre, activo: true }]);
+    setNuevo("");
+  };
+  const guardar = async () => {
+    setGuardando(true);
+    const r = await useStore.getState().guardarTiposCliente(tipos);
+    setGuardando(false);
+    ok(r, "Tipos de cliente guardados");
+  };
+  const cambio = JSON.stringify(tipos) !== JSON.stringify(db.config.tiposCliente);
+  return (
+    <Card className="max-w-2xl">
+      <CardContent className="space-y-3 pt-4">
+        <ul className="divide-y divide-border rounded-control border border-border">
+          {tipos.map((t, i) => (
+            <li key={t.codigo} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+              <Input value={t.nombre} aria-label="Nombre del tipo" className="h-8 flex-1" onChange={(e) => setTipos(tipos.map((x, j) => (j === i ? { ...x, nombre: e.target.value } : x)))} />
+              <span className="w-24 text-right text-[12px] text-muted">{usados(t.codigo)} clientes</span>
+              <label className="flex items-center gap-1.5 text-[12px] text-muted"><Switch checked={t.activo} onCheckedChange={(v) => setTipos(tipos.map((x, j) => (j === i ? { ...x, activo: v } : x)))} /> Activo</label>
+              <Button size="sm" variant="ghost" disabled={usados(t.codigo) > 0} title={usados(t.codigo) ? "Tiene clientes: desactivalo" : undefined} onClick={() => setTipos(tipos.filter((_, j) => j !== i))}>Borrar</Button>
+            </li>
+          ))}
+        </ul>
+        <div className="flex gap-2">
+          <Input value={nuevo} onChange={(e) => setNuevo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && agregar()} placeholder="Nuevo tipo (ej. Revendedor)" />
+          <Button variant="secondary" onClick={agregar} disabled={!nuevo.trim()}><Plus /> Agregar</Button>
+        </div>
+        <div className="flex justify-end">
+          <Button loading={guardando} disabled={!cambio} onClick={guardar}><Save /> Guardar cambios</Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

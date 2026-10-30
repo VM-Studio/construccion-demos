@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useEmpresa } from "@/store/selectors";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { LogoEmpresa } from "./logo-empresa";
 
 /**
  * Documento imprimible A4: encabezado con la empresa (logo textual y datos),
@@ -37,8 +38,8 @@ export function PrintLayout({
     <div className={cn("print-area mx-auto w-full max-w-[210mm] bg-white p-8 text-[12px] leading-snug text-ink", className)}>
       <header className="flex items-start justify-between gap-6 border-b-2 border-ink pb-4">
         <div>
-          <div className="text-[20px] font-bold tracking-tight">{e.empresa}</div>
-          <div className="mt-1 text-[11px] text-muted">
+          <LogoEmpresa nombre={e.empresa} />
+          <div className="mt-2 text-[11px] text-muted">
             {e.razonSocial} · CUIT {e.cuit}
             <br />
             {e.direccion}

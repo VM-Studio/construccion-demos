@@ -10,7 +10,7 @@ import { CircuitoBadge } from "@/components/shared/circuito-badge";
 import type { EstadoInicial } from "@/domain/types";
 import { claveFecha, pedidosVendidos, rankingProductos, type FiltroMetricas, type Rango } from "@/domain/metricas";
 import { calcularRentabilidadACostoActual, calcularRentabilidadItem } from "@/domain/ventas";
-import { TIPO_CLIENTE_LABEL } from "@/domain/estados";
+import { nombreTipoCliente } from "@/domain/estados";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { Select } from "@/components/ui/select";
@@ -86,7 +86,7 @@ function agrupar(db: EstadoInicial, r: Rango, suc: FiltroMetricas, dim: Dim) {
           break;
         case "tipo":
           clave = cli?.tipo ?? "";
-          label = TIPO_CLIENTE_LABEL[clave] ?? clave;
+          label = nombreTipoCliente(clave, db.config.tiposCliente);
           break;
         default:
           clave = cli?.listaPreciosId ?? "";

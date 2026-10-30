@@ -17,7 +17,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
 import { OrdenPagoDocumento } from "./documentos";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 type Fila = MedioCobro & { _id: string };
 const deInput = (v: string) => {
@@ -55,6 +55,7 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
   const imputado = Math.round(Object.values(imput).reduce((a, v) => a + (v || 0), 0) * 100) / 100;
   const up = (id: string, patch: Partial<Fila>) => setMedios((ms) => ms.map((m) => (m._id === id ? { ...m, ...patch } : m)));
   const usados = new Set(medios.map((m) => m.chequeId).filter(Boolean));
+  const cajas = db.cajas.filter((c) => c.activa).sort((a, b) => a.orden - b.orden);
 
   const confirmar = async () => {
     const r = await medir("crearOrdenPago", { proveedorId }, () => useStore.getState().registrarPagoProveedor({
@@ -94,7 +95,6 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
               <FormField label="Fecha" htmlFor="op-f" className="max-w-[200px]"><Input id="op-f" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></FormField>
               <FormField label="Circuito" className="max-w-[200px]">
                 <Select aria-label="Circuito" value={String(circuito)} onValueChange={(v) => { setCircuito(Number(v) as 1 | 2); setImput({}); }} options={[{ value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} />
-                <ImpactoCampo campo={`circuito.${circuito}`} />
               </FormField>
             </div>
             <div>
@@ -120,12 +120,13 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
               </div>
               <div className="space-y-2">
                 {medios.map((m) => (
-                  <div key={m._id} className="grid gap-2 rounded-control border border-border p-2 sm:grid-cols-[160px_150px_1fr_auto]">
+                  <div key={m._id} className={cn("grid gap-2 rounded-control border border-border p-2", m.medio === "EFECTIVO" && cajas.length > 1 ? "sm:grid-cols-[160px_150px_150px_1fr_auto]" : "sm:grid-cols-[160px_150px_1fr_auto]")}>
                     {m.chequeId ? (
                       <div className="flex h-8 items-center rounded-control bg-accent-soft px-2 text-[12px] font-medium text-accent">Cheque de cartera</div>
                     ) : (
                       <Select size="sm" aria-label="Medio" value={m.medio} onValueChange={(v) => up(m._id, { medio: v as MedioPago })} options={[{ value: "TRANSFERENCIA", label: "Transferencia" }, { value: "ECHEQ", label: "eCheq propio" }, { value: "CHEQUE", label: "Cheque propio" }, { value: "EFECTIVO", label: "Efectivo" }]} />
                     )}
+                    {m.medio === "EFECTIVO" && cajas.length > 1 && <Select size="sm" aria-label="Caja" value={m.cajaId ?? cajas[0].id} onValueChange={(v) => up(m._id, { cajaId: v })} options={cajas.map((c) => ({ value: c.id, label: c.nombre }))} />}
                     <NumberInput aria-label="Importe" disabled={!!m.chequeId} value={m.importe} min={0} className="h-8" onValueChange={(v) => up(m._id, { importe: v })} />
                     <Input className="h-8 text-[13px]" aria-label="Referencia" disabled={!!m.chequeId} value={m.chequeId ? `${m.banco} Nº ${m.numeroCheque} · cobro ${formatDate(m.fechaCobro)}` : m.referencia ?? ""} onChange={(e) => up(m._id, { referencia: e.target.value })} placeholder={m.medio === "TRANSFERENCIA" ? "Número de operación" : "Banco / número"} />
                     <Button size="icon-sm" variant="ghost" aria-label="Quitar" disabled={medios.length === 1} onClick={() => setMedios(medios.filter((x) => x._id !== m._id))}><Trash2 className="text-muted" /></Button>
@@ -168,7 +169,6 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
               )}
               {Math.abs(imputado - total) > 0.01 && <p className="mt-2 text-[12px] text-danger">En pagos a proveedores lo imputado tiene que ser igual al total pagado.</p>}
             </div>
-            <Impacto accion="crearOrdenPago" />
           </div>
         </DialogContent>
       </Dialog>

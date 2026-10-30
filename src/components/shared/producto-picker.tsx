@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { useDb, usePosiciones, posicionEn, usePuede, useUnidadNegocio } from "@/store/selectors";
 import { AltaRapidaSheet } from "./alta-rapida";
-import { obtenerPrecio } from "@/domain/precios";
+import { precioLista } from "@/domain/precios";
 import { formatMoney, formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Producto } from "@/domain/types";
@@ -60,7 +60,7 @@ export function ProductoPicker({
 
   const item = (p: Producto) => {
     const pos = posicionEn(posiciones.get(p.id), depositoId ?? null);
-    const valor = precioDe ? precioDe(p) : mostrarCosto ? p.costoUltimo : listaId ? obtenerPrecio(p.id, listaId, db.precios) : undefined;
+    const valor = precioDe ? precioDe(p) : mostrarCosto ? p.costoUltimo : listaId ? precioLista(p.id, listaId, db) : undefined;
     return (
       <Command.Item
         key={p.id}

@@ -7,7 +7,7 @@ import { useStore } from "@/store";
 import { useDb, usePuede } from "@/store/selectors";
 import { detectarVariante, markupsEfectivos, markupsSospechosos, nombreConVariante, nombreRepetidoEnRubro, parsearPegado, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
 import { UNIDAD_LABEL } from "@/domain/estados";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input, NumberInput, Textarea } from "@/components/ui/input";
@@ -203,7 +203,6 @@ export function SerieDialog({ origenId, onClose }: { origenId: string; onClose: 
             </table>
             {!filas.length && <p className="py-6 text-center text-[13px] text-muted">Agregá filas o pegalas desde Excel.</p>}
           </div>
-          <Impacto accion="crearSerieProductos" />
         </div>
       </DialogContent>
     </Dialog>

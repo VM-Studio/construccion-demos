@@ -35,7 +35,7 @@ export function VacioGuiado({
   const router = useRouter();
   const t: TextoVacio = VACIOS[pagina];
   const falta = faltantes(t.requiere ?? [], db);
-  const descripcion = falta.length ? `${t.texto} ${t.siFalta ?? `Para empezar necesitás ${enumerarFaltantes(falta)}.`}` : t.texto;
+  const descripcion = falta.length ? `Primero cargá ${enumerarFaltantes(falta)}.` : undefined;
 
   let acciones: React.ReactNode = null;
   if (falta.length)

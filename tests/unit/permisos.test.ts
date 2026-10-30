@@ -53,8 +53,8 @@ function esperado(rol: Rol, permiso: Permiso): boolean {
 const MATRIZ = ROLES.flatMap((rol) => TODOS.map((permiso) => [rol, permiso, esperado(rol, permiso)] as const));
 
 describe("catálogo de permisos", () => {
-  it("tiene 42 permisos", () => {
-    expect(TODOS).toHaveLength(42);
+  it("tiene 45 permisos", () => {
+    expect(TODOS).toHaveLength(45);
   });
 
   it("las listas esperadas solo usan permisos existentes", () => {
@@ -84,8 +84,8 @@ describe("puede(): casos puntuales", () => {
 
   it("cantidad de permisos por rol", () => {
     const cuenta = (rol: Rol) => TODOS.filter((p) => puede({ rol, activo: true }, p)).length;
-    expect(cuenta("DUENO")).toBe(42);
-    expect(cuenta("ADMINISTRACION")).toBe(41);
+    expect(cuenta("DUENO")).toBe(45);
+    expect(cuenta("ADMINISTRACION")).toBe(44);
     expect(cuenta("VENTAS")).toBe(14);
     expect(cuenta("DEPOSITO")).toBe(11);
   });

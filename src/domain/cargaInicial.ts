@@ -29,7 +29,7 @@ export function pasosCargaInicial(db: EstadoInicial): PasoCarga[] {
   const fer = activos.filter((p) => p.unidadNegocioId === un("FER")).length;
   const cor = activos.filter((p) => p.unidadNegocioId === un("COR")).length;
 
-  const listas = db.listasPrecios.filter((l) => l.activa);
+  const listas = db.listasPrecios.filter((l) => l.activa && !l.clienteId);
   const conPrecio = new Set(db.precios.filter((p) => p.precio > 0).map((p) => `${p.productoId}|${p.listaPreciosId}`));
   const completos = activos.filter((p) => listas.every((l) => conPrecio.has(`${p.id}|${l.id}`))).length;
 

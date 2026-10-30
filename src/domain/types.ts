@@ -38,7 +38,8 @@ export type CodigoDoc =
   | "SI"; // saldo inicial de cuenta corriente
 
 export type EstadoOC = "BORRADOR" | "ENVIADA" | "CONFIRMADA" | "RECIBIDA_PARCIAL" | "RECIBIDA" | "CANCELADA";
-export type EstadoCotizacion = "BORRADOR" | "ENVIADA" | "ACEPTADA" | "RECHAZADA" | "VENCIDA";
+/** BORRADOR (en armado) → PENDIENTE (creada, esperando respuesta) → ACEPTADA (es venta) | RECHAZADA (anulada). ENVIADA/VENCIDA: datos anteriores. */
+export type EstadoCotizacion = "BORRADOR" | "PENDIENTE" | "ENVIADA" | "ACEPTADA" | "RECHAZADA" | "VENCIDA";
 export type EstadoNP = "BORRADOR" | "PENDIENTE" | "ENTREGADA_PARCIAL" | "ENTREGADA" | "ANULADA";
 export type EstadoAcopio = "VIGENTE" | "VENCIDO" | "AGOTADO" | "CANCELADO";
 export type EstadoRemito = "INICIAL" | "PICKING" | "HECHO" | "ANULADO";
@@ -60,11 +61,12 @@ export type TipoMovimientoStock =
 export type TipoComprobante = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "SALDO_A_FAVOR" | "SALDO_INICIAL";
 export type LetraComprobante = "A" | "B";
 
-/** Vigentes: MAYORISTA, FERRETERIA, CORRALON, MELI, MADERERA. Los demás quedan solo por clientes ya cargados. */
-export type TipoCliente = "MAYORISTA" | "FERRETERIA" | "CORRALON" | "MELI" | "MADERERA" | "CONSTRUCTORA" | "PARTICULAR" | "ARQUITECTO";
+/** Código de un tipo de cliente de la lista editable (`Configuracion.tiposCliente`). */
+export type TipoCliente = string;
 export type TipoProveedor = "FABRICANTE" | "DISTRIBUIDOR" | "TRANSPORTISTA" | "SERVICIOS";
 export type CondicionPago = "CONTADO" | "CTA_CTE_15" | "CTA_CTE_30" | "CTA_CTE_60" | "ANTICIPO";
-export type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "ECHEQ" | "TARJETA" | "MERCADOPAGO";
+/** COMISION: lo que retiene Mercado Libre / Mercado Pago (cancela deuda sin entrar plata). */
+export type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "CHEQUE" | "ECHEQ" | "TARJETA" | "MERCADOPAGO" | "COMISION";
 export type CondicionIVA = "RI" | "MONOTRIBUTO" | "EXENTO" | "CF";
 
 export type FormaPagoAcopio = "ANTICIPO" | "CUENTA_CORRIENTE";
@@ -196,6 +198,15 @@ export interface Producto extends Entidad {
   /** Moneda del costo: en USD el costo en pesos sale del tipo de cambio vigente. */
   monedaCosto?: Moneda;
   costoUSD?: number;
+  /** Unidad alternativa (ej. hierro: stock en barras, también se ingresa y vende por TN). */
+  unidadAlternativa?: Unidad;
+  /** 1 unidad alternativa = `factorAlternativa` unidades base (ej. 1 TN = 375 barras del 6). */
+  factorAlternativa?: number;
+}
+
+export interface ReglaRubro {
+  rubroId: string;
+  markupPct: number;
 }
 
 export interface ListaPrecios extends Entidad {
@@ -203,6 +214,14 @@ export interface ListaPrecios extends Entidad {
   descripcion: string;
   markupPorDefecto: number;
   activa: boolean;
+  /** Lista especial de un cliente. Sin `clienteId` es una lista general. */
+  clienteId?: string;
+  /** Lista especial: parte de esta lista general… */
+  listaBaseId?: string;
+  /** …con este % (negativo = descuento). */
+  ajustePct?: number;
+  /** …o con markup sobre costo por rubro (ej. hierro al 12 %). Los precios cargados a mano mandan. */
+  reglasRubro?: ReglaRubro[];
 }
 
 export interface PrecioProducto extends Entidad {
@@ -353,6 +372,8 @@ export interface ItemNP {
   costoUnitarioSnapshot: number;
   descuentoPct?: number;
   subtotal: number;
+  /** Unidad en la que se vendió (la alternativa del artículo, ej. TN); `cantidad` siempre en la unidad base. */
+  unidadVenta?: Unidad;
 }
 
 /** Nota de pedido: retiro de acopio o venta nueva. Es la fuente de verdad de las ventas. */
@@ -388,6 +409,8 @@ export interface NotaPedido extends Entidad, ConTipoCambio {
   forzadoSinDisponible?: boolean;
   autorizadoSaldoNegativo?: boolean;
   excepcionCredito?: boolean;
+  motivoAnulacion?: string;
+  anuladaEn?: string;
 }
 
 /** Alias de compatibilidad: un "pedido" es una nota de pedido. */
@@ -445,12 +468,20 @@ export interface ItemVenta {
   precioUnitario: number;
   costoUnitarioSnapshot: number;
   descuentoPct: number;
+  /** Unidad en la que se cotizó/vendió (la alternativa del artículo); `cantidad` siempre en la unidad base. */
+  unidadVenta?: Unidad;
 }
 
 export interface Cotizacion extends Entidad, ConTipoCambio {
   numero: string;
   circuito: Circuito;
-  clienteId: string;
+  /** Vacío en cotizaciones rápidas a quien todavía no es cliente (se crea al aceptarla). */
+  clienteId?: string;
+  prospectoNombre?: string;
+  prospectoTelefono?: string;
+  tipoCliente?: TipoCliente;
+  motivoRechazo?: string;
+  fechaRespuesta?: string;
   obraId?: string;
   sucursalId: string;
   vendedorId: string;
@@ -689,11 +720,33 @@ export interface Comprobante extends Entidad {
   estado: EstadoComprobante;
   items?: ItemVenta[];
   observaciones?: string;
+  motivoAnulacion?: string;
+  /** Factura electrónica: NO_APLICA (interna), PENDIENTE, AUTORIZADO o RECHAZADO por ARCA. */
+  arcaEstado?: EstadoArca;
+  cae?: string;
+  caeVencimiento?: string;
+  arcaPuntoVenta?: number;
+  arcaNumero?: number;
+  arcaTipo?: number;
+  arcaError?: string;
+  /** Venta por Mercado Libre. */
+  ventaML?: string;
+  compradorNombre?: string;
+  compradorDoc?: string;
 }
+
+export type EstadoArca = "NO_APLICA" | "PENDIENTE" | "AUTORIZADO" | "RECHAZADO";
 
 export interface MedioCobro {
   medio: MedioPago;
+  /** Siempre en pesos (en dólares: importeME × tipoCambio). */
   importe: number;
+  /** Efectivo en dólares: dólares recibidos y tipo de cambio cargado a mano. */
+  moneda?: Moneda;
+  importeME?: number;
+  tipoCambio?: number;
+  /** Caja chica donde entra / de donde sale el efectivo. */
+  cajaId?: string;
   referencia?: string;
   banco?: string;
   numeroCheque?: string;
@@ -751,6 +804,53 @@ export interface Cheque extends Entidad {
   pagoProveedorId?: string;
 }
 
+// ───────────────────────── Caja chica ─────────────────────────
+
+export interface Caja extends Entidad {
+  nombre: string;
+  descripcion?: string;
+  sucursalId?: string;
+  activa: boolean;
+  orden: number;
+}
+
+export type TipoMovimientoCaja = "INGRESO" | "EGRESO" | "TRANSFERENCIA" | "PRESTAMO" | "DEVOLUCION_PRESTAMO" | "APERTURA" | "AJUSTE";
+export type ReferenciaCaja = "RECIBO" | "ORDEN_PAGO" | "MANUAL" | "ARQUEO";
+
+export interface MovimientoCaja extends Entidad {
+  cajaId: string;
+  fecha: string;
+  tipo: TipoMovimientoCaja;
+  signo: 1 | -1;
+  moneda: Moneda;
+  /** Positivo; el signo dice si entra o sale. */
+  importe: number;
+  concepto: string;
+  categoria?: string;
+  referenciaTipo?: ReferenciaCaja;
+  referenciaId?: string;
+  /** Transferencias y préstamos: la otra caja. */
+  cajaRelacionadaId?: string;
+  /** Une las dos patas de una transferencia o préstamo. */
+  grupoId?: string;
+  usuarioId: string;
+  anulado?: boolean;
+  motivoAnulacion?: string;
+  observaciones?: string;
+}
+
+export interface ArqueoCaja extends Entidad {
+  cajaId: string;
+  fecha: string;
+  moneda: Moneda;
+  saldoSistema: number;
+  contado: number;
+  diferencia: number;
+  billetes?: { denominacion: number; cantidad: number }[];
+  usuarioId: string;
+  observaciones?: string;
+}
+
 // ───────────────────────── Sistema ─────────────────────────
 
 export interface Auditoria extends Entidad {
@@ -797,6 +897,8 @@ export interface Configuracion {
   categoriasAdjunto: { codigo: CategoriaAdjunto; nombre: string }[];
   empresa: DatosEmpresa;
   motivosAjuste: { codigo: string; nombre: string; activo: boolean }[];
+  /** Tipos de cliente (lista editable en Configuración). */
+  tiposCliente: { codigo: string; nombre: string; activo: boolean }[];
 }
 
 export interface TipoCambioVigente {
@@ -845,6 +947,9 @@ export interface EstadoInicial {
   cobranzas: Cobranza[];
   pagosProveedores: PagoProveedor[];
   cheques: Cheque[];
+  cajas: Caja[];
+  movimientosCaja: MovimientoCaja[];
+  arqueosCaja: ArqueoCaja[];
   auditoria: Auditoria[];
   config: Configuracion;
   numeradores: Numeradores;

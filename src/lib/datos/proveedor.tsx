@@ -5,15 +5,12 @@
  * - Cada colección es una clave SWR ["datos", coleccion] contra /api/datos.
  * - useSincronizacion(): consulta /api/cambios cada 2 s con la pestaña visible (15 s en segundo
  *   plano, al instante al volver el foco) y aplica SOLO las filas que cambiaron (delta).
- *   Si el cambio lo hizo otro usuario, muestra un aviso discreto (como mucho uno cada 5 s).
+ *   Sin avisos flotantes: los cambios de otros usuarios se ven solos (pedido de los dueños).
  */
 import * as React from "react";
 import * as Sentry from "@sentry/nextjs";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR, { SWRConfig, useSWRConfig } from "swr";
-import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
 import type { EstadoInicial } from "@/domain/types";
 import { establecerDatos, obtenerDb } from "./almacen";
 import { useStore } from "@/store";
@@ -108,45 +105,16 @@ interface CambioRemoto {
   href: string | null;
 }
 
-/**
- * Altas y ediciones de clientes, proveedores y obras no muestran el aviso flotante: aparecía justo
- * donde el usuario iba a hacer clic y lo sacaba de lo que estaba haciendo. Los datos se refrescan igual.
- */
-const SIN_AVISO = new Set(["Cliente", "Proveedor", "Obra", "Contador"]);
-const merecenAviso = (c: CambioRemoto) => c.tipos.some((t) => !SIN_AVISO.has(t));
-
 /** Polling de /api/cambios (2 s visible, 15 s oculta, al instante al volver el foco). */
 function useSincronizacion(actorId: string) {
   const pathname = usePathname();
   const rapida = pathname.startsWith("/despachos");
-  const pendientesAviso = React.useRef<CambioRemoto[]>([]);
-  const ultimoAviso = React.useRef(0);
 
   React.useEffect(() => {
     let vivo = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let enCurso = false;
 
-    const avisar = () => {
-      const lista = pendientesAviso.current;
-      if (!lista.length || Date.now() - ultimoAviso.current < 5000) return;
-      pendientesAviso.current = [];
-      ultimoAviso.current = Date.now();
-      const usuarios = obtenerDb().usuarios;
-      const nombre = (id: string | null) => usuarios.find((u) => u.id === id)?.nombre.split(" ")[0] ?? "Otro usuario";
-      const ult = lista.at(-1)!;
-      const texto = lista.length === 1 ? `${nombre(ult.usuarioId)} ${ult.resumen ?? "hizo un cambio"}` : `${nombre(ult.usuarioId)} y otros hicieron ${lista.length} cambios`;
-      toast(
-        <span className="flex items-center gap-2 text-[13px]">
-          <RefreshCw className="size-3.5 shrink-0 text-muted" />
-          <span className="min-w-0 flex-1">{texto}</span>
-          {lista.length === 1 && ult.href && (
-            <Link href={ult.href} className="shrink-0 font-medium text-ink underline underline-offset-2">Ver</Link>
-          )}
-        </span>,
-        { duration: 4000 },
-      );
-    };
 
     const consultar = async () => {
       if (enCurso) return;
@@ -168,10 +136,7 @@ function useSincronizacion(actorId: string) {
               aplicarDelta(delta);
               revalidarDerivadas(tipos);
             } else await refrescarColecciones(coleccionesDe(tipos));
-            const ajenos = cambios.filter((c) => c.usuarioId && c.usuarioId !== actorId && merecenAviso(c));
-            if (ajenos.length) pendientesAviso.current.push(...ajenos);
           }
-          avisar();
         }
       } catch {
         // Sin conexión: se reintenta en el próximo ciclo.

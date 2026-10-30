@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SerieDialog } from "./serie-dialog";
 import { calcularPrecioDesdeMarkup, markupEfectivo } from "@/domain/precios";
 import { opciones, UNIDAD_LABEL } from "@/domain/estados";
+import { barrasPorToneladaDe, diametroDe, esBarraDeHierro } from "@/domain/unidades";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { SelectorProveedor } from "@/components/shared/alta-rapida";
@@ -29,7 +30,7 @@ import { LineaChart } from "@/components/charts";
 import { formatDate, formatDateTime, formatMoney, formatPercent, formatQty } from "@/lib/format";
 import { referenciaMovimiento, nombreUsuario } from "@/lib/referencias";
 import { cn } from "@/lib/utils";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { formatUSD, useTipoCambio } from "@/lib/tipo-cambio";
 import { useEnvio } from "@/lib/use-envio";
 
@@ -260,6 +261,8 @@ function TabGeneral({
         proveedorHabitualId: f.proveedorHabitualId,
         codigoBarras: f.codigoBarras || undefined,
         pesoKg: f.pesoKg,
+        unidadAlternativa: f.unidadAlternativa,
+        factorAlternativa: f.unidadAlternativa ? f.factorAlternativa : undefined,
         monedaCosto: f.monedaCosto ?? "ARS",
         costoUSD: enUSD ? f.costoUSD : undefined,
         costoUltimo: f.costoUltimo,
@@ -353,6 +356,15 @@ function TabGeneral({
           {marca("pesoKg")}
         </FormField>
       </div>
+      <UnidadAlternativaCampos
+        ro={ro}
+        nombre={f.nombre}
+        unidad={f.unidad}
+        rubroId={f.rubroId}
+        unidadAlternativa={f.unidadAlternativa}
+        factorAlternativa={f.factorAlternativa}
+        onChange={(u, fa) => setF((x) => ({ ...x, unidadAlternativa: u, factorAlternativa: fa }))}
+      />
       <div className="grid gap-4 sm:grid-cols-3">
         <FormField label="Proveedor habitual" className="sm:col-span-2">
           <div className={cn("flex items-center gap-1", resaltar("proveedorHabitualId"))}>
@@ -385,7 +397,6 @@ function TabGeneral({
                 { value: "USD", label: "Dólares (USD)" },
               ]}
             />
-            <ImpactoCampo campo="producto.monedaCosto" />
           </FormField>
           {enUSD && (
             <FormField label="Costo USD" htmlFor="p-costo-usd" error={errores.costoUSD} hint="Sin IVA">
@@ -412,7 +423,7 @@ function TabGeneral({
         {verCostos && (
           <FormField label="Costo último" htmlFor="p-costo" error={errores.costoUltimo} hint={producto ? `Actualizado ${formatDate(producto.fechaUltimoCosto)}` : "Sin IVA"}>
             <NumberInput id="p-costo" disabled={ro || enUSD} value={f.costoUltimo} min={0} onValueChange={setCosto} className={resaltar("costoUltimo")} />
-            {enUSD ? <p className="mt-1 text-[12px] text-muted">En pesos: lo calcula el sistema desde el costo USD.</p> : <ImpactoCampo campo="producto.costo" />}
+            {enUSD ? <p className="mt-1 text-[12px] text-muted">En pesos: lo calcula el sistema desde el costo USD.</p> : null}
             {marca("costoUltimo")}
           </FormField>
         )}
@@ -423,7 +434,6 @@ function TabGeneral({
         )}
         <FormField label="Stock mínimo" htmlFor="p-min" hint="Total entre depósitos">
           <NumberInput id="p-min" disabled={ro} value={f.stockMinimo} min={0} onValueChange={(v) => set("stockMinimo", v)} className={resaltar("stockMinimo")} />
-          <ImpactoCampo campo="producto.stockMinimo" />
           {marca("stockMinimo")}
         </FormField>
       </div>
@@ -507,7 +517,6 @@ function TabGeneral({
           </Button>
         </div>
       )}
-      {!ro && <Impacto accion={accionId} />}
     </form>
   );
 }
@@ -536,7 +545,7 @@ function TabPrecios({ producto }: { producto: Producto }) {
             </tr>
           </thead>
           <tbody>
-            {db.listasPrecios.map((l) => {
+            {db.listasPrecios.filter((l) => !l.clienteId).map((l) => {
               const reg = db.precios.find((p) => p.productoId === producto.id && p.listaPreciosId === l.id);
               const precio = editando[l.id] ?? reg?.precio ?? 0;
               const mk = markupEfectivo(precio, producto.costoPromedio);
@@ -592,7 +601,6 @@ function TabPrecios({ producto }: { producto: Producto }) {
           Recalcular desde markup
         </Button>
       )}
-      {puedeEditar && <Impacto accion="actualizarPrecio" />}
     </div>
   );
 }
@@ -768,3 +776,62 @@ function TabCostos({ producto }: { producto: Producto }) {
   );
 }
 
+
+/** Unidad alternativa: hierro en barras que también se ingresa y vende por tonelada. */
+function UnidadAlternativaCampos({
+  ro,
+  nombre,
+  unidad,
+  rubroId,
+  unidadAlternativa,
+  factorAlternativa,
+  onChange,
+}: {
+  ro: boolean;
+  nombre: string;
+  unidad: Unidad;
+  rubroId: string;
+  unidadAlternativa?: Unidad;
+  factorAlternativa?: number;
+  onChange: (u: Unidad | undefined, f: number | undefined) => void;
+}) {
+  const db = useDb();
+  const esHierro = esBarraDeHierro({ nombre, unidad, rubroId, unidadAlternativa }, db.rubros);
+  const bptSug = esHierro ? barrasPorToneladaDe(diametroDe(nombre)) : null;
+  // Stock en barras: 1 TN = N barras. Stock en toneladas: 1 barra = 1/N TN (se carga N igual).
+  const sugerido = bptSug ? (unidad === "UN" ? bptSug : unidad === "TN" ? 1 / bptSug : null) : null;
+  const porToneladas = unidad === "TN" && unidadAlternativa === "UN";
+  const activo = !!unidadAlternativa;
+  return (
+    <div className="rounded-card border border-border p-3">
+      <label className="flex items-center gap-2 text-[13px] font-medium">
+        <Switch disabled={ro} checked={activo} onCheckedChange={(v) => onChange(v ? (unidad === "TN" ? "UN" : "TN") : undefined, v ? (sugerido ?? factorAlternativa) : undefined)} />
+        También se ingresa y se vende por otra unidad
+      </label>
+      {activo && (
+        <div className="mt-3 grid items-end gap-3 sm:grid-cols-[160px_auto_1fr]">
+          <FormField label="Otra unidad">
+            <Select disabled={ro} value={unidadAlternativa ?? "TN"} onValueChange={(v) => onChange(v as Unidad, factorAlternativa)} options={opciones(UNIDAD_LABEL).filter((o) => o.value !== unidad)} />
+          </FormField>
+          {porToneladas ? (
+            <FormField label="Barras por tonelada" htmlFor="p-factor">
+              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ? Math.round(1 / factorAlternativa) : 0} min={0} onValueChange={(v) => onChange("UN", v ? Math.round((1 / v) * 1e8) / 1e8 : undefined)} className="w-28" />
+            </FormField>
+          ) : (
+            <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
+              <div className="flex items-center gap-2">
+                <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
+                <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
+              </div>
+            </FormField>
+          )}
+          {sugerido && bptSug && Math.abs((factorAlternativa ?? 0) - sugerido) > 1e-9 && !ro && (
+            <Button size="sm" variant="ghost" onClick={() => onChange(unidad === "UN" ? "TN" : "UN", Math.round(sugerido * 1e8) / 1e8)}>
+              Usar {bptSug} barras por tonelada (Ø {diametroDe(nombre)} mm)
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

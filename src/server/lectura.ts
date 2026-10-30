@@ -19,7 +19,7 @@ export const COLECCIONES_CLIENTE = [
   "sucursales", "depositos", "usuarios", "unidadesNegocio", "rubros", "proveedores", "productos", "listasPrecios", "precios", "stock",
   "transferencias", "ajustes", "ordenesCompra", "recepciones", "acopiosProveedor", "clientes", "obras", "cotizaciones", "notasPedido",
   "devoluciones", "ajustesAcopio", "acopios", "remitos", "adjuntos", "comprobantes", "vehiculos", "choferes", "despachos", "hojasRuta",
-  "cobranzas", "pagosProveedores", "cheques",
+  "cobranzas", "pagosProveedores", "cheques", "cajas", "movimientosCaja", "arqueosCaja",
 ] as const satisfies readonly Coleccion[];
 export type ColeccionCliente = (typeof COLECCIONES_CLIENTE)[number] | "config" | "numeradores";
 
@@ -81,6 +81,9 @@ export async function estadoPara(actor: Usuario): Promise<{ version: bigint; db:
       cobranzas: [],
       pagosProveedores: [],
       cheques: [],
+      cajas: [],
+      movimientosCaja: [],
+      arqueosCaja: [],
       devoluciones: v.devoluciones.map((d) => sinCostos(d, ["monto"])),
       ajustesAcopio: v.ajustesAcopio.map((a) => sinCostos(a, ["monto"])),
       notasPedido: v.notasPedido.map((n) => ({ ...sinCostos(n, ["monto", "iva", "total"]), items: n.items.map((i) => sinCostos(i, ["precioUnitario", "subtotal", "costoUnitarioSnapshot"])) })),

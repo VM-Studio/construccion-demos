@@ -4,7 +4,7 @@
  */
 import { prisma } from "../src/server/db-base";
 import { seedEjemplo } from "../src/data/seed";
-import { COLECCIONES, guardarConfig, insertarMuchos } from "../src/server/datos/mapeo";
+import { COLECCIONES, MODELOS, guardarConfig, insertarMuchos } from "../src/server/datos/mapeo";
 import { CONDICIONES_PAGO } from "./condiciones";
 import bcrypt from "bcryptjs";
 
@@ -47,7 +47,7 @@ async function main() {
 }
 
 function modeloDelegado(k: string) {
-  const m = ({ sucursales: "Sucursal", depositos: "Deposito", usuarios: "Usuario", unidadesNegocio: "UnidadNegocio", rubros: "Rubro", proveedores: "Proveedor", productos: "Producto", listasPrecios: "ListaPrecios", precios: "PrecioProducto", stock: "StockDeposito", movimientos: "MovimientoStock", transferencias: "TransferenciaStock", ajustes: "AjusteStock", ordenesCompra: "OrdenCompra", recepciones: "RecepcionMercaderia", acopiosProveedor: "AcopioProveedor", clientes: "Cliente", obras: "Obra", cotizaciones: "Cotizacion", notasPedido: "NotaPedido", devoluciones: "DevolucionNP", ajustesAcopio: "AjusteAcopio", acopios: "Acopio", remitos: "Remito", adjuntos: "Adjunto", comprobantes: "Comprobante", vehiculos: "Vehiculo", choferes: "Chofer", despachos: "Despacho", hojasRuta: "HojaRuta", cobranzas: "Recibo", pagosProveedores: "OrdenPago", cheques: "Cheque", auditoria: "Auditoria" } as Record<string, string>)[k];
+  const m = (MODELOS as Record<string, string>)[k];
   return m.charAt(0).toLowerCase() + m.slice(1);
 }
 

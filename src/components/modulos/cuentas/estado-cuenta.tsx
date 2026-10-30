@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { CobranzaDialog } from "./cobranza-dialog";
 import { PagoDialog } from "./pago-dialog";
 import { SaldoInicialDialog } from "./saldo-inicial-dialog";
+import { FacturasCliente } from "./facturas-cliente";
 
 export interface MovimientoCuenta {
   id: string;
@@ -45,6 +46,10 @@ export function extracto(db: EstadoInicial, tipo: "cliente" | "proveedor", id: s
     if (c.tipo === "SALDO_A_FAVOR" && !c.numero.startsWith("SI")) continue;
     // NC de devoluciones de acopio: vuelven al saldo del acopio, no a la cuenta corriente.
     if (c.tipo === "NOTA_CREDITO" && c.acopioId && !c.aplicadoA?.length && Math.abs(c.saldoPendiente) < 0.01) continue;
+    // Factura anulada sin nota de crédito (interna o sin CAE): no cuenta en el saldo.
+    if (c.estado === "ANULADO" && !db.comprobantes.some((n) => n.tipo === "NOTA_CREDITO" && n.comprobanteOrigenId === c.id)) continue;
+    // Saldos a favor liberados al anular una factura: se muestran como el recibo.
+    if (c.tipo === "SALDO_A_FAVOR" && c.numero.includes("anulación")) continue;
     const esDebe = c.tipo !== "NOTA_CREDITO" && c.tipo !== "SALDO_A_FAVOR";
     const ref = c.notaPedidoId ? db.notasPedido.find((p) => p.id === c.notaPedidoId)?.numero : c.acopioId ? db.acopios.find((a) => a.id === c.acopioId)?.numero : c.recepcionId ? db.ordenesCompra.find((o) => o.id === db.recepciones.find((r) => r.id === c.recepcionId)?.ordenCompraId)?.numero : undefined;
     out.push({
@@ -138,6 +143,7 @@ export function EstadoCuenta({ tipo, id, embebido }: { tipo: "cliente" | "provee
           <KpiCard label="Plazo de pago" valor={CONDICION_PAGO_LABEL[entidad.condicionPago]} />
         )}
       </div>
+      {tipo === "cliente" && <FacturasCliente clienteId={id} />}
       <Card className="mb-4 p-4">
         <h3 className="mb-3 text-[14px] font-semibold">Antigüedad de la deuda</h3>
         <div className="grid grid-cols-4 gap-2">

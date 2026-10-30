@@ -17,7 +17,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useEnvio } from "@/lib/use-envio";
 
 type Form = Omit<Cliente, "id" | "creadoEn" | "actualizadoEn">;
@@ -64,7 +64,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
     tocados.current.add(k as string);
     setF((x) => ({ ...x, [k]: v }));
   };
-  const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" ? "lst_may" : t === "PARTICULAR" ? "lst_pub" : t === "ARQUITECTO" ? "lst_gen" : "lst_may");
+  const listaPorTipo = (t: TipoCliente) => (t === "CONSTRUCTORA" || t === "MAYORISTA" ? "lst_may" : t === "PARTICULAR" || t === "CONSUMIDOR_FINAL" ? "lst_pub" : "lst_gen");
   const aplicarPadron = React.useCallback(
     (d: DatosPadron, reemplazar: boolean) =>
       setF((x) => ({ ...x, ...completarDesdePadron(x, d, { reemplazar, tocados: tocados.current }) })),
@@ -112,7 +112,7 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
               set("tipo", t);
               if (!cliente && !tocados.current.has("listaPreciosId")) setF((x) => ({ ...x, listaPreciosId: listaPorTipo(t) }));
             }}
-            options={opcionesTipoCliente(cliente?.tipo)}
+            options={opcionesTipoCliente(db.config.tiposCliente, cliente?.tipo)}
           />
         </FormField>
         <FormField label="Condición IVA">
@@ -143,14 +143,13 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
           <Input id="cl-cp" disabled={ro} value={f.codigoPostal ?? ""} onChange={(e) => set("codigoPostal", e.target.value || undefined)} />
         </FormField>
         <FormField label="Lista de precios">
-          <Select disabled={ro} value={f.listaPreciosId} onValueChange={(v) => set("listaPreciosId", v)} options={db.listasPrecios.map((l) => ({ value: l.id, label: l.nombre }))} />
+          <Select disabled={ro} value={f.listaPreciosId} onValueChange={(v) => set("listaPreciosId", v)} options={db.listasPrecios.filter((l) => !l.clienteId || l.id === f.listaPreciosId).map((l) => ({ value: l.id, label: l.nombre }))} />
         </FormField>
         <FormField label="Condición de pago">
           <Select disabled={ro} value={f.condicionPago} onValueChange={(v) => set("condicionPago", v as CondicionPago)} options={opciones(CONDICION_PAGO_LABEL)} />
         </FormField>
         <FormField label="Límite de crédito" error={err.limiteCredito} htmlFor="cl-lim">
           <NumberInput id="cl-lim" disabled={ro} value={f.limiteCredito} min={0} onValueChange={(v) => set("limiteCredito", v)} />
-          <ImpactoCampo campo="cliente.limiteCredito" />
         </FormField>
         <FormField label="Sucursal preferida">
           <Select disabled={ro} value={f.sucursalPreferidaId} onValueChange={(v) => set("sucursalPreferidaId", v)} options={db.sucursales.map((s) => ({ value: s.id, label: s.nombre }))} />
@@ -163,7 +162,6 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
             <Checkbox disabled={ro} checked={!!f.facturaEnUSD} onCheckedChange={(v) => set("facturaEnUSD", v === true)} /> Factura en USD
             <span className="text-[12px] text-muted">· habilita Precios en USD en cotizaciones y notas de pedido</span>
           </label>
-          <ImpactoCampo campo="cliente.facturaEnUSD" />
         </div>
       </div>
       {!compacto && (
@@ -181,7 +179,6 @@ export function ClienteForm({ cliente, onSaved, compacto }: { cliente?: Cliente;
           <Button type="submit" loading={guardando}><Save /> {cliente ? "Guardar cambios" : "Crear cliente"}</Button>
         </div>
       )}
-      {!ro && !cliente && <Impacto accion="crearCliente" />}
     </form>
   );
 }

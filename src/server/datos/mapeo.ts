@@ -8,6 +8,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Configuracion, EstadoInicial, Numeradores } from "@/domain/types";
 import { esDecimal } from "@/lib/decimal";
+import { configInicial } from "@/data/seed/config";
 
 export type Cliente = PrismaClient | Prisma.TransactionClient;
 
@@ -46,6 +47,9 @@ export const MODELOS = {
   cobranzas: "Recibo",
   pagosProveedores: "OrdenPago",
   cheques: "Cheque",
+  cajas: "Caja",
+  movimientosCaja: "MovimientoCaja",
+  arqueosCaja: "ArqueoCaja",
   auditoria: "Auditoria",
 } as const satisfies Partial<Record<keyof EstadoInicial, string>>;
 
@@ -226,7 +230,10 @@ export async function leerConfig(db: Cliente): Promise<Configuracion> {
   delete d.id;
   delete d.creadoEn;
   delete d.actualizadoEn;
-  return { ...(d as unknown as Configuracion), motivosAjuste: motivos.map((x) => ({ codigo: x.codigo, nombre: x.nombre, activo: x.activo })) };
+  const cfg = d as unknown as Configuracion;
+  // Base anterior a la lista editable: tipos por defecto.
+  if (!Array.isArray(cfg.tiposCliente) || !cfg.tiposCliente.length) cfg.tiposCliente = configInicial().tiposCliente;
+  return { ...cfg, motivosAjuste: motivos.map((x) => ({ codigo: x.codigo, nombre: x.nombre, activo: x.activo })) };
 }
 
 export async function leerNumeradores(db: Cliente): Promise<Numeradores> {

@@ -16,7 +16,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { fuenteLabel, useTipoCambio } from "@/lib/tipo-cambio";
 import { cn } from "@/lib/utils";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export type Alcance = "TODO" | "RUBRO" | "PROVEEDOR" | "MARCA" | "SELECCIONADOS";
 
@@ -39,7 +39,7 @@ export function ActualizacionMasivaDialog({
   const aplicar = useStore((s) => s.aplicarCambiosPrecios);
   const [alcance, setAlcance] = React.useState<Alcance>(inicial?.alcance ?? (seleccionados?.size ? "SELECCIONADOS" : "TODO"));
   const [valorAlcance, setValorAlcance] = React.useState("");
-  const [listas, setListas] = React.useState<Set<string>>(() => new Set(db.listasPrecios.filter((l) => l.activa).map((l) => l.id)));
+  const [listas, setListas] = React.useState<Set<string>>(() => new Set(db.listasPrecios.filter((l) => !l.clienteId).filter((l) => l.activa).map((l) => l.id)));
   const [modo, setModo] = React.useState<"AUMENTAR" | "DISMINUIR" | "MARKUP" | "DESDE_USD">(inicial?.modo ?? "AUMENTAR");
   const [pct, setPct] = React.useState(inicial?.pct ?? 5);
   const [redondeo, setRedondeo] = React.useState<Redondeo>(10);
@@ -75,7 +75,7 @@ export function ActualizacionMasivaDialog({
 
   const { tc } = useTipoCambio();
   const dolar = tc?.valor ?? 0;
-  const markups = React.useMemo(() => Object.fromEntries(db.listasPrecios.map((l) => [l.id, l.markupPorDefecto])), [db.listasPrecios]);
+  const markups = React.useMemo(() => Object.fromEntries(db.listasPrecios.filter((l) => !l.clienteId).map((l) => [l.id, l.markupPorDefecto])), [db.listasPrecios]);
   const modoCalc: ModoActualizacion =
     modo === "MARKUP" ? { tipo: "MARKUP", markups } : modo === "DESDE_USD" ? { tipo: "DESDE_USD", markups, tipoCambio: dolar } : { tipo: modo, pct };
   const cambios = React.useMemo(
@@ -158,7 +158,7 @@ export function ActualizacionMasivaDialog({
 
             <FormField label="Listas afectadas">
               <div className="space-y-2 rounded-control border border-border p-3">
-                {db.listasPrecios.map((l) => (
+                {db.listasPrecios.filter((l) => !l.clienteId).map((l) => (
                   <label key={l.id} className="flex cursor-pointer items-center gap-2 text-[13px]">
                     <Checkbox
                       checked={listas.has(l.id)}
@@ -270,7 +270,6 @@ export function ActualizacionMasivaDialog({
             {reales.length > 300 && <p className="mt-1 text-[12px] text-muted">Se muestran los primeros 300 cambios.</p>}
           </div>
         </div>
-        <Impacto accion="actualizarPreciosMasivo" n={reales.length} className="mt-4" />
       </DialogContent>
     </Dialog>
   );

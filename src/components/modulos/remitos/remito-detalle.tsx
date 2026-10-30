@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { DevolucionDialog, saldosDeNP } from "@/components/modulos/ventas/nota-pedido-detalle";
 import { RemitoDocumento } from "./remito-documento";
 import { SubirFirmadoDialog } from "./subir-firmado";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 const PASOS = ["INICIAL", "PICKING", "HECHO"] as const;
 const PASO_LABEL = { INICIAL: "Inicial", PICKING: "Picking", HECHO: "Hecho" };
@@ -64,7 +64,6 @@ export function RemitoDetalle({ id }: { id: string }) {
   const devoluciones = db.devoluciones.filter((d) => d.notaPedidoId === r.notaPedidoId);
 
   const ctx = { remitoId: r.id, clienteId: r.clienteId, notaPedidoId: r.notaPedidoId, acopioId: r.acopioId, productoIds: r.items.map((i) => i.productoId), depositoIds: [r.depositoId] };
-  const proxima = r.estado === "INICIAL" && puedeOperar ? "iniciarPicking" : r.estado === "PICKING" && puedeOperar ? "marcarRemitoHecho" : r.estado === "HECHO" && !firmado && puedeOperar ? "subirRemitoFirmado" : null;
 
   const iniciarPicking = async () => {
     const x = await medir("iniciarPicking", ctx, () => useStore.getState().iniciarPicking(r.id));
@@ -143,8 +142,6 @@ export function RemitoDetalle({ id }: { id: string }) {
           </Button>
         )}
       </div>
-        {proxima && <Impacto accion={proxima} />}
-        <ImpactoCampo campo={`remito.estado.${r.estado}`} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">

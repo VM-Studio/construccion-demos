@@ -5,9 +5,9 @@ import { Download, Plus, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useStore } from "@/store";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 import { useDb, usePendientes, usePuede, useSaldosClientes, useAcopiosResumen, useSucursalActiva, useVeCircuito2 } from "@/store/selectors";
-import { TIPO_CLIENTE_LABEL, CONDICION_PAGO_LABEL, opcionesTipoCliente } from "@/domain/estados";
+import { nombreTipoCliente, CONDICION_PAGO_LABEL, opcionesTipoCliente } from "@/domain/estados";
 import type { Cliente } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -94,7 +94,7 @@ export function ClientesView() {
   const columnas: Column<ResumenCliente>[] = [
     { key: "cod", header: "Código", sortable: true, sortValue: (f) => f.c.codigo, cell: (f) => <span className="font-mono text-[12px]">{f.c.codigo}</span> },
     { key: "rs", header: "Cliente", footer: `${filas.length} clientes`, sortable: true, sortValue: (f) => f.c.razonSocial, cell: (f) => <span className="block min-w-[180px]"><span className="block font-medium text-ink">{f.c.nombreFantasia ?? f.c.razonSocial}</span>{f.c.nombreFantasia && <span className="block text-[11px] text-muted">{f.c.razonSocial}</span>}</span> },
-    { key: "t", header: "Tipo", cell: (f) => <span className="text-muted">{TIPO_CLIENTE_LABEL[f.c.tipo]}</span>, hideOnMobile: true },
+    { key: "t", header: "Tipo", cell: (f) => <span className="text-muted">{nombreTipoCliente(f.c.tipo, db.config.tiposCliente)}</span>, hideOnMobile: true },
     { key: "cuit", header: "CUIT", cell: (f) => <span className="whitespace-nowrap font-mono text-[12px] text-muted">{f.c.cuit || "—"}</span>, hideOnMobile: true },
     { key: "ci", header: "Circuito", cell: (f) => <CircuitoBadge circuito={f.c.circuitoHabitual} corto /> },
     { key: "loc", header: "Localidad", cell: (f) => <span className="text-muted">{f.c.localidad}</span>, hideOnMobile: true },
@@ -124,7 +124,7 @@ export function ClientesView() {
       "clientes.csv",
       aCSV(
         ["Código", "Razón social", "Fantasía", "Tipo", "CUIT", "Circuito", "Localidad", "Lista", "Condición", "Saldo cta. cte.", "Vencido", "Acopios vigentes", "Saldo acopios", "Pendiente de entrega", "Vendedor"],
-        filas.map((f) => [f.c.codigo, f.c.razonSocial, f.c.nombreFantasia, TIPO_CLIENTE_LABEL[f.c.tipo], f.c.cuit, `AC${f.c.circuitoHabitual}`, f.c.localidad, lista(f.c.listaPreciosId), CONDICION_PAGO_LABEL[f.c.condicionPago], Math.round(f.saldo), Math.round(f.vencido), f.acopios, Math.round(f.saldoAcopios), Math.round(f.pendiente), usr(f.c.vendedorId)]),
+        filas.map((f) => [f.c.codigo, f.c.razonSocial, f.c.nombreFantasia, nombreTipoCliente(f.c.tipo, db.config.tiposCliente), f.c.cuit, `AC${f.c.circuitoHabitual}`, f.c.localidad, lista(f.c.listaPreciosId), CONDICION_PAGO_LABEL[f.c.condicionPago], Math.round(f.saldo), Math.round(f.vencido), f.acopios, Math.round(f.saldoAcopios), Math.round(f.pendiente), usr(f.c.vendedorId)]),
       ),
     );
 
@@ -177,7 +177,7 @@ export function ClientesView() {
         }
         filters={
           <>
-            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opcionesTipoCliente()]} /></div>
+            <div className="w-[150px]"><Select size="sm" aria-label="Tipo" value={tipo} onValueChange={setTipo} options={[{ value: "", label: "Todos los tipos" }, ...opcionesTipoCliente(db.config.tiposCliente)]} /></div>
             <div className="w-[150px]"><Select size="sm" aria-label="Circuito" value={circuito} onValueChange={setCircuito} options={[{ value: "", label: "Ambos circuitos" }, { value: "1", label: "AC1 · Fiscal" }, { value: "2", label: "AC2 · Interno" }]} /></div>
             <div className="w-[160px]"><Select size="sm" aria-label="Vendedor" value={vendedor} onValueChange={setVendedor} options={[{ value: "", label: "Todos los vendedores" }, ...db.usuarios.filter((u) => u.rol === "VENTAS").map((u) => ({ value: u.id, label: u.nombre }))]} /></div>
             {check("Con acopio vigente", conAcopio, setConAcopio)}
@@ -208,7 +208,6 @@ export function ClientesView() {
       >
         <div className="space-y-3">
           <p className="text-[13px] text-muted">Queda registrado en la auditoría.</p>
-          <Impacto accion="eliminarCliente" />
         </div>
       </ConfirmDialog>
       <NuevoClienteDialog open={nuevo} onOpenChange={setNuevo} onCreado={(id) => router.push(`/clientes/${id}`)} />

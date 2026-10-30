@@ -34,3 +34,7 @@ export async function guardarRubro(...args: Parameters<AccionesNegocio["guardarR
 export async function importarArticulos(...args: Parameters<AccionesNegocio["importarArticulos"]>) {
   return correr("importarArticulos", args);
 }
+
+export async function quitarPrecioLista(...args: Parameters<AccionesNegocio["quitarPrecioLista"]>) {
+  return correr("quitarPrecioLista", args);
+}

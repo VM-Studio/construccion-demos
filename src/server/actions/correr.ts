@@ -10,6 +10,8 @@ import { ErrorPermiso, servicio } from "../servicios/base";
 import { datosRequest, ErrorSesion, exigirActor } from "../auth/actor";
 import type { Diferencia } from "@/capacitacion/slice";
 import { registrarDuracion, usuarioEnSentry } from "../monitoreo";
+import { after } from "next/server";
+import { autorizarComprobantesArca } from "../servicios/facturacionArca";
 import { deltaPara } from "../lectura";
 import type { Delta } from "@/lib/sincronizacion/delta";
 
@@ -37,6 +39,9 @@ export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[
     registrarDuracion(nombre, Date.now() - t0, msActor);
     // Sin revalidatePath: la respuesta trae solo las filas que cambiaron (delta) y el navegador las
     // aplica sin un segundo viaje al servidor; así tampoco se re-renderiza la página entera.
+    // Factura electrónica: los comprobantes fiscales nuevos se mandan a ARCA sin hacer esperar al usuario.
+    const comprobantes = r.ok && nombre !== "registrarResultadoArca" ? r.cambiados?.comprobantes : undefined;
+    if (comprobantes?.length) after(() => autorizarComprobantesArca({ actor, ...req }, comprobantes));
     if (r.ok && r.cambiados) {
       const { cambiados, ...resto } = r;
       const ids = new Map(Object.entries(cambiados).map(([c, xs]) => [c, new Set(xs)] as const));

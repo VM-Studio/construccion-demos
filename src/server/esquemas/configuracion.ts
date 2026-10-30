@@ -12,6 +12,7 @@ const datosEmpresa = z.object({
 });
 
 const motivoAjuste = z.object({ codigo: z.string().min(1).max(100), nombre: texto, activo: z.boolean() });
+const tipoClienteConfig = z.object({ codigo: z.string().min(1).max(40).regex(/^[A-Z0-9_]+$/), nombre: z.string().trim().min(1).max(60), activo: z.boolean() });
 
 /** `Partial<Omit<Configuracion, "empresa">>`. */
 const configPatch = z
@@ -28,6 +29,7 @@ const configPatch = z
     tamanoMaxAdjuntoMB: z.number().finite().positive().max(1000),
     categoriasAdjunto: lista(z.object({ codigo: categoriaAdjunto, nombre: texto }), 20),
     motivosAjuste: lista(motivoAjuste, 200),
+    tiposCliente: lista(tipoClienteConfig, 100),
   })
   .partial();
 
@@ -61,4 +63,5 @@ export const guardarUsuario = z.tuple([usuarioInput, id.optional()]);
 export const guardarUnidadNegocio = z.tuple([unidadNegocioInput, id.optional()]);
 export const establecerNumeroInicial = z.tuple([z.string().min(1).max(200), z.number().int().nonnegative().max(99_999_999)]);
 export const guardarMotivosAjuste = z.tuple([lista(motivoAjuste, 200)]);
+export const guardarTiposCliente = z.tuple([lista(tipoClienteConfig, 100)]);
 export const registrarEvento = z.tuple([texto, texto, texto, texto.optional()]);

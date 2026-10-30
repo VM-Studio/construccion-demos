@@ -17,6 +17,7 @@ import { mapearColumnas, validarArchivo } from "../src/domain/importacion";
 import { calcularActualizacionMasiva } from "../src/domain/precios";
 import { pasosCargaInicial } from "../src/domain/cargaInicial";
 import { prerequisitos } from "../src/domain/prerequisitos";
+import { saldoCaja, prestamosPendientes } from "../src/domain/caja";
 
 const motor = crearMotorMemoria(crearSeed(new Date()));
 const s = () => motor;
@@ -230,6 +231,61 @@ console.log("\n10) Desde el sistema vacío: importar → precios → proveedor �
   const res = verificarIntegridad(s().db);
   check("Integridad desde vacío", res.ok, res.chequeos.filter((c) => !c.ok).map((c) => c.errores[0]).join(" | "));
   // (Vaciar y cargar datos de ejemplo no existen en el sistema real.)
+}
+
+console.log("\n9) Reunión con los dueños: cotización rápida → venta en un paso → anular en cascada → recuperar; dólares, caja chica y saldo a favor");
+{
+  const m = crearMotorMemoria(crearSeed(new Date()));
+  m.login("usr_felipe");
+  const HIERRO6 = "prod_20102";
+  const dep = "dep_central";
+  const fis0 = posicionesDe(m.db).get(HIERRO6)!.porDeposito[dep].fisico;
+  const precio = 1500;
+  const borrador = paso("Guardar borrador de cotización rápida (sin cliente)", m.guardarCotizacion({ prospectoNombre: "Juan Pérez", prospectoTelefono: "11 5555-1234", sucursalId: "suc_central", circuito: 1, fecha: hoy, validezDias: 7, items: [{ id: "", productoId: HIERRO6, cantidad: 10, precioUnitario: precio, costoUnitarioSnapshot: 0, descuentoPct: 0 }], descuentoPct: 0, estado: "BORRADOR" }));
+  check("Queda en borrador y sin cliente", m.db.cotizaciones.find((c) => c.id === borrador)?.estado === "BORRADOR" && !m.db.cotizaciones.find((c) => c.id === borrador)?.clienteId);
+  paso("Crear (pasa a pendiente)", m.guardarCotizacion({ prospectoNombre: "Juan Pérez", prospectoTelefono: "11 5555-1234", sucursalId: "suc_central", circuito: 1, fecha: hoy, validezDias: 7, items: [{ id: "", productoId: HIERRO6, cantidad: 10, precioUnitario: precio, costoUnitarioSnapshot: 0, descuentoPct: 0 }], descuentoPct: 0 }, borrador));
+  check("Pendiente", m.db.cotizaciones.find((c) => c.id === borrador)?.estado === "PENDIENTE");
+  const clientesAntes = m.db.clientes.length;
+  const total = m.db.cotizaciones.find((c) => c.id === borrador)!.total;
+  const caja = m.db.cajas[0];
+  const v = paso(
+    "Aceptar: crea el cliente, retira ahora, factura y cobra US$ 10 + resto en pesos",
+    m.aceptarCotizacion(borrador, { cliente: { razonSocial: "Juan Pérez", condicionIVA: "CF" }, circuito: 1, formaPago: "CONTADO", entrega: "RETIRA_AHORA", facturar: true, cobro: { medios: [{ medio: "EFECTIVO", importe: 0, moneda: "USD", importeME: 10, tipoCambio: 1000, cajaId: caja.id }, { medio: "EFECTIVO", importe: Math.round((total - 10_000) * 100) / 100, cajaId: caja.id }] } }),
+  );
+  check("Se sumó el cliente", m.db.clientes.length === clientesAntes + 1);
+  const fac = m.db.comprobantes.find((c) => c.id === v?.facturaId);
+  check("Factura cobrada completa (saldo 0) y pendiente de ARCA", !!fac && fac.saldoPendiente === 0 && fac.arcaEstado === "PENDIENTE", `${fac?.saldoPendiente}`);
+  check("Stock bajó 10", posicionesDe(m.db).get(HIERRO6)!.porDeposito[dep].fisico === fis0 - 10);
+
+  check("Caja: US$ 10 y pesos del resto", saldoCaja(caja.id, "USD", m.db.movimientosCaja) === 10 && Math.abs(saldoCaja(caja.id, "ARS", m.db.movimientosCaja) - (total - 10_000)) < 0.01);
+  check("Cotización aceptada con NP", m.db.cotizaciones.find((c) => c.id === borrador)?.estado === "ACEPTADA" && !!m.db.cotizaciones.find((c) => c.id === borrador)?.notaPedidoId);
+  paso("Anular la venta", m.anularVenta(v.npId, "El cliente se arrepintió"));
+  check("NP anulada, factura anulada, recibo anulado", m.db.notasPedido.find((n) => n.id === v.npId)?.estado === "ANULADA" && m.db.comprobantes.find((c) => c.id === v.facturaId)?.estado === "ANULADO" && !!m.db.cobranzas.find((c) => c.id === v.reciboId)?.anulado);
+  check("Stock vuelve", posicionesDe(m.db).get(HIERRO6)!.porDeposito[dep].fisico === fis0);
+  check("Caja vuelve a 0", saldoCaja(caja.id, "USD", m.db.movimientosCaja) === 0 && saldoCaja(caja.id, "ARS", m.db.movimientosCaja) === 0);
+  paso("Recuperar la venta (vuelve la cotización a pendiente)", m.recuperarVenta(v.npId));
+  check("Cotización de nuevo pendiente", m.db.cotizaciones.find((c) => c.id === borrador)?.estado === "PENDIENTE");
+  paso("Anular cotización (cruz)", m.rechazarCotizacion(borrador, "No contestó"));
+  paso("Recuperar cotización", m.recuperarCotizacion(borrador));
+  // Pago a cuenta sin imputar y después aplicado a la factura.
+  const cli = m.db.clientes.find((c) => c.razonSocial === "Juan Pérez")!;
+  const v2 = paso("Venta en cuenta corriente con factura, sin cobro", m.crearVenta({ clienteId: cli.id, sucursalId: "suc_central", depositoId: dep, fecha: hoy, circuito: 2, origen: "NUEVA", formaPago: "CUENTA_CORRIENTE", items: [{ productoId: HIERRO6, cantidad: 2, precioUnitario: 1000 }], descuentoPct: 0, pendienteEntrega: true, modalidadEntrega: "RETIRA" }, undefined, { facturar: true }));
+  paso("Pago a cuenta de $ 5.000 por transferencia, sin aplicar", m.registrarCobranza({ clienteId: cli.id, circuito: 2, fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: 5000 }], imputaciones: [] }));
+  const saf = m.db.comprobantes.find((c) => c.tipo === "SALDO_A_FAVOR" && c.clienteId === cli.id && c.estado !== "ANULADO")!;
+  paso("Aplicar el pago a la factura", m.aplicarSaldoAFavor(saf.id, [{ comprobanteId: v2.facturaId!, importe: 2000 }]));
+  check("Factura saldada y quedan $ 3.000 a favor", m.db.comprobantes.find((c) => c.id === v2.facturaId)?.saldoPendiente === 0 && m.db.comprobantes.find((c) => c.id === saf.id)?.saldoPendiente === -3000);
+  // Cajas: nueva caja, préstamo y devolución.
+  const c2 = paso("Crear otra caja", m.guardarCaja({ nombre: "Caja Sucursal 2", activa: true }));
+  paso("Ingreso manual", m.registrarMovimientoCaja({ cajaId: caja.id, fecha: hoy, tipo: "INGRESO", moneda: "ARS", importe: 100_000, concepto: "Aporte de socios" }));
+  paso("Egreso: flete", m.registrarMovimientoCaja({ cajaId: caja.id, fecha: hoy, tipo: "EGRESO", moneda: "ARS", importe: 28_000, concepto: "Pago Gabriel flete" }));
+  paso("Préstamo de $ 50.000 a la otra caja", m.transferirEntreCajas({ origenId: caja.id, destinoId: c2, fecha: hoy, moneda: "ARS", importe: 50_000, tipo: "PRESTAMO" }));
+  check("Deuda entre cajas $ 50.000", prestamosPendientes(m.db.movimientosCaja)[0]?.saldo === 50_000);
+  paso("Devolución parcial $ 20.000", m.transferirEntreCajas({ origenId: c2, destinoId: caja.id, fecha: hoy, moneda: "ARS", importe: 20_000, tipo: "DEVOLUCION_PRESTAMO" }));
+  check("Deuda $ 30.000 y saldo caja $ 42.000", prestamosPendientes(m.db.movimientosCaja)[0]?.saldo === 30_000 && saldoCaja(caja.id, "ARS", m.db.movimientosCaja) === 42_000);
+  const arq = paso("Arqueo con faltante y ajuste", m.registrarArqueo({ cajaId: caja.id, moneda: "ARS", contado: 41_000, ajustar: true }));
+  check("Diferencia −1.000 y caja ajustada", arq?.diferencia === -1000 && saldoCaja(caja.id, "ARS", m.db.movimientosCaja) === 41_000);
+  const res = verificarIntegridad(m.db);
+  check("Integridad", res.ok, res.chequeos.filter((c) => !c.ok).map((c) => c.errores[0]).join(" | "));
 }
 
 if (fallas) {

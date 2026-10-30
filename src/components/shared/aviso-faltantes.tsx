@@ -31,6 +31,8 @@ export function AvisoFaltantes({
 }) {
   const router = useRouter();
   const db = useDb();
+  // Los dueños pidieron sacar los cuadros amarillos explicativos: solo se muestra si trae acciones.
+  if (!acciones) return null;
   const faltan = faltanProp ?? faltantes(claves ?? [], db);
   if (claves && !faltanProp && !faltan.length) return null;
   if (!faltan.length && !texto) return null;

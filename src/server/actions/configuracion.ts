@@ -34,3 +34,7 @@ export async function guardarMotivosAjuste(...args: Parameters<AccionesNegocio["
 export async function registrarEvento(...args: Parameters<AccionesNegocio["registrarEvento"]>) {
   return correr("registrarEvento", args);
 }
+
+export async function guardarTiposCliente(...args: Parameters<AccionesNegocio["guardarTiposCliente"]>) {
+  return correr("guardarTiposCliente", args);
+}

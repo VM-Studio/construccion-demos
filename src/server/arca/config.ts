@@ -42,6 +42,7 @@ export const URLS = {
   wsaa: { homologacion: "https://wsaahomo.afip.gov.ar/ws/services/LoginCms", produccion: "https://wsaa.afip.gov.ar/ws/services/LoginCms" },
   a13: { homologacion: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13", produccion: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13" },
   a5: { homologacion: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5", produccion: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5" },
+  wsfe: { homologacion: "https://wswhomo.afip.gov.ar/wsfev1/service.asmx", produccion: "https://servicios1.afip.gov.ar/wsfev1/service.asmx" },
 } as const;
 
 /** Errores de ARCA con mensaje para la interfaz. */

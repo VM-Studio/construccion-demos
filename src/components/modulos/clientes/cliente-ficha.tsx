@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Boxes, FileText, Pencil, Plus, ShoppingCart, Wallet, PackageOpen, Check, X } from "lucide-react";
 import { useStore } from "@/store";
 import { useAcopiosResumen, useDb, usePendientes, usePuede, useRentabilidadNP, useSaldosClientes } from "@/store/selectors";
-import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, FORMA_PAGO_LABEL, TIPO_CLIENTE_LABEL } from "@/domain/estados";
+import { CONDICION_IVA_LABEL, CONDICION_PAGO_LABEL, FORMA_PAGO_LABEL, nombreTipoCliente } from "@/domain/estados";
 import { porcentajeEntregado } from "@/domain/ventas";
 import type { Obra } from "@/domain/types";
 import { PageHeader } from "@/components/shared/page-header";
@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PreciosEspecialesCliente } from "./precios-especiales";
 import { formatDate, formatMoney, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EditarClienteDialog } from "@/components/modulos/ventas/cliente-form";
@@ -31,7 +32,7 @@ import { PendientesTabla } from "@/components/modulos/ventas/pendientes-tabla";
 import { CobranzaDialog } from "@/components/modulos/cuentas/cobranza-dialog";
 import { EstadoCuenta } from "@/components/modulos/cuentas/estado-cuenta";
 import { DescargarDesacopio } from "@/components/modulos/acopios/descargar-desacopio";
-import { Impacto, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 export function ClienteFicha({ id }: { id: string }) {
   const db = useDb();
@@ -78,7 +79,7 @@ export function ClienteFicha({ id }: { id: string }) {
         titulo={c.nombreFantasia ?? c.razonSocial}
         descripcion={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono">{c.codigo}</span>·<span>{TIPO_CLIENTE_LABEL[c.tipo]}</span>·<span>CUIT {c.cuit || "—"}</span>·<span>{CONDICION_IVA_LABEL[c.condicionIVA]}</span>·
+            <span className="font-mono">{c.codigo}</span>·<span>{nombreTipoCliente(c.tipo, db.config.tiposCliente)}</span>·<span>CUIT {c.cuit || "—"}</span>·<span>{CONDICION_IVA_LABEL[c.condicionIVA]}</span>·
             <CircuitoBadge circuito={c.circuitoHabitual} />
             {c.contacto && <span>· Contacto {c.contacto}</span>}
             <ClipContador cantidad={adjCliente.length} onClick={() => setTab("adjuntos")} />
@@ -109,6 +110,7 @@ export function ClienteFicha({ id }: { id: string }) {
           <TabsTrigger value="ventas">Ventas ({nps.length})</TabsTrigger>
           <TabsTrigger value="pendiente">Pendiente de entrega ({pendientes.length})</TabsTrigger>
           <TabsTrigger value="ctacte">Cuenta corriente</TabsTrigger>
+          <TabsTrigger value="precios">Precios especiales</TabsTrigger>
           <TabsTrigger value="remitos">Remitos</TabsTrigger>
           <TabsTrigger value="adjuntos">Adjuntos ({adjCliente.length})</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
@@ -118,6 +120,7 @@ export function ClienteFicha({ id }: { id: string }) {
         <TabsContent value="ventas"><VentasCliente id={id} /></TabsContent>
         <TabsContent value="pendiente"><PendientesTabla lineas={pendientes} vacio="El cliente no tiene entregas pendientes: lo que compre y no se lleve en el momento va a aparecer acá." /></TabsContent>
         <TabsContent value="ctacte"><EstadoCuenta tipo="cliente" id={id} embebido /></TabsContent>
+        <TabsContent value="precios"><PreciosEspecialesCliente clienteId={id} /></TabsContent>
         <TabsContent value="remitos"><RemitosCliente id={id} /></TabsContent>
         <TabsContent value="adjuntos"><Card className="p-4"><AdjuntosPanel entidadTipo="CLIENTE" entidadId={id} /></Card></TabsContent>
         <TabsContent value="historial">
@@ -227,7 +230,7 @@ function ResumenCliente({ id }: { id: string }) {
               </tbody>
             </table>
           </div>
-          {edit && !edit.id && <div className="border-t border-border p-3"><Impacto accion="crearObra" /></div>}
+          {edit && !edit.id && <div className="border-t border-border p-3"></div>}
         </Card>
         <Card>
           <CardHeader><CardTitle>Notas internas</CardTitle></CardHeader>

@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, PlayCircle, UserRound, LifeBuoy } from "lucide-react";
+import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, UserRound } from "lucide-react";
 import { useStore } from "@/store";
 import { useEmpresa, useUsuario } from "@/store/selectors";
 import { coincidencia } from "@/config/modulos";
@@ -41,7 +41,6 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
   const empresa = useEmpresa();
   const logout = useStore((s) => s.logout);
   const [miCuenta, setMiCuenta] = React.useState(false);
-  const abrirTour = useStore((s) => s.abrirTour);
   const setModulo = useStore((s) => s.setModuloActivo);
   const sucursales = useDb().sucursales;
   const visibles = useModulosVisibles();
@@ -155,13 +154,6 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
               <DropdownMenuItem onSelect={() => setTimeout(() => setMiCuenta(true), 100)}>
           <UserRound /> Mi cuenta
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/ayuda"><LifeBuoy /> Ayuda</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setTimeout(abrirTour, 100)}>
-                <PlayCircle />
-                Ver recorrido
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {

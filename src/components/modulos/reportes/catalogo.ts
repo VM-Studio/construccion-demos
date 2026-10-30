@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Factory, FileWarning, PackageCheck, Timer, ClipboardList, History, Landmark, PackageX, Percent, ShieldCheck, ShoppingCart, Truck, Users, Warehouse, type LucideIcon } from "lucide-react";
+import { BarChart3, Boxes, Factory, FileWarning, PackageCheck, Timer, ClipboardList, History, Landmark, PackageX, Percent, ShieldCheck, ShoppingCart, Truck, UserCheck, Users, Warehouse, Weight, type LucideIcon } from "lucide-react";
 import type { Permiso } from "@/domain/permisos";
 
 export const REPORTES: { slug: string; titulo: string; descripcion: string; icono: LucideIcon; permiso: Permiso; destacado?: boolean }[] = [
@@ -17,6 +17,8 @@ export const REPORTES: { slug: string; titulo: string; descripcion: string; icon
   { slug: "cobranzas", titulo: "Cobranzas y antigüedad", descripcion: "Cobrado por medio y por día, antigüedad por cliente y días de cobro.", icono: Landmark, permiso: "ctacte.ver" },
   { slug: "despachos", titulo: "Despachos", descripcion: "Entregas por día y vehículo, puntualidad, reprogramaciones y kilos.", icono: Truck, permiso: "despachos.ver" },
   { slug: "movimientos", titulo: "Movimientos de stock", descripcion: "Kardex exportable con todos los filtros y totales por tipo.", icono: History, permiso: "stock.ver" },
+  { slug: "ultimas-modificaciones", titulo: "Últimas modificaciones", descripcion: "Quién fue el último en modificar cada módulo y sección, qué hizo, qué día y a qué hora.", icono: UserCheck, permiso: "auditoria.ver", destacado: true },
+  { slug: "hierros-toneladas", titulo: "Hierros en toneladas", descripcion: "Ingresado, vendido y stock de hierros llevado a toneladas.", icono: Weight, permiso: "stock.ver" },
   { slug: "auditoria", titulo: "Auditoría", descripcion: "Quién hizo qué y cuándo, filtrable por usuario, entidad y acción.", icono: ShieldCheck, permiso: "auditoria.ver" },
 ];
 

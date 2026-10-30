@@ -206,7 +206,7 @@ describe("Duplicar artículo y crear serie", () => {
     };
     const antes = await foto();
     const db = await estado();
-    const origen = db.productos.find((p) => p.costoUltimo > 0 && db.precios.filter((x) => x.productoId === p.id).length === db.listasPrecios.length)!;
+    const origen = db.productos.find((p) => p.costoUltimo > 0 && db.precios.filter((x) => x.productoId === p.id).length === db.listasPrecios.filter((l) => !l.clienteId).length)!;
     const stockOrigenAntes = db.stock.filter((s) => s.productoId === origen.id).map((s) => s.cantidadFisica);
     const sello = Date.now().toString(36).toUpperCase();
 

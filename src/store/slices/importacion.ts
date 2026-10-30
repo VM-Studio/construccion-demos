@@ -35,7 +35,7 @@ export function crearSliceImportacion(set: SetFn, get: GetFn) {
           tx.insert("productos", nuevo);
           for (const d of tx.get("depositos"))
             tx.insert("stock", { id: newId("stk"), productoId: nuevo.id, depositoId: d.id, cantidadFisica: 0, ...tx.meta() });
-          for (const l of tx.get("listasPrecios"))
+          for (const l of tx.get("listasPrecios").filter((x) => !x.clienteId))
             tx.insert("precios", {
               id: newId("pre"),
               productoId: nuevo.id,

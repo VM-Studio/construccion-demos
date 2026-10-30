@@ -11,7 +11,7 @@ import { useStore } from "@/store";
 import { useDb, useUsuario } from "@/store/selectors";
 import { aplicarResultadoPropio } from "@/lib/datos/proveedor";
 import { cambiarActivoUsuario, cerrarSesionesDe, crearUsuario, restablecerPassword } from "@/server/actions/sesion";
-import { Impacto } from "@/capacitacion";
+
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,7 +107,6 @@ function NuevoUsuarioDialog({ onClose, onCreado }: { onClose: () => void; onCrea
         footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button loading={enviando} disabled={!f.nombre.trim() || !f.email.trim()} onClick={guardar}><Save /> Crear usuario</Button></>}
       >
         <div className="space-y-4">
-          <Impacto accion="crearUsuario" />
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Nombre" required htmlFor="nu-n"><Input id="nu-n" autoFocus value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></FormField>
             <FormField label="Apellido" htmlFor="nu-a"><Input id="nu-a" value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} /></FormField>

@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime, formatMoney, formatQty } from "@/lib/format";
 import { nombreUsuario } from "@/lib/referencias";
 import { cn, newId } from "@/lib/utils";
-import { Impacto, ImpactoCampo, medir } from "@/capacitacion";
+import { medir } from "@/capacitacion";
 
 type Linea = LineaBase & { signo: 1 | -1; motivo: string; costoUnitario?: number };
 
@@ -97,7 +97,6 @@ function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boo
   const sinCargar = db.productos.filter((p) => p.activo && !items.some((i) => i.productoId === p.id));
 
   const accionId = inventario || soloInventario ? "inventarioInicial" : "crearAjuste";
-  const hayInventario = items.some((i) => i.motivo === INVENTARIO);
 
   const guardar = async () => {
     const r = await medir(accionId, { productoIds: items.map((i) => i.productoId), depositoIds: [deposito], n: items.length }, () => crear({ depositoId: deposito, items: items.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad, signo: i.motivo === INVENTARIO ? 1 : i.signo, motivo: i.motivo, ...(i.motivo === INVENTARIO ? { costoUnitario: i.costoUnitario ?? 0 } : {}) })), observacion: obs || undefined }));
@@ -125,7 +124,6 @@ function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boo
         <div className="flex flex-wrap items-end justify-between gap-3">
           <FormField label="Depósito" className="w-full max-w-xs">
             <Select value={deposito} onValueChange={setDeposito} options={db.depositos.map((d) => ({ value: d.id, label: d.nombre }))} />
-            <ImpactoCampo campo="ajuste.deposito" />
           </FormField>
           {inventario && sinCargar.length > 0 && (
             <Button size="sm" variant="secondary" onClick={() => setItems([...items, ...sinCargar.map((p) => lineaInventario(p.id))])}>
@@ -162,7 +160,6 @@ function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boo
             return undefined;
           }}
         />
-        {hayInventario && <ImpactoCampo campo="ajuste.motivo.INVENTARIO_INICIAL" />}
         <div className="flex items-center justify-between rounded-control border border-border bg-subtle px-3 py-2 text-[13px]">
           <span className="text-muted">{soloInventario ? "Valor del inventario al costo indicado" : "Valor del ajuste a costo promedio"}</span>
           <span className="font-semibold tnum">{formatMoney(valor)}</span>
@@ -170,7 +167,6 @@ function NuevoAjuste({ open, onClose, productoInicial, inventario }: { open: boo
         <FormField label="Observación" required={requiereObs} error={requiereObs && !obs.trim() ? "Obligatoria: el ajuste supera $ 500.000." : undefined} htmlFor="aju-obs">
           <Textarea id="aju-obs" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej. Conteo físico de fin de mes" />
         </FormField>
-        <Impacto accion={accionId} n={items.length} />
       </div>
     </EntitySheet>
   );

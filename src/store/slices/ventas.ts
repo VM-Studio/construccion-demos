@@ -1,7 +1,8 @@
 import type { Circuito, Cliente, Comprobante, Cotizacion, DevolucionNP, FormaPagoVenta, ItemNP, ItemVenta, MedioCobro, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Remito, Unidad } from "@/domain/types";
 import { pendienteLinea, precioCongelado, validarRetiro, retiradoAcopio, pagadoAcopio } from "@/domain/acopios";
 import { calcularTotales } from "@/domain/ventas";
-import { saldoCliente } from "@/domain/cuentasCorrientes";
+import { PREFIJO_NC_ANULACION, saldoCliente } from "@/domain/cuentasCorrientes";
+import { buscarPorCuit, validarCUIT } from "@/domain/cuit";
 import { puede } from "@/domain/permisos";
 import { formatMoney } from "@/lib/format";
 import { newId, round2 } from "@/lib/utils";
@@ -15,6 +16,7 @@ import {
   clienteMercadoLibre,
   crearClienteDesdeVenta,
   crearRemitoNP,
+  desaplicarDeComprobante,
   disponible,
   type DatosClienteVenta,
   marcarHecho,
@@ -356,62 +358,90 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
     return out;
   };
 
-  /** Anula una factura: con CAE de ARCA lleva nota de crédito; si no, se anula directamente. */
+  /**
+   * Anula una factura con todo lo conectado. Los recibos que la pagaban se anulan (o, si pagaban
+   * también otras facturas, lo imputado a esta queda como saldo a favor del recibo).
+   * - Con CAE de ARCA: las NC que ya tenía (devoluciones) se aplican a la factura y por el resto se
+   *   emite una NC de anulación.
+   * - Sin CAE (interna o pendiente de ARCA): la factura y sus NC quedan anuladas.
+   */
   const anularFacturaTx = (tx: Tx, facturaId: string, motivo: string) => {
     const f = tx.must("comprobantes", facturaId);
     if (f.estado === "ANULADO") return;
     if (f.tipo !== "FACTURA") throw new ErrorNegocio("Solo se anulan facturas.");
-    // Recibos imputados: si cubren solo esta factura se anulan; si no, se libera lo imputado como saldo a favor.
     for (const cob of tx.get("cobranzas").filter((c) => !c.anulado && c.imputaciones.some((i) => i.comprobanteId === f.id))) {
       if (cob.imputaciones.every((i) => i.comprobanteId === f.id)) anularRecibo(tx, cob.id, `Anulación de ${f.numero}: ${motivo}`);
       else {
-        const imp = cob.imputaciones.find((i) => i.comprobanteId === f.id)!;
-        tx.patch("cobranzas", cob.id, { imputaciones: cob.imputaciones.filter((i) => i.comprobanteId !== f.id), saldoAFavor: r2((cob.saldoAFavor ?? 0) + imp.importe) });
-        tx.insert("comprobantes", { id: newId("cmp"), tipo: "SALDO_A_FAVOR", circuito: cob.circuito, numero: `${cob.numero} (a favor por anulación de ${f.numero})`, clienteId: cob.clienteId, sucursalId: cob.sucursalId, fecha: tx.ahora, subtotal: imp.importe, iva: 0, total: imp.importe, saldoPendiente: -imp.importe, estado: "PENDIENTE", observaciones: `Pago liberado al anular ${f.numero}`, ...tx.meta() });
+        const importe = r2(cob.imputaciones.filter((i) => i.comprobanteId === f.id).reduce((a, i) => a + i.importe, 0));
+        desaplicarDeComprobante(tx, f.id, importe);
+        tx.patch("cobranzas", cob.id, { imputaciones: cob.imputaciones.filter((i) => i.comprobanteId !== f.id), saldoAFavor: r2((cob.saldoAFavor ?? 0) + importe) });
+        tx.insert("comprobantes", { id: newId("cmp"), tipo: "SALDO_A_FAVOR", circuito: cob.circuito, numero: `${cob.numero} (a favor por anulación de ${f.numero})`, clienteId: cob.clienteId, sucursalId: cob.sucursalId, fecha: tx.ahora, subtotal: importe, iva: 0, total: importe, saldoPendiente: -importe, estado: "PENDIENTE", observaciones: `Pago liberado al anular ${f.numero}`, ...tx.meta() });
       }
     }
-    // Saldos a favor / NC aplicados a esta factura: vuelven a quedar disponibles.
-    for (const cr of tx.get("comprobantes").filter((c) => c.id !== f.id && c.aplicadoA?.some((a) => a.comprobanteId === f.id) && c.estado !== "ANULADO")) {
-      if (cr.tipo === "NOTA_CREDITO" && cr.comprobanteOrigenId === f.id) continue;
-      const imp = cr.aplicadoA!.filter((a) => a.comprobanteId === f.id).reduce((a, x) => a + x.importe, 0);
+    // Saldos a favor aplicados a esta factura (que no son NC de ella): vuelven a quedar disponibles.
+    for (const cr of tx.get("comprobantes").filter((c) => c.id !== f.id && c.comprobanteOrigenId !== f.id && c.aplicadoA?.some((a) => a.comprobanteId === f.id) && c.estado !== "ANULADO")) {
+      const imp = r2(cr.aplicadoA!.filter((a) => a.comprobanteId === f.id).reduce((a, x) => a + x.importe, 0));
+      desaplicarDeComprobante(tx, f.id, imp);
       tx.patch("comprobantes", cr.id, { aplicadoA: cr.aplicadoA!.filter((a) => a.comprobanteId !== f.id), saldoPendiente: r2(cr.saldoPendiente - imp), estado: "PENDIENTE" });
     }
-    const actual = tx.must("comprobantes", f.id);
+    const ncs = tx.get("comprobantes").filter((c) => c.tipo === "NOTA_CREDITO" && c.comprobanteOrigenId === f.id && c.estado !== "ANULADO");
     if (f.arcaEstado === "AUTORIZADO") {
-      const nc: Comprobante = {
-        id: newId("cmp"),
-        tipo: "NOTA_CREDITO",
-        letra: f.letra,
-        circuito: f.circuito,
-        numero: tx.numero("NC", f.circuito, puntoVentaDe(tx, f.sucursalId ?? tx.get("sucursales")[0]?.id ?? "")),
-        clienteId: f.clienteId,
-        notaPedidoId: f.notaPedidoId,
-        comprobanteOrigenId: f.id,
-        aplicadoA: [{ comprobanteId: f.id, importe: f.total }],
-        sucursalId: f.sucursalId,
-        fecha: tx.ahora,
-        subtotal: f.subtotal,
-        iva: f.iva,
-        total: f.total,
-        saldoPendiente: 0,
-        estado: "PAGADO",
-        items: f.items,
-        observaciones: `Anulación de ${f.numero}: ${motivo}`,
-        arcaEstado: "PENDIENTE",
-        compradorNombre: f.compradorNombre,
-        compradorDoc: f.compradorDoc,
-        ...tx.meta(),
-      };
-      tx.insert("comprobantes", nc);
-      if (f.notaPedidoId) tx.patch("notasPedido", f.notaPedidoId, (x) => ({ ...x, comprobanteIds: [...x.comprobanteIds, nc.id] }));
+      // Las NC de devoluciones siguen valiendo fiscalmente: su crédito libre se aplica a la factura.
+      for (const nc of ncs) {
+        const libre = r2(-tx.must("comprobantes", nc.id).saldoPendiente);
+        const imp = Math.min(libre, tx.must("comprobantes", f.id).saldoPendiente);
+        if (imp > 0.009) {
+          aplicarAComprobante(tx, f.id, imp);
+          const act = tx.must("comprobantes", nc.id);
+          tx.patch("comprobantes", nc.id, { saldoPendiente: r2(act.saldoPendiente + imp), aplicadoA: [...(act.aplicadoA ?? []), { comprobanteId: f.id, importe: r2(imp) }], estado: act.saldoPendiente + imp > -0.009 ? "PAGADO" : "PARCIAL" });
+        }
+      }
+      // NC de anulación por lo que la factura todavía vale (total menos las NC que ya tenía).
+      const yaAcreditado = r2(ncs.reduce((a, n) => a + n.total, 0));
+      const resto = r2(f.total - yaAcreditado);
+      let ncNumero = "";
+      if (resto > 0.009) {
+        const proporcion = resto / f.total;
+        const pendiente = tx.must("comprobantes", f.id).saldoPendiente;
+        const nc: Comprobante = {
+          id: newId("cmp"),
+          tipo: "NOTA_CREDITO",
+          letra: f.letra,
+          circuito: f.circuito,
+          numero: tx.numero("NC", f.circuito, puntoVentaDe(tx, f.sucursalId ?? tx.get("sucursales")[0]?.id ?? "")),
+          clienteId: f.clienteId,
+          notaPedidoId: f.notaPedidoId,
+          comprobanteOrigenId: f.id,
+          aplicadoA: pendiente > 0.009 ? [{ comprobanteId: f.id, importe: r2(Math.min(pendiente, resto)) }] : undefined,
+          sucursalId: f.sucursalId,
+          fecha: tx.ahora,
+          subtotal: r2(f.subtotal * proporcion),
+          iva: r2(resto - r2(f.subtotal * proporcion)),
+          total: resto,
+          saldoPendiente: r2(-(resto - Math.min(pendiente, resto))),
+          estado: resto - Math.min(pendiente, resto) > 0.009 ? "PENDIENTE" : "PAGADO",
+          items: yaAcreditado ? undefined : f.items,
+          observaciones: `${PREFIJO_NC_ANULACION}${f.numero}: ${motivo}`,
+          arcaEstado: "PENDIENTE",
+          compradorNombre: f.compradorNombre,
+          compradorDoc: f.compradorDoc,
+          ...tx.meta(),
+        };
+        tx.insert("comprobantes", nc);
+        ncNumero = nc.numero;
+        if (f.notaPedidoId) tx.patch("notasPedido", f.notaPedidoId, (x) => ({ ...x, comprobanteIds: [...x.comprobanteIds, nc.id] }));
+      }
       tx.patch("comprobantes", f.id, { estado: "ANULADO", saldoPendiente: 0, motivoAnulacion: motivo });
-      tx.auditar("Anuló factura con nota de crédito", "Comprobante", f.id, `${f.numero} · ${nc.numero} · ${motivo}`);
+      tx.auditar("Anuló factura con nota de crédito", "Comprobante", f.id, `${f.numero}${ncNumero ? ` · ${ncNumero}` : ""} · ${motivo}`);
     } else {
-      tx.patch("comprobantes", f.id, { estado: "ANULADO", saldoPendiente: 0, motivoAnulacion: motivo, arcaEstado: actual.arcaEstado === "PENDIENTE" ? "NO_APLICA" : actual.arcaEstado });
+      for (const nc of ncs) {
+        for (const ap of nc.aplicadoA ?? []) if (ap.comprobanteId !== f.id) desaplicarDeComprobante(tx, ap.comprobanteId, ap.importe);
+        tx.patch("comprobantes", nc.id, { estado: "ANULADO", saldoPendiente: 0, motivoAnulacion: `Anulación de ${f.numero}`, arcaEstado: nc.arcaEstado === "PENDIENTE" ? "NO_APLICA" : nc.arcaEstado });
+      }
+      tx.patch("comprobantes", f.id, { estado: "ANULADO", saldoPendiente: 0, motivoAnulacion: motivo, arcaEstado: f.arcaEstado === "PENDIENTE" ? "NO_APLICA" : f.arcaEstado });
       tx.auditar("Anuló factura", "Comprobante", f.id, `${f.numero} · ${motivo}`);
     }
   };
-
   const anularVentaTx = (tx: Tx, npId: string, motivo: string) => {
     const np = tx.must("notasPedido", npId);
     if (np.estado === "ANULADA") throw new ErrorNegocio("La venta ya está anulada.");
@@ -613,11 +643,14 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "ventas.anular");
         const f = tx.must("comprobantes", id);
-        if (f.notaPedidoId) {
-          anularVentaTx(tx, f.notaPedidoId, motivo);
+        if (f.acopioId) throw new ErrorNegocio("Es la factura de un acopio: cancelá el acopio desde su ficha.");
+        if (!motivo.trim()) throw new ErrorNegocio("Indicá el motivo de la anulación.");
+        const np = f.notaPedidoId ? tx.find("notasPedido", f.notaPedidoId) : undefined;
+        if (np && np.estado !== "ANULADA") {
+          anularVentaTx(tx, np.id, motivo);
           return;
         }
-        anularFacturaTx(tx, id, motivo);
+        anularFacturaTx(tx, id, motivo.trim());
       }),
 
     /** Resultado de pedir el CAE a ARCA (lo llama el servidor después de emitir la factura). */
@@ -650,7 +683,7 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
               saldoPendiente: 0,
               estado: "PAGADO",
               items: c.items,
-              observaciones: `Anulación de ${c.numero}${c.motivoAnulacion ? `: ${c.motivoAnulacion}` : ""}`,
+              observaciones: `${PREFIJO_NC_ANULACION}${c.numero}${c.motivoAnulacion ? `: ${c.motivoAnulacion}` : ""}`,
               arcaEstado: "PENDIENTE",
               compradorNombre: c.compradorNombre,
               compradorDoc: c.compradorDoc,
@@ -825,7 +858,14 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
           if (a.cliente) {
             const patch: Partial<Cliente> = {};
             if (a.cliente.razonSocial?.trim() && a.cliente.razonSocial.trim() !== cli.razonSocial) patch.razonSocial = a.cliente.razonSocial.trim();
-            if ((a.cliente.cuit ?? "").trim() && a.cliente.cuit!.trim() !== cli.cuit) patch.cuit = a.cliente.cuit!.trim();
+            const cuit = (a.cliente.cuit ?? "").trim();
+            if (cuit && cuit !== cli.cuit) {
+              const err = validarCUIT(cuit);
+              if (err) throw new ErrorNegocio(err);
+              const dup = buscarPorCuit(tx.get("clientes"), cuit, cli.id);
+              if (dup) throw new ErrorNegocio(`Ya existe el cliente ${dup.razonSocial} con ese CUIT.`);
+              patch.cuit = cuit;
+            }
             if (a.cliente.condicionIVA && a.cliente.condicionIVA !== cli.condicionIVA) patch.condicionIVA = a.cliente.condicionIVA;
             if (Object.keys(patch).length) {
               tx.patch("clientes", cli.id, patch);

@@ -22,7 +22,8 @@ export interface DefinicionAccion<N extends NombreAccion> {
 type Registro = { [N in Exclude<NombreAccion, NoExpuestas>]: DefinicionAccion<N> };
 
 /** Acciones del demo que no existen en el sistema real. */
-export type NoExpuestas = "refrescarEstadosAcopios";
+/** `registrarResultadoArca` solo lo corre el servidor (facturacionArca.ts), nunca el navegador. */
+export type NoExpuestas = "refrescarEstadosAcopios" | "registrarResultadoArca";
 
 const npDeposito = (db: EstadoInicial, npId: string) => db.notasPedido.find((n) => n.id === npId);
 const remitoDe = (db: EstadoInicial, id: string) => db.remitos.find((r) => r.id === id);
@@ -178,7 +179,6 @@ export const REGISTRO: Registro = {
       return { ...stockDe(np?.items.map((i) => i.productoId) ?? [], [np?.depositoId]), acopioIds: np?.acopioId ? [np.acopioId] : [] };
     },
   },
-  registrarResultadoArca: { modulo: "ventas", permiso: "ventas.ver", accionId: "autorizarArca", rutas: R.ventas },
   // ── Acopios ──
   crearAcopio: { modulo: "acopios", permiso: "acopios.editar", accionId: "crearAcopio", rutas: [...R.acopios, ...R.finanzas] },
   traspasarSaldo: { modulo: "acopios", permiso: "acopios.traspasar", accionId: "traspasarSaldoAcopio", rutas: R.acopios, bloqueos: ([o, d]) => ({ acopioIds: [o, d] }) },

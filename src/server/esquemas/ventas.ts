@@ -108,16 +108,11 @@ const aceptacion = z.object({
   opciones: opcionesConfirmacion.optional(),
 });
 
-const resultadoArca = z.union([
-  z.object({ ok: z.literal(true), cae: z.string().max(40), caeVencimiento: z.string().max(40), puntoVenta: z.number().int(), numero: z.number().int(), tipo: z.number().int() }),
-  z.object({ ok: z.literal(false), error: texto }),
-]);
 
 export const crearVenta = z.tuple([notaPedidoInput, opcionesConfirmacion.optional(), extrasVenta, id.optional()]);
 export const anularVenta = z.tuple([id, texto]);
 export const recuperarVenta = z.tuple([id]);
 export const anularFactura = z.tuple([id, texto]);
-export const registrarResultadoArca = z.tuple([id, resultadoArca]);
 export const aceptarCotizacion = z.tuple([id, aceptacion]);
 export const rechazarCotizacion = z.tuple([id, texto.optional()]);
 export const recuperarCotizacion = z.tuple([id]);

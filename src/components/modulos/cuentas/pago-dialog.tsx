@@ -16,6 +16,7 @@ import { PrintPreview } from "@/components/shared/print-layout";
 import { formatDate, formatMoney } from "@/lib/format";
 import { diaLocal } from "@/lib/periodos";
 import { cn, newId } from "@/lib/utils";
+import { cajaPorDefecto } from "@/domain/caja";
 import { OrdenPagoDocumento } from "./documentos";
 import { medir } from "@/capacitacion";
 
@@ -126,7 +127,7 @@ export function PagoDialog({ open, onOpenChange, proveedorId }: { open: boolean;
                     ) : (
                       <Select size="sm" aria-label="Medio" value={m.medio} onValueChange={(v) => up(m._id, { medio: v as MedioPago })} options={[{ value: "TRANSFERENCIA", label: "Transferencia" }, { value: "ECHEQ", label: "eCheq propio" }, { value: "CHEQUE", label: "Cheque propio" }, { value: "EFECTIVO", label: "Efectivo" }]} />
                     )}
-                    {m.medio === "EFECTIVO" && cajas.length > 1 && <Select size="sm" aria-label="Caja" value={m.cajaId ?? cajas[0].id} onValueChange={(v) => up(m._id, { cajaId: v })} options={cajas.map((c) => ({ value: c.id, label: c.nombre }))} />}
+                    {m.medio === "EFECTIVO" && cajas.length > 1 && <Select size="sm" aria-label="Caja" value={m.cajaId ?? cajaPorDefecto(db.cajas)?.id ?? ""} onValueChange={(v) => up(m._id, { cajaId: v })} options={cajas.map((c) => ({ value: c.id, label: c.nombre }))} />}
                     <NumberInput aria-label="Importe" disabled={!!m.chequeId} value={m.importe} min={0} className="h-8" onValueChange={(v) => up(m._id, { importe: v })} />
                     <Input className="h-8 text-[13px]" aria-label="Referencia" disabled={!!m.chequeId} value={m.chequeId ? `${m.banco} Nº ${m.numeroCheque} · cobro ${formatDate(m.fechaCobro)}` : m.referencia ?? ""} onChange={(e) => up(m._id, { referencia: e.target.value })} placeholder={m.medio === "TRANSFERENCIA" ? "Número de operación" : "Banco / número"} />
                     <Button size="icon-sm" variant="ghost" aria-label="Quitar" disabled={medios.length === 1} onClick={() => setMedios(medios.filter((x) => x._id !== m._id))}><Trash2 className="text-muted" /></Button>

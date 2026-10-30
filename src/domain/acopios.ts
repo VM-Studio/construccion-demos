@@ -21,7 +21,9 @@ export function pendienteLinea(it: Pick<ItemNP, "cantidad" | "entregados" | "dev
 /** Σ montos retirados (NP) − Σ devueltos (DP): lo efectivamente consumido del saldo. */
 export function retiradoAcopio(acopioId: string, notas: NotaPedido[], devoluciones: DevolucionNP[]): number {
   const np = notasDelAcopio(acopioId, notas).reduce((a, n) => a + n.monto, 0);
-  const dp = devoluciones.filter((d) => d.acopioId === acopioId).reduce((a, d) => a + d.monto, 0);
+  // Las DP de una NP anulada ya no cuentan: la NP entera dejó de restar.
+  const anuladas = new Set(notas.filter((n) => n.estado === "ANULADA").map((n) => n.id));
+  const dp = devoluciones.filter((d) => d.acopioId === acopioId && !anuladas.has(d.notaPedidoId)).reduce((a, d) => a + d.monto, 0);
   return Math.round((np + dp) * 1000) / 1000;
 }
 
@@ -118,7 +120,8 @@ export function movimientosAcopio(acopio: Acopio, notas: NotaPedido[], devolucio
       }),
     });
   }
-  for (const d of devoluciones.filter((x) => x.acopioId === acopio.id)) {
+  const npAnuladas = new Set(notas.filter((n) => n.estado === "ANULADA").map((n) => n.id));
+  for (const d of devoluciones.filter((x) => x.acopioId === acopio.id && !npAnuladas.has(x.notaPedidoId))) {
     const rd = ctx.remitos.find((r) => r.id === d.remitoDevolucionId);
     const nc = ctx.comprobantes.find((c) => c.id === d.notaCreditoId);
     grupos.push({

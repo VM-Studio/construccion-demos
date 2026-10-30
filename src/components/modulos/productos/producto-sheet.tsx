@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SerieDialog } from "./serie-dialog";
 import { calcularPrecioDesdeMarkup, markupEfectivo } from "@/domain/precios";
 import { opciones, UNIDAD_LABEL } from "@/domain/estados";
-import { barrasPorToneladaDe, diametroDe, esBarraDeHierro } from "@/domain/unidades";
+import { barrasPorToneladaDe, diametroDe, errorUnidadAlternativa, esBarraDeHierro } from "@/domain/unidades";
 import { EntitySheet } from "@/components/shared/entity-sheet";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { SelectorProveedor } from "@/components/shared/alta-rapida";
@@ -189,7 +189,7 @@ function TabGeneral({
   };
   const [f, setF] = React.useState<Form>(inicial);
   // Precios del duplicado: los del origen o recalculados con su markup efectivo si cambia el costo.
-  const listas = db.listasPrecios;
+  const listas = db.listasPrecios.filter((l) => !l.clienteId);
   const markups = React.useMemo(() => (origen ? markupsEfectivos(origen, db.precios, listas) : {}), [origen, db.precios, listas]);
   const preciosOrigen = React.useMemo(() => (origen ? preciosParaCosto(origen, db.precios, listas, origen.costoUltimo) : {}), [origen, db.precios, listas]);
   const [precios, setPrecios] = React.useState<Record<string, number>>(() => (origen ? (camposSiempre.includes("precios") ? Object.fromEntries(listas.map((l) => [l.id, 0])) : origen ? preciosParaCosto(origen, db.precios, listas, f.costoUltimo) : {}) : {}));
@@ -592,7 +592,7 @@ function TabPrecios({ producto }: { producto: Producto }) {
           variant="secondary"
           onClick={async () => {
             await medir("actualizarPreciosMasivo", { productoIds: [producto.id], n: db.listasPrecios.length }, () => {
-              for (const l of db.listasPrecios) actualizar(producto.id, l.id, calcularPrecioDesdeMarkup(producto.costoPromedio, l.markupPorDefecto));
+              for (const l of db.listasPrecios.filter((x) => !x.clienteId)) actualizar(producto.id, l.id, calcularPrecioDesdeMarkup(producto.costoPromedio, l.markupPorDefecto));
             });
             toast.success("Precios recalculados desde costo promedio + markup de cada lista");
           }}
@@ -797,36 +797,30 @@ function UnidadAlternativaCampos({
 }) {
   const db = useDb();
   const esHierro = esBarraDeHierro({ nombre, unidad, rubroId, unidadAlternativa }, db.rubros);
-  const bptSug = esHierro ? barrasPorToneladaDe(diametroDe(nombre)) : null;
-  // Stock en barras: 1 TN = N barras. Stock en toneladas: 1 barra = 1/N TN (se carga N igual).
-  const sugerido = bptSug ? (unidad === "UN" ? bptSug : unidad === "TN" ? 1 / bptSug : null) : null;
-  const porToneladas = unidad === "TN" && unidadAlternativa === "UN";
+  const bptSug = esHierro && unidad === "UN" ? barrasPorToneladaDe(diametroDe(nombre)) : null;
+  const sugerido = bptSug;
+  const error = errorUnidadAlternativa({ unidad, unidadAlternativa, factorAlternativa });
   const activo = !!unidadAlternativa;
   return (
     <div className="rounded-card border border-border p-3">
       <label className="flex items-center gap-2 text-[13px] font-medium">
-        <Switch disabled={ro} checked={activo} onCheckedChange={(v) => onChange(v ? (unidad === "TN" ? "UN" : "TN") : undefined, v ? (sugerido ?? factorAlternativa) : undefined)} />
+        <Switch disabled={ro} checked={activo} onCheckedChange={(v) => onChange(v ? "TN" : undefined, v ? (sugerido ?? factorAlternativa) : undefined)} />
         También se ingresa y se vende por otra unidad
       </label>
+      {activo && error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
       {activo && (
         <div className="mt-3 grid items-end gap-3 sm:grid-cols-[160px_auto_1fr]">
           <FormField label="Otra unidad">
             <Select disabled={ro} value={unidadAlternativa ?? "TN"} onValueChange={(v) => onChange(v as Unidad, factorAlternativa)} options={opciones(UNIDAD_LABEL).filter((o) => o.value !== unidad)} />
           </FormField>
-          {porToneladas ? (
-            <FormField label="Barras por tonelada" htmlFor="p-factor">
-              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ? Math.round(1 / factorAlternativa) : 0} min={0} onValueChange={(v) => onChange("UN", v ? Math.round((1 / v) * 1e8) / 1e8 : undefined)} className="w-28" />
-            </FormField>
-          ) : (
-            <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
-              <div className="flex items-center gap-2">
-                <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
-                <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
-              </div>
-            </FormField>
-          )}
+          <FormField label={`1 ${UNIDAD_LABEL[unidadAlternativa ?? "TN"] ?? unidadAlternativa} equivale a`} htmlFor="p-factor">
+            <div className="flex items-center gap-2">
+              <NumberInput id="p-factor" disabled={ro} value={factorAlternativa ?? 0} min={0} onValueChange={(v) => onChange(unidadAlternativa, v || undefined)} className="w-28" />
+              <span className="text-[13px] text-muted">{UNIDAD_LABEL[unidad] ?? unidad}</span>
+            </div>
+          </FormField>
           {sugerido && bptSug && Math.abs((factorAlternativa ?? 0) - sugerido) > 1e-9 && !ro && (
-            <Button size="sm" variant="ghost" onClick={() => onChange(unidad === "UN" ? "TN" : "UN", Math.round(sugerido * 1e8) / 1e8)}>
+            <Button size="sm" variant="ghost" onClick={() => onChange("TN", sugerido)}>
               Usar {bptSug} barras por tonelada (Ø {diametroDe(nombre)} mm)
             </Button>
           )}

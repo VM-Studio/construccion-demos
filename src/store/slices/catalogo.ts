@@ -1,6 +1,7 @@
 import type { Cliente, ListaPrecios, Obra, PrecioProducto, Producto, Proveedor, Rubro } from "@/domain/types";
 import { calcularPrecioDesdeMarkup, aplicarCambiosPrecio, calcularActualizacionMasiva, costoEnPesos, type CambioPrecio, type Redondeo } from "@/domain/precios";
 import { validarCUIT, buscarPorCuit } from "@/domain/cuit";
+import { errorUnidadAlternativa } from "@/domain/unidades";
 import { nombreRepetidoEnRubro, preciosParaCosto } from "@/domain/duplicar";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
@@ -139,6 +140,8 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "productos.editar");
         if (!data.nombre.trim()) throw new ErrorNegocio("El nombre es obligatorio.");
+        const errAlt = errorUnidadAlternativa(data);
+        if (errAlt) throw new ErrorNegocio(errAlt);
         data = { ...data, unidadNegocioId: tx.must("rubros", data.rubroId).unidadNegocioId };
         data = normalizarCostoUSD(tx, data, id ? tx.must("productos", id) : undefined);
         const dup = tx.get("productos").find((p) => p.codigo.toLowerCase() === data.codigo.trim().toLowerCase() && p.id !== id);
@@ -350,6 +353,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           const cli = tx.must("clientes", data.clienteId);
           if (data.listaBaseId && tx.find("listasPrecios", data.listaBaseId)?.clienteId) throw new ErrorNegocio("La lista base tiene que ser una lista general.");
           if (id) {
+            if (tx.must("listasPrecios", id).clienteId !== cli.id) throw new ErrorNegocio("Esa lista no es la lista especial del cliente.");
             tx.patch("listasPrecios", id, data);
             if (!data.activa && cli.listaPreciosId === id) tx.patch("clientes", cli.id, { listaPreciosId: data.listaBaseId ?? "lst_gen" });
             if (data.activa && cli.listaPreciosId !== id) tx.patch("clientes", cli.id, { listaPreciosId: id });
@@ -364,6 +368,7 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
           return lista.id;
         }
         if (id) {
+          if (tx.must("listasPrecios", id).clienteId) throw new ErrorNegocio("Las listas especiales se editan desde la ficha del cliente.");
           tx.patch("listasPrecios", id, data);
           tx.auditar("Editó lista de precios", "ListaPrecios", id, data.nombre);
           return id;

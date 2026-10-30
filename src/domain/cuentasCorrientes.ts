@@ -93,3 +93,10 @@ export function imputarAutomaticamente(
   }
   return { imputaciones, remanente: resto };
 }
+
+/** Las NC que anulan una factura completa empiezan así en sus observaciones. */
+export const PREFIJO_NC_ANULACION = "Anulación de ";
+
+export function esNCAnulacion(c: Pick<Comprobante, "tipo" | "observaciones">): boolean {
+  return c.tipo === "NOTA_CREDITO" && !!c.observaciones?.startsWith(PREFIJO_NC_ANULACION);
+}

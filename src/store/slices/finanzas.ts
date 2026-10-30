@@ -1,5 +1,5 @@
 import type { ArqueoCaja, Caja, Cheque, Circuito, Cobranza, Comprobante, EstadoCheque, Imputacion, MedioCobro, Moneda, MovimientoCaja, PagoProveedor } from "@/domain/types";
-import { saldoCaja, prestamosPendientes } from "@/domain/caja";
+import { cajaPorDefecto, saldoCaja, prestamosPendientes } from "@/domain/caja";
 import { estadoPorSaldo } from "@/domain/cuentasCorrientes";
 import { formatMoney } from "@/lib/format";
 import { newId } from "@/lib/utils";
@@ -120,9 +120,9 @@ export function anularRecibo(tx: Tx, id: string, motivo: string) {
   const cheques = tx.get("cheques").filter((ch) => ch.cobranzaId === cob.id);
   const usado = cheques.find((ch) => ch.estado !== "EN_CARTERA");
   if (usado) throw new ErrorNegocio(`El cheque ${usado.banco} Nº ${usado.numero} ya no está en cartera: anulá primero la orden de pago o revertí su estado.`);
-  const saf = tx.get("comprobantes").find((c) => c.tipo === "SALDO_A_FAVOR" && c.clienteId === cob.clienteId && c.numero === `${cob.numero} (a favor)` && c.estado !== "ANULADO");
-  if (saf) {
-    // Lo que ya se había aplicado de ese saldo a favor vuelve a quedar adeudado.
+  // Saldos a favor del recibo (lo no imputado y lo liberado al anular facturas): lo que ya se
+  // había aplicado de ellos vuelve a quedar adeudado.
+  for (const saf of tx.get("comprobantes").filter((c) => c.tipo === "SALDO_A_FAVOR" && c.clienteId === cob.clienteId && c.numero.startsWith(`${cob.numero} (a favor`) && c.estado !== "ANULADO")) {
     for (const ap of saf.aplicadoA ?? []) desaplicarDeComprobante(tx, ap.comprobanteId, ap.importe);
     tx.patch("comprobantes", saf.id, { estado: "ANULADO", saldoPendiente: 0 });
   }
@@ -229,8 +229,8 @@ export function crearSliceFinanzas(set: SetFn, get: GetFn) {
           }
         for (const m of op.medios) {
           if (m.medio !== "EFECTIVO") continue;
-          const cajaId = m.cajaId ?? "";
-          const caja = tx.find("cajas", cajaId);
+          const caja = m.cajaId ? tx.find("cajas", m.cajaId) : cajaPorDefecto(tx.get("cajas"));
+          if (caja) m.cajaId = caja.id;
           const moneda: Moneda = m.moneda === "USD" ? "USD" : "ARS";
           const imp = moneda === "USD" ? (m.importeME ?? 0) : m.importe;
           if (caja && imp > saldoCaja(caja.id, moneda, tx.get("movimientosCaja")) + 0.009) throw new ErrorNegocio(`No hay efectivo suficiente en ${caja.nombre} para este pago.`);

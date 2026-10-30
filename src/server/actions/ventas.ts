@@ -55,10 +55,6 @@ export async function anularFactura(...args: Parameters<AccionesNegocio["anularF
   return correr("anularFactura", args);
 }
 
-export async function registrarResultadoArca(...args: Parameters<AccionesNegocio["registrarResultadoArca"]>) {
-  return correr("registrarResultadoArca", args);
-}
-
 export async function aceptarCotizacion(...args: Parameters<AccionesNegocio["aceptarCotizacion"]>) {
   return correr("aceptarCotizacion", args);
 }

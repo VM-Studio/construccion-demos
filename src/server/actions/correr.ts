@@ -18,6 +18,9 @@ import type { Delta } from "@/lib/sincronizacion/delta";
 /** `delta`: las filas que cambió la acción, ya filtradas por rol (el navegador no vuelve a pedirlas). */
 export type RespuestaAccion<T = unknown> = { ok: true; data: T; efectos: Diferencia[]; tipos: string[]; delta?: Delta } | { ok: false; error: string; codigo?: string };
 
+/** Acciones que pueden emitir facturas o notas de crédito fiscales (las demás no disparan ARCA). */
+const EMITEN_COMPROBANTES = new Set<string>(["crearVenta", "aceptarCotizacion", "facturarNotaPedido", "anularVenta", "anularFactura", "crearAcopio", "registrarDevolucion"]);
+
 const servicios = new Map<string, ReturnType<typeof servicio>>();
 
 export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[]): Promise<RespuestaAccion<ReturnType<AccionesNegocio[N]> extends { ok: true; data: infer D } | { ok: false } ? D : unknown>> {
@@ -40,7 +43,7 @@ export async function correr<N extends NombreExpuesto>(nombre: N, args: unknown[
     // Sin revalidatePath: la respuesta trae solo las filas que cambiaron (delta) y el navegador las
     // aplica sin un segundo viaje al servidor; así tampoco se re-renderiza la página entera.
     // Factura electrónica: los comprobantes fiscales nuevos se mandan a ARCA sin hacer esperar al usuario.
-    const comprobantes = r.ok && nombre !== "registrarResultadoArca" ? r.cambiados?.comprobantes : undefined;
+    const comprobantes = r.ok && EMITEN_COMPROBANTES.has(nombre) ? r.cambiados?.comprobantes : undefined;
     if (comprobantes?.length) after(() => autorizarComprobantesArca({ actor, ...req }, comprobantes));
     if (r.ok && r.cambiados) {
       const { cambiados, ...resto } = r;

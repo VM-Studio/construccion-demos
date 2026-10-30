@@ -18,6 +18,8 @@ import { calcularActualizacionMasiva } from "../src/domain/precios";
 import { pasosCargaInicial } from "../src/domain/cargaInicial";
 import { prerequisitos } from "../src/domain/prerequisitos";
 import { saldoCaja, prestamosPendientes } from "../src/domain/caja";
+import { saldoCliente } from "../src/domain/cuentasCorrientes";
+import { extracto } from "../src/domain/extracto";
 
 const motor = crearMotorMemoria(crearSeed(new Date()));
 const s = () => motor;
@@ -286,6 +288,81 @@ console.log("\n9) Reunión con los dueños: cotización rápida → venta en un 
   check("Diferencia −1.000 y caja ajustada", arq?.diferencia === -1000 && saldoCaja(caja.id, "ARS", m.db.movimientosCaja) === 41_000);
   const res = verificarIntegridad(m.db);
   check("Integridad", res.ok, res.chequeos.filter((c) => !c.ok).map((c) => c.errores[0]).join(" | "));
+}
+
+console.log("\n10) Auditoría: anulaciones con devoluciones, recibos que pagan varias facturas y acopios");
+{
+  const nueva = () => {
+    const m = crearMotorMemoria(crearSeed(new Date()));
+    m.login("usr_felipe");
+    return m;
+  };
+  const HIERRO6 = "prod_20102";
+  const vender = (m: ReturnType<typeof nueva>, cli: string, cant: number, forma: "CONTADO" | "CUENTA_CORRIENTE", cobro?: number) =>
+    paso(
+      "Venta",
+      m.crearVenta({ clienteId: cli, sucursalId: "suc_central", depositoId: "dep_central", fecha: hoy, circuito: 2, origen: "NUEVA", formaPago: forma, items: [{ productoId: HIERRO6, cantidad: cant, precioUnitario: 1000 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "RETIRA" }, { forzarSinDisponible: true, excepcionCredito: true }, { retiraAhora: true, facturar: true, cobro: cobro ? { medios: [{ medio: "TRANSFERENCIA", importe: cobro }] } : undefined }),
+    );
+  const saldoExt = (m: ReturnType<typeof nueva>, cli: string) => extracto(m.db, "cliente", cli).at(-1)?.saldo ?? 0;
+  {
+    const m = nueva();
+    const cli = m.db.clientes.find((c) => c.activo)!.id;
+    const s0 = saldoCliente(cli, m.db.comprobantes);
+    const a = vender(m, cli, 1, "CUENTA_CORRIENTE");
+    const b = vender(m, cli, 2, "CUENTA_CORRIENTE");
+    const rc = paso("Un recibo paga las dos facturas", m.registrarCobranza({ clienteId: cli, circuito: 2, fecha: hoy, medios: [{ medio: "TRANSFERENCIA", importe: 3000 }], imputaciones: [{ comprobanteId: a.facturaId!, importe: 1000 }, { comprobanteId: b.facturaId!, importe: 2000 }] }));
+    paso("Anular la venta A", m.anularVenta(a.npId, "x"));
+    paso("Anular el recibo", m.anularCobranza(rc.cobranzaId, "error"));
+    check("Queda debiendo solo B (2.000)", Math.abs(saldoCliente(cli, m.db.comprobantes) - s0 - 2000) < 0.01, String(saldoCliente(cli, m.db.comprobantes) - s0));
+  }
+  {
+    const m = nueva();
+    const cli = m.db.clientes.find((c) => c.activo)!.id;
+    const s0 = saldoCliente(cli, m.db.comprobantes);
+    const e0 = saldoExt(m, cli);
+    const v = vender(m, cli, 10, "CONTADO", 10000);
+    const np = m.db.notasPedido.find((n) => n.id === v.npId)!;
+    paso("Devolución de 3", m.registrarDevolucion({ notaPedidoId: np.id, items: [{ itemId: np.items[0].id, cantidad: 3 }], motivo: "sobró" }));
+    paso("Anular la venta cobrada con devolución", m.anularVenta(v.npId, "x"));
+    check("Saldo y extracto vuelven a cero", Math.abs(saldoCliente(cli, m.db.comprobantes) - s0) < 0.01 && Math.abs(saldoExt(m, cli) - e0) < 0.01, `${saldoCliente(cli, m.db.comprobantes) - s0} / ${saldoExt(m, cli) - e0}`);
+  }
+  {
+    const m = nueva();
+    const cli = m.db.clientes.find((c) => c.activo)!.id;
+    const s0 = saldoCliente(cli, m.db.comprobantes);
+    const e0 = saldoExt(m, cli);
+    const v = vender(m, cli, 10, "CUENTA_CORRIENTE");
+    const np = m.db.notasPedido.find((n) => n.id === v.npId)!;
+    paso("Devolución de 3 en cuenta corriente", m.registrarDevolucion({ notaPedidoId: np.id, items: [{ itemId: np.items[0].id, cantidad: 3 }], motivo: "sobró" }));
+    paso("Anular la venta", m.anularVenta(v.npId, "x"));
+    check("Saldo y extracto coinciden en cero", Math.abs(saldoCliente(cli, m.db.comprobantes) - s0) < 0.01 && Math.abs(saldoExt(m, cli) - e0) < 0.01, `${saldoCliente(cli, m.db.comprobantes) - s0} / ${saldoExt(m, cli) - e0}`);
+  }
+  {
+    const m = nueva();
+    const cli = m.db.clientes.find((c) => c.activo && c.condicionIVA === "RI")!.id;
+    const s0 = saldoCliente(cli, m.db.comprobantes);
+    const e0 = saldoExt(m, cli);
+    const v = paso("Venta F1", m.crearVenta({ clienteId: cli, sucursalId: "suc_central", depositoId: "dep_central", fecha: hoy, circuito: 1, origen: "NUEVA", formaPago: "CONTADO", items: [{ productoId: HIERRO6, cantidad: 10, precioUnitario: 1000 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "RETIRA" }, { forzarSinDisponible: true, excepcionCredito: true }, { retiraAhora: true, facturar: true, cobro: { medios: [{ medio: "EFECTIVO", importe: 12100 }] } }));
+    paso("ARCA autoriza la factura", m.registrarResultadoArca(v.facturaId!, { ok: true, cae: "12345678901234", caeVencimiento: hoy, puntoVenta: 3, numero: 1, tipo: 1 }));
+    const np = m.db.notasPedido.find((n) => n.id === v.npId)!;
+    paso("Devolución de 3 con NC", m.registrarDevolucion({ notaPedidoId: np.id, items: [{ itemId: np.items[0].id, cantidad: 3 }], motivo: "sobró" }));
+    paso("Anular la venta con CAE", m.anularVenta(v.npId, "x"));
+    const ncs = m.db.comprobantes.filter((c) => c.tipo === "NOTA_CREDITO" && c.comprobanteOrigenId === v.facturaId);
+    check("NC de anulación solo por el resto (12.100 − 3.630)", ncs.length === 2 && Math.abs(ncs.reduce((a, c) => a + c.total, 0) - 12100) < 0.01, ncs.map((c) => c.total).join(" + "));
+    check("Saldo y extracto vuelven a cero", Math.abs(saldoCliente(cli, m.db.comprobantes) - s0) < 0.01 && Math.abs(saldoExt(m, cli) - e0) < 0.01, `${saldoCliente(cli, m.db.comprobantes) - s0} / ${saldoExt(m, cli) - e0}`);
+  }
+  {
+    const m = nueva();
+    const sd = (id: string) => saldoDisponible(m.db.acopios.find((a) => a.id === id)!, m.db.notasPedido, m.db.devoluciones, m.db.ajustesAcopio);
+    const ac = m.db.acopios.find((a) => a.estado === "VIGENTE" && sd(a.id) > 100000 && a.preciosCongelados.some((p) => p.precio > 0 && p.precio < 50000))!;
+    const pc = ac.preciosCongelados.find((p) => p.precio > 0 && p.precio < 50000)!;
+    const s0 = sd(ac.id);
+    const id = paso("Retiro de acopio pendiente", m.crearNotaPedido({ clienteId: ac.clienteId, sucursalId: ac.sucursalId, depositoId: ac.depositoId, fecha: hoy, circuito: ac.circuito, origen: "ACOPIO", acopioId: ac.id, formaPago: "ACOPIO", items: [{ productoId: pc.productoId, obraId: ac.obraIds[0], cantidad: 2, precioUnitario: 1 }], descuentoPct: 0, pendienteEntrega: true, modalidadEntrega: "RETIRA" }, { forzarSinDisponible: true, autorizarSaldoNegativo: true }));
+    const np = m.db.notasPedido.find((n) => n.id === id)!;
+    paso("Devolución de 1", m.registrarDevolucion({ notaPedidoId: id, items: [{ itemId: np.items[0].id, cantidad: 1 }], motivo: "no va" }));
+    paso("Anular el retiro", m.anularVenta(id, "x"));
+    check("El saldo del acopio vuelve exacto", Math.abs(sd(ac.id) - s0) < 0.01, `${sd(ac.id) - s0}`);
+  }
 }
 
 if (fallas) {

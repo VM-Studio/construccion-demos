@@ -96,3 +96,19 @@ export function barrasPorTonelada(p: ConAlternativa & Pick<Producto, "nombre">):
   if (tieneAlternativa(p) && p.unidadAlternativa === "UN" && p.unidad === "TN") return Math.round(1 / p.factorAlternativa);
   return barrasPorToneladaDe(diametroDe(p.nombre));
 }
+
+/**
+ * La cantidad se guarda con 3 decimales en la unidad base: la unidad alternativa tiene que ser
+ * la MÁS GRANDE (factor ≥ 1). Hierro: unidad barra (UN) y alternativa tonelada (1 TN = N barras);
+ * al revés (stock en TN y venta por barra) se pierden barras al redondear.
+ */
+export function errorUnidadAlternativa(p: Pick<Producto, "unidad" | "unidadAlternativa" | "factorAlternativa">): string | null {
+  if (!p.unidadAlternativa) return null;
+  if (p.unidadAlternativa === p.unidad) return "La otra unidad tiene que ser distinta de la unidad del artículo.";
+  if (!(p.factorAlternativa && p.factorAlternativa > 0)) return "Indicá la equivalencia de la otra unidad.";
+  if (p.factorAlternativa < 1)
+    return p.unidad === "TN" && p.unidadAlternativa === "UN"
+      ? "Para vender hierro por barra y por tonelada, la unidad del artículo tiene que ser la barra (Unidad) y la tonelada la otra unidad: así no se pierden barras al redondear."
+      : "La otra unidad tiene que ser la más grande (1 de la otra unidad = varias de la unidad del artículo).";
+  return null;
+}

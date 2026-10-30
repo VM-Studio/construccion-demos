@@ -14,7 +14,6 @@ export const crearVenta = servicio("crearVenta");
 export const anularVenta = servicio("anularVenta");
 export const recuperarVenta = servicio("recuperarVenta");
 export const anularFactura = servicio("anularFactura");
-export const registrarResultadoArca = servicio("registrarResultadoArca");
 export const aceptarCotizacion = servicio("aceptarCotizacion");
 export const rechazarCotizacion = servicio("rechazarCotizacion");
 export const recuperarCotizacion = servicio("recuperarCotizacion");

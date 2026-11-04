@@ -22,7 +22,7 @@ export function DescargarDocumento({ armar, entidad, entidadId, size, variant = 
       const { saveAs } = await import("file-saver");
       if (formato === "PDF") {
         const { generarPdfDesacopio } = await import("@/lib/desacopio/pdf");
-        saveAs(generarPdfDesacopio(doc), `${doc.archivo}.pdf`);
+        saveAs(await generarPdfDesacopio(doc), `${doc.archivo}.pdf`);
       } else {
         const { generarExcelDesacopio } = await import("@/lib/desacopio/excel");
         saveAs(await generarExcelDesacopio(doc), `${doc.archivo}.xlsx`);

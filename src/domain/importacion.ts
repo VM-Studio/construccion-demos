@@ -555,7 +555,7 @@ export function validarFilaProveedor(f: FilaSistema, db: DbImportacion, ctx: Con
   const errores: string[] = [];
   const razonSocial = (f.razon_social ?? "").trim();
   if (!razonSocial) errores.push("Falta la razón social.");
-  const cuit = validarCodigoYCuit(f, db.proveedores, ctx, errores, true);
+  const cuit = validarCodigoYCuit(f, db.proveedores, ctx, errores, false);
 
   let tipo: TipoProveedor | null = "DISTRIBUIDOR";
   if (f.tipo) {

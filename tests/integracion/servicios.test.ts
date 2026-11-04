@@ -256,6 +256,42 @@ describe("Duplicar artículo y crear serie", () => {
   });
 });
 
+describe("Eliminar artículo y proveedor sin CUIT", () => {
+  it("un artículo sin uso se elimina (con sus precios y stock); con stock o documentos se rechaza", async () => {
+    const { duplicarProducto, eliminarProducto } = await import("@/server/servicios/catalogo");
+    const { crearAjuste } = await import("@/server/servicios/stock");
+    const sello = Date.now().toString(36).toUpperCase();
+    const origen = (await estado()).productos.find((p) => p.id === HOLCIM)!;
+    const d = await duplicarProducto(dueno, origen.id, { codigo: `DEL${sello}`, nombre: `${origen.nombre} borrar ${sello}` });
+    expect(d.ok, d.ok ? "" : d.error).toBe(true);
+    const id = idDe(d.ok && d.data);
+    const r = await eliminarProducto(dueno, id);
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+    const db = await estado();
+    expect(db.productos.some((x) => x.id === id)).toBe(false);
+    expect(db.precios.some((x) => x.productoId === id)).toBe(false);
+    expect(db.stock.some((x) => x.productoId === id)).toBe(false);
+    // Con un ajuste (movimiento en el kardex) ya no se puede eliminar.
+    const d2 = await duplicarProducto(dueno, origen.id, { codigo: `DEM${sello}`, nombre: `${origen.nombre} con stock ${sello}` });
+    const id2 = idDe(d2.ok && d2.data);
+    const aj = await crearAjuste(dueno, { depositoId: "dep_central", items: [{ productoId: id2, cantidad: 3, signo: 1, motivo: "SOBRANTE" }] });
+    expect(aj.ok, aj.ok ? "" : aj.error).toBe(true);
+    const r2 = await eliminarProducto(dueno, id2);
+    expect(r2.ok).toBe(false);
+    expect((await estado()).productos.some((x) => x.id === id2)).toBe(true);
+  });
+
+  it("un proveedor se puede cargar sin CUIT; si se carga, tiene que ser válido", async () => {
+    const { guardarProveedor } = await import("@/server/servicios/proveedores");
+    const sello = Date.now().toString(36);
+    const base = { codigo: "", razonSocial: `Sin factura ${sello}`, tipo: "DISTRIBUIDOR", cuit: "", condicionIVA: "CF", circuitoHabitual: 2, email: "", telefono: "", direccion: "", contacto: "", plazoEntregaDias: 0, condicionPago: "CONTADO", unidadNegocioIds: ["un_cor"], activo: true, notas: "" };
+    const r = await guardarProveedor(dueno, base as never);
+    expect(r.ok, r.ok ? "" : r.error).toBe(true);
+    const malo = await guardarProveedor(dueno, { ...base, razonSocial: `CUIT malo ${sello}`, cuit: "00-00000000-0" } as never);
+    expect(malo.ok).toBe(false);
+  });
+});
+
 describe("Eliminar cliente y anular recibo", () => {
   it("un cliente sin documentos se elimina; con documentos se rechaza", async () => {
     const { guardarCliente, eliminarCliente } = await import("@/server/servicios/clientes");

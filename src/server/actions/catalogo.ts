@@ -11,6 +11,10 @@ export async function duplicarProducto(...args: Parameters<AccionesNegocio["dupl
   return correr("duplicarProducto", args);
 }
 
+export async function eliminarProducto(...args: Parameters<AccionesNegocio["eliminarProducto"]>) {
+  return correr("eliminarProducto", args);
+}
+
 export async function crearSerieProductos(...args: Parameters<AccionesNegocio["crearSerieProductos"]>) {
   return correr("crearSerieProductos", args);
 }

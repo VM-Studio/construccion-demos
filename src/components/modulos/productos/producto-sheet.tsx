@@ -5,12 +5,12 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeftRight, Calculator, Copy, Rows3, Save, SlidersHorizontal, X } from "lucide-react";
+import { ArrowLeftRight, Calculator, Copy, PencilLine, Rows3, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useStore } from "@/store";
 import { useDb, usePosiciones, usePuede } from "@/store/selectors";
 import type { Producto, Unidad } from "@/domain/types";
 import { siguienteCodigoProducto } from "@/domain/productos";
-import { markupsEfectivos, markupsSospechosos, nombreRepetidoEnRubro, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
+import { markupsEfectivos, markupsSospechosos, mensajeNombreRepetido, nombreRepetidoEnRubro, preciosParaCosto, siguientesCodigos } from "@/domain/duplicar";
 import type { CampoDuplicar } from "@/store/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SerieDialog } from "./serie-dialog";
@@ -18,6 +18,7 @@ import { calcularPrecioDesdeMarkup, markupEfectivo } from "@/domain/precios";
 import { opciones, UNIDAD_LABEL } from "@/domain/estados";
 import { barrasPorToneladaDe, diametroDe, errorUnidadAlternativa, esBarraDeHierro } from "@/domain/unidades";
 import { EntitySheet } from "@/components/shared/entity-sheet";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { SelectorProveedor } from "@/components/shared/alta-rapida";
 import { FormField } from "@/components/ui/form-field";
@@ -69,6 +70,7 @@ export function ProductoSheet({ productoId, nuevo, duplicarDeId, onClose, onCrea
   const [dupDe, setDupDe] = React.useState<string | null>(duplicarDeId ?? null);
   const [vuelta, setVuelta] = React.useState(0);
   const [serieDe, setSerieDe] = React.useState<string | null>(null);
+  const [eliminar, setEliminar] = React.useState<Producto | null>(null);
   React.useEffect(() => setDupDe(duplicarDeId ?? null), [duplicarDeId, productoId, nuevo]);
   const origen = dupDe ? db.productos.find((p) => p.id === dupDe) : undefined;
   const open = !!producto || !!nuevo || !!origen;
@@ -106,13 +108,14 @@ export function ProductoSheet({ productoId, nuevo, duplicarDeId, onClose, onCrea
         open={open}
         onOpenChange={(v) => !v && cerrar()}
         titulo={origen ? "Duplicar artículo" : producto ? producto.nombre : "Nuevo producto"}
-        subtitulo={origen ? `A partir de ${origen.codigo} · ${origen.nombre}` : producto ? `${producto.codigo} · ${producto.marca ?? ""} · ${db.rubros.find((r) => r.id === producto.rubroId)?.nombre}` : "Completá los datos del producto"}
+        subtitulo={origen ? `A partir de ${origen.codigo} · ${origen.nombre}` : producto ? [producto.codigo, producto.marca, db.rubros.find((r) => r.id === producto.rubroId)?.nombre].filter(Boolean).join(" · ") : "Completá los datos del producto"}
         estado={!enFormulario && producto && pos ? <StatusBadge tipo="STOCK" estado={pos.estado} /> : undefined}
         acciones={
           !enFormulario && producto && puedeEditar ? (
             <div className="flex gap-1.5">
               <Button size="sm" variant="secondary" onClick={() => setDupDe(producto.id)}><Copy /> Duplicar</Button>
               <Button size="sm" variant="secondary" onClick={() => setSerieDe(producto.id)}><Rows3 /> Crear serie</Button>
+              <Button size="sm" variant="secondary" onClick={() => setEliminar(producto)}><Trash2 /> Eliminar</Button>
             </div>
           ) : undefined
         }
@@ -121,7 +124,36 @@ export function ProductoSheet({ productoId, nuevo, duplicarDeId, onClose, onCrea
         onTabChange={setTab}
       />
       {serieDe && <SerieDialog origenId={serieDe} onClose={() => setSerieDe(null)} />}
+      <EliminarProductoDialog producto={eliminar} onClose={() => setEliminar(null)} onEliminado={cerrar} />
     </>
+  );
+}
+
+/** Confirmación para eliminar un artículo que nunca se usó (si ya operó, el servidor pide desactivarlo). */
+export function EliminarProductoDialog({ producto, onClose, onEliminado }: { producto: Producto | null; onClose: () => void; onEliminado?: () => void }) {
+  return (
+    <ConfirmDialog
+      open={!!producto}
+      onOpenChange={(v) => !v && onClose()}
+      titulo={`Eliminar ${producto?.nombre ?? "artículo"}`}
+      descripcion="Se elimina el artículo con sus precios. Solo se puede si nunca se usó: sin stock, ventas, compras, acopios con proveedores ni movimientos."
+      confirmLabel="Eliminar"
+      variant="danger"
+      onConfirm={async () => {
+        if (!producto) return;
+        const p = producto;
+        const r = await medir("eliminarProducto", { productoIds: [p.id] }, () => useStore.getState().eliminarProducto(p.id));
+        if (!r.ok) {
+          toast.error(r.error);
+          return false;
+        }
+        toast.success(`Artículo ${p.codigo} eliminado`);
+        onClose();
+        onEliminado?.();
+      }}
+    >
+      <p className="text-[13px] text-muted">Si ya tuvo movimientos, desactivalo desde la pestaña General. Queda registrado en la auditoría.</p>
+    </ConfirmDialog>
   );
 }
 
@@ -239,7 +271,7 @@ function TabGeneral({
     dupRef.current = false;
     const err: Record<string, string> = {};
     if (!f.nombre.trim()) err.nombre = "Ingresá el nombre.";
-    else if (!producto && nombreRepetidoEnRubro(f.nombre, f.rubroId, db.productos)) err.nombre = "Ya existe un artículo con ese nombre; cambiá el nombre o el diámetro/medida.";
+    else if (!producto && nombreRepetidoEnRubro(f.nombre, f.rubroId, db.productos)) err.nombre = mensajeNombreRepetido(nombreRepetidoEnRubro(f.nombre, f.rubroId, db.productos)!);
     if (!f.codigo.trim()) err.codigo = "Ingresá el código.";
     else if (db.productos.some((p) => p.id !== producto?.id && p.codigo.toUpperCase() === f.codigo.trim().toUpperCase())) err.codigo = "Ese código ya existe.";
     if (f.codigoBarras && db.productos.some((p) => p.id !== producto?.id && p.codigoBarras === f.codigoBarras)) err.codigoBarras = "Ese código de barras ya es de otro artículo.";
@@ -605,13 +637,59 @@ function TabPrecios({ producto }: { producto: Producto }) {
   );
 }
 
+const INVENTARIO_INICIAL = "INVENTARIO_INICIAL";
+/** Motivo "según la diferencia": sobrante si sube, faltante si baja. */
+const SEGUN_DIFERENCIA = "";
+
 function TabStock({ producto }: { producto: Producto }) {
   const db = useDb();
   const router = useRouter();
   const pos = usePosiciones().get(producto.id);
   const puedeTransferir = usePuede("stock.transferir");
   const puedeAjustar = usePuede("stock.ajustar");
+  const crearAjuste = useStore((s) => s.crearAjuste);
+  // Corrección directa del stock físico: cada depósito que cambia genera un ajuste (queda en el kardex).
+  const [editando, setEditando] = React.useState<Record<string, number> | null>(null);
+  const [motivo, setMotivo] = React.useState(SEGUN_DIFERENCIA);
+  const [obs, setObs] = React.useState("");
+  const [costo, setCosto] = React.useState(0);
+  const [enviarCorreccion, guardandoCorreccion] = useEnvio(async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    await guardar();
+  });
   if (!pos) return null;
+  const motivos = db.config.motivosAjuste.filter((m) => m.activo);
+  const diferencias = editando ? db.depositos.map((d) => ({ d, dif: (editando[d.id] ?? 0) - pos.porDeposito[d.id].fisico })).filter((x) => Math.abs(x.dif) > 1e-9) : [];
+  const esInventario = motivo === INVENTARIO_INICIAL;
+  const bajaConInventario = esInventario && diferencias.some((x) => x.dif < 0);
+  const valor = diferencias.reduce((s, x) => s + Math.abs(x.dif) * (esInventario ? costo : producto.costoPromedio), 0);
+  const requiereObs = valor > 500_000 && !esInventario;
+
+  const empezar = () => {
+    setEditando(Object.fromEntries(db.depositos.map((d) => [d.id, pos.porDeposito[d.id].fisico])));
+    const sinHistoria = pos.fisico === 0 && producto.costoPromedio === 0;
+    setMotivo(sinHistoria && motivos.some((m) => m.codigo === INVENTARIO_INICIAL) ? INVENTARIO_INICIAL : SEGUN_DIFERENCIA);
+    setCosto(producto.costoUltimo);
+    setObs("");
+  };
+  const guardar = async () => {
+    const hechos: string[] = [];
+    for (const { d, dif } of diferencias) {
+      const signo: 1 | -1 = dif > 0 ? 1 : -1;
+      const m = motivo || (signo === 1 ? "SOBRANTE" : "FALTANTE");
+      const item = { productoId: producto.id, cantidad: Math.abs(dif), signo, motivo: m, ...(m === INVENTARIO_INICIAL ? { costoUnitario: costo } : {}) };
+      const accionId = m === INVENTARIO_INICIAL ? "inventarioInicial" : "crearAjuste";
+      const r = await medir(accionId, { productoIds: [producto.id], depositoIds: [d.id], n: 1 }, () => crearAjuste({ depositoId: d.id, items: [item], observacion: obs.trim() || "Corrección desde la ficha del artículo" }));
+      if (!r.ok) {
+        toast.error(`${d.nombre}: ${r.error}`, hechos.length ? { description: `Ya se registró: ${hechos.join(", ")}.` } : undefined);
+        return;
+      }
+      hechos.push(`${r.data.numero} (${d.nombre})`);
+    }
+    toast.success(hechos.length === 1 ? `Stock corregido · ajuste ${hechos[0]}` : `Stock corregido · ${hechos.length} ajustes`, { description: "El stock y el kardex ya están actualizados." });
+    setEditando(null);
+  };
+
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded-card border border-border">
@@ -619,57 +697,114 @@ function TabStock({ producto }: { producto: Producto }) {
           <thead className="bg-[#FAFAF8]">
             <tr className="text-[12px] text-muted">
               <th className="h-9 px-3 text-left font-medium">Depósito</th>
-              <th className="h-9 px-3 text-right font-medium">Físico</th>
-              <th className="h-9 px-3 text-right font-medium">Comprometido</th>
-              <th className="h-9 px-3 text-right font-medium">Disponible</th>
-              <th className="h-9 px-3 text-right font-medium">En tránsito</th>
+              <th className="h-9 px-3 text-right font-medium">{editando ? "Stock real" : "Físico"}</th>
+              {editando ? (
+                <th className="h-9 px-3 text-right font-medium">Diferencia</th>
+              ) : (
+                <>
+                  <th className="h-9 px-3 text-right font-medium">Comprometido</th>
+                  <th className="h-9 px-3 text-right font-medium">Disponible</th>
+                  <th className="h-9 px-3 text-right font-medium">En tránsito</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {db.depositos.map((d) => {
               const x = pos.porDeposito[d.id];
+              const dif = editando ? (editando[d.id] ?? 0) - x.fisico : 0;
               return (
                 <tr key={d.id} className="h-10 border-t border-border">
                   <td className="px-3">{d.nombre}</td>
-                  <td className="px-3 text-right tnum">{formatQty(x.fisico, producto.unidad)}</td>
-                  <td className="px-3 text-right text-muted tnum">{formatQty(x.comprometido, producto.unidad)}</td>
-                  <td className={cn("px-3 text-right font-medium tnum", x.disponible < 0 && "text-danger")}>{formatQty(x.disponible, producto.unidad)}</td>
-                  <td className="px-3 text-right text-muted tnum">{formatQty(x.enTransito, producto.unidad)}</td>
+                  {editando ? (
+                    <>
+                      <td className="px-3 py-1 text-right">
+                        <NumberInput aria-label={`Stock real en ${d.nombre}`} className="ml-auto h-8 w-32 text-right" value={editando[d.id] ?? 0} min={0} onValueChange={(v) => setEditando({ ...editando, [d.id]: Math.max(0, v) })} />
+                      </td>
+                      <td className={cn("px-3 text-right tnum", dif > 0 && "text-success", dif < 0 && "text-danger", !dif && "text-muted")}>{dif ? `${dif > 0 ? "+" : "−"}${formatQty(Math.abs(dif), producto.unidad)}` : "—"}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 text-right tnum">{formatQty(x.fisico, producto.unidad)}</td>
+                      <td className="px-3 text-right text-muted tnum">{formatQty(x.comprometido, producto.unidad)}</td>
+                      <td className={cn("px-3 text-right font-medium tnum", x.disponible < 0 && "text-danger")}>{formatQty(x.disponible, producto.unidad)}</td>
+                      <td className="px-3 text-right text-muted tnum">{formatQty(x.enTransito, producto.unidad)}</td>
+                    </>
+                  )}
                 </tr>
               );
             })}
           </tbody>
-          <tfoot>
-            <tr className="h-10 border-t border-border-strong bg-[#FAFAF8] font-semibold">
-              <td className="px-3">Total</td>
-              <td className="px-3 text-right tnum">{formatQty(pos.fisico, producto.unidad)}</td>
-              <td className="px-3 text-right tnum">{formatQty(pos.comprometido, producto.unidad)}</td>
-              <td className="px-3 text-right tnum">{formatQty(pos.disponible, producto.unidad)}</td>
-              <td className="px-3 text-right tnum">{formatQty(pos.enTransito, producto.unidad)}</td>
-            </tr>
-          </tfoot>
+          {!editando && (
+            <tfoot>
+              <tr className="h-10 border-t border-border-strong bg-[#FAFAF8] font-semibold">
+                <td className="px-3">Total</td>
+                <td className="px-3 text-right tnum">{formatQty(pos.fisico, producto.unidad)}</td>
+                <td className="px-3 text-right tnum">{formatQty(pos.comprometido, producto.unidad)}</td>
+                <td className="px-3 text-right tnum">{formatQty(pos.disponible, producto.unidad)}</td>
+                <td className="px-3 text-right tnum">{formatQty(pos.enTransito, producto.unidad)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
-      <div className="flex flex-wrap items-center gap-2 text-[13px]">
-        <span className="text-muted">Stock mínimo:</span>
-        <span className="font-medium">{formatQty(producto.stockMinimo, producto.unidad)}</span>
-        {pos.estado !== "OK" && <Badge variant="danger">Bajo mínimo</Badge>}
-        {pos.enTransferencia > 0 && <Badge variant="warning">{formatQty(pos.enTransferencia, producto.unidad)} viajando entre depósitos</Badge>}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {puedeTransferir && (
-          <Button variant="secondary" onClick={() => router.push(`/stock/transferencias?nuevo=1&producto=${producto.id}`)}>
-            <ArrowLeftRight />
-            Transferir
-          </Button>
-        )}
-        {puedeAjustar && (
-          <Button variant="secondary" onClick={() => router.push(`/stock/ajustes?nuevo=1&producto=${producto.id}`)}>
-            <SlidersHorizontal />
-            Ajustar
-          </Button>
-        )}
-      </div>
+      {editando ? (
+        <form onSubmit={enviarCorreccion} className="space-y-3 rounded-card border border-border p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Motivo">
+              <Select
+                value={motivo}
+                onValueChange={setMotivo}
+                options={[{ value: SEGUN_DIFERENCIA, label: "Según la diferencia (sobrante / faltante)" }, ...motivos.filter((m) => m.codigo !== "SOBRANTE" && m.codigo !== "FALTANTE").map((m) => ({ value: m.codigo, label: m.nombre }))]}
+              />
+            </FormField>
+            {esInventario ? (
+              <FormField label="Costo unitario" hint="Lo que entra se valoriza a este costo.">
+                <NumberInput value={costo} min={0} onValueChange={setCosto} />
+              </FormField>
+            ) : (
+              <FormField label="Observación" required={requiereObs} hint={requiereObs ? "La corrección supera $ 500.000." : undefined}>
+                <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ej.: conteo del galpón" />
+              </FormField>
+            )}
+          </div>
+          {bajaConInventario && <p className="text-[13px] text-danger">El inventario inicial solo suma stock: elegí otro motivo para descontar.</p>}
+          <p className="text-[12px] text-muted">Cada depósito que cambia genera un ajuste de stock y queda en el kardex del artículo.</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setEditando(null)}>Cancelar</Button>
+            <Button type="submit" loading={guardandoCorreccion} disabled={!diferencias.length || bajaConInventario || (requiereObs && !obs.trim())}><Save /> Guardar stock</Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+            <span className="text-muted">Stock mínimo:</span>
+            <span className="font-medium">{formatQty(producto.stockMinimo, producto.unidad)}</span>
+            {pos.estado !== "OK" && <Badge variant="danger">Bajo mínimo</Badge>}
+            {pos.enTransferencia > 0 && <Badge variant="warning">{formatQty(pos.enTransferencia, producto.unidad)} viajando entre depósitos</Badge>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {puedeAjustar && (
+              <Button onClick={empezar}>
+                <PencilLine />
+                Modificar stock
+              </Button>
+            )}
+            {puedeTransferir && (
+              <Button variant="secondary" onClick={() => router.push(`/stock/transferencias?nuevo=1&producto=${producto.id}`)}>
+                <ArrowLeftRight />
+                Transferir
+              </Button>
+            )}
+            {puedeAjustar && (
+              <Button variant="secondary" onClick={() => router.push(`/stock/ajustes?nuevo=1&producto=${producto.id}`)}>
+                <SlidersHorizontal />
+                Ajuste detallado
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

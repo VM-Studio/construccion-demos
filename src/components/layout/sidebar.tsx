@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronsLeft, ChevronsRight, LayoutGrid, LogOut, UserRound } from "lucide-react";
 import { useStore } from "@/store";
@@ -13,16 +14,6 @@ import { cn } from "@/lib/utils";
 import { useModuloActual, useModulosVisibles } from "./use-modulo";
 import { MiCuentaDialog } from "@/components/modulos/auth/mi-cuenta";
 import { useDb } from "@/lib/datos/almacen";
-
-function iniciales(nombre: string) {
-  return nombre
-    .split(/\s+/)
-    .filter((w) => /^[A-ZÁÉÍÓÚÑ]/i.test(w))
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
 
 const itemCls = (activo: boolean, colapsado: boolean) =>
   cn(
@@ -68,18 +59,15 @@ export function SidebarNav({ colapsado = false, onNavigate }: { colapsado?: bool
 
   return (
     <div className="flex h-full flex-col">
-      <div className={cn("flex h-14 shrink-0 items-center border-b border-border", colapsado ? "justify-center px-2" : "px-4")}>
-        <Link href="/inicio" onClick={onNavigate} className="min-w-0" aria-label="Ir a módulos">
-          {colapsado ? (
-            <span className="flex size-8 items-center justify-center rounded-control bg-ink text-[12px] font-semibold text-white">{iniciales(empresa.empresa)}</span>
-          ) : (
-            <>
-              <div className="truncate text-[14px] font-semibold tracking-tight text-ink">{empresa.empresa}</div>
-              <div className="truncate text-[11px] text-muted">Sistema de Gestión</div>
-            </>
-          )}
-        </Link>
-      </div>
+      <Link
+        href="/inicio"
+        onClick={onNavigate}
+        aria-label={`${empresa.empresa} · Ir a módulos`}
+        className="relative block h-14 shrink-0 overflow-hidden border-b border-border bg-[#0e1217]"
+      >
+        {/* Logo con fondo, a la altura del encabezado (56 px), centrado sobre el mismo tono oscuro. */}
+        <Image src="/logo-sistema.png" alt={empresa.empresa} fill priority sizes="240px" className="object-contain" />
+      </Link>
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="Navegación del módulo">
         {modulo && !enInicio ? (
           <div key={modulo.id} className="animate-fade-in">

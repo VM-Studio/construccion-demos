@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Download, Eye, FileUp, MoreVertical, Package, Plus, Rows3, TrendingUp } from "lucide-react";
+import { Copy, Download, Eye, FileUp, MoreVertical, Package, Plus, Rows3, Trash2, TrendingUp } from "lucide-react";
 import { useDb, usePosiciones, usePuede, useDepositoActivo, useUnidadNegocio } from "@/store/selectors";
 import { obtenerPrecio } from "@/domain/precios";
 import { UNIDAD_LABEL } from "@/domain/estados";
@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatMoney, formatQty, unidadCorta } from "@/lib/format";
 import { aCSV, descargarArchivo, cn } from "@/lib/utils";
 import { posicionEn } from "@/store/selectors";
-import { ProductoSheet } from "./producto-sheet";
+import { EliminarProductoDialog, ProductoSheet } from "./producto-sheet";
 import { SerieDialog } from "./serie-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ActualizacionMasivaDialog, type Alcance } from "./actualizacion-masiva";
@@ -40,6 +40,7 @@ export function ProductosView() {
   }, [rubroParam]);
   const [duplicarDe, setDuplicarDe] = React.useState<string | null>(null);
   const [serieDe, setSerieDe] = React.useState<string | null>(null);
+  const [eliminar, setEliminar] = React.useState<Producto | null>(null);
   const puedeEditarProductos = usePuede("productos.editar");
   const [proveedor, setProveedor] = React.useState("");
   const [estado, setEstado] = React.useState(params.get("filtro") === "bajo-minimo" ? "BAJO" : "ACTIVOS");
@@ -153,6 +154,7 @@ export function ProductosView() {
                     <DropdownMenuItem onSelect={() => abrir(p.id)}><Eye /> Ver ficha</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setDuplicarDe(p.id)}><Copy /> Duplicar</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setSerieDe(p.id)}><Rows3 /> Crear serie a partir de este artículo</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setEliminar(p)}><Trash2 /> Eliminar</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </span>
@@ -272,6 +274,7 @@ export function ProductosView() {
         }
       />
       <ProductoSheet productoId={duplicarDe ? null : productoId} nuevo={nuevo} duplicarDeId={duplicarDe} onClose={cerrar} />
+      <EliminarProductoDialog producto={eliminar} onClose={() => setEliminar(null)} onEliminado={() => productoId === eliminar?.id && cerrar()} />
       {serieDe && <SerieDialog origenId={serieDe} onClose={() => setSerieDe(null)} />}
       <ActualizacionMasivaDialog open={masiva} onOpenChange={cerrarMasiva} seleccionados={seleccion} inicial={inicialMasiva} />
       <ImportarCsvDialog tipo="articulos" open={importar} onOpenChange={setImportar} />

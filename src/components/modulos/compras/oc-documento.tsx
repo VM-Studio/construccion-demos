@@ -29,7 +29,7 @@ export function OCDocumento({ oc }: { oc: OrdenCompra }) {
           <div>
             <div className="text-[10px] font-semibold uppercase text-muted">Proveedor</div>
             <div className="font-semibold">{prov?.razonSocial}</div>
-            <div>CUIT {prov?.cuit}</div>
+            {prov?.cuit && <div>CUIT {prov.cuit}</div>}
             <div>{prov?.direccion}</div>
             <div>{prov?.contacto} · {prov?.telefono}</div>
           </div>

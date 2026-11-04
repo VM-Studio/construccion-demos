@@ -45,6 +45,7 @@ const duplicarProductoInput = z.object({
 });
 const filaSerieInput = z.object({ codigo: texto, nombre: texto, pesoKg: cantidad.optional(), costoUltimo: montoNoNegativo, stockMinimo: cantidad, precios: preciosPorLista.optional() });
 export const duplicarProducto = z.tuple([id, duplicarProductoInput]);
+export const eliminarProducto = z.tuple([id]);
 export const crearSerieProductos = z.tuple([id, lista(filaSerieInput, 200)]);
 export const actualizarPrecio = z.tuple([id, id, montoNoNegativo]);
 const recalculoDesdeUSD = z.object({

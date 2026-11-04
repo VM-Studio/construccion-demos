@@ -6,6 +6,7 @@
 import { jsPDF } from "jspdf";
 import autoTable, { type RowInput } from "jspdf-autotable";
 import type { DatosEmpresa } from "@/domain/types";
+import { cargarLogoPdf, type LogoPdf } from "./logo";
 
 const M = 14;
 const TINTA: [number, number, number] = [20, 20, 19];
@@ -30,8 +31,13 @@ export interface DocumentoPdf {
   apaisado?: boolean;
 }
 
-/** Marca de la empresa dibujada en vectores (misma que LogoEmpresa). */
-function logo(pdf: jsPDF, x: number, y: number, nombre: string) {
+/** Logo sin fondo de la empresa; si no se pudo cargar, la marca dibujada en vectores. */
+function logo(pdf: jsPDF, x: number, y: number, nombre: string, imagen: LogoPdf | null) {
+  if (imagen) {
+    const alto = 17;
+    pdf.addImage(imagen.dataUrl, "PNG", x, y, alto * imagen.proporcion, alto);
+    return;
+  }
   pdf.setFillColor(...TINTA);
   pdf.roundedRect(x, y, 15, 15, 2, 2, "F");
   pdf.setFillColor(...ACENTO);
@@ -51,11 +57,12 @@ function logo(pdf: jsPDF, x: number, y: number, nombre: string) {
   pdf.text("CORRALÓN · FERRETERÍA", x + 18, y + 11.5, { charSpace: 0.6 });
 }
 
-export function generarPdfDocumento(d: DocumentoPdf): Blob {
+export async function generarPdfDocumento(d: DocumentoPdf): Promise<Blob> {
+  const imagen = await cargarLogoPdf();
   const pdf = new jsPDF({ orientation: d.apaisado ? "landscape" : "portrait", unit: "mm", format: "a4" });
   const ancho = pdf.internal.pageSize.getWidth();
   const alto = pdf.internal.pageSize.getHeight();
-  logo(pdf, M, M, d.empresa.empresa);
+  logo(pdf, M, M, d.empresa.empresa, imagen);
   pdf.setFontSize(7.5);
   pdf.setTextColor(...GRIS);
   const datos = [`${d.empresa.razonSocial} · CUIT ${d.empresa.cuit}`, d.empresa.direccion, [d.empresa.telefono, d.empresa.email].filter(Boolean).join(" · ")].filter(Boolean);

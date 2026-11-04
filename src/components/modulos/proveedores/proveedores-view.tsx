@@ -201,7 +201,7 @@ export function ProveedorFicha({ id }: { id: string }) {
         titulo={p.razonSocial}
         descripcion={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono">{p.codigo}</span>· {TIPO_PROVEEDOR_LABEL[p.tipo]} · CUIT {p.cuit} · <CircuitoBadge circuito={p.circuitoHabitual} /> · {p.contacto} · {p.telefono}
+            <span className="font-mono">{p.codigo}</span>· {TIPO_PROVEEDOR_LABEL[p.tipo]} ·{p.cuit ? ` CUIT ${p.cuit} ·` : ""} <CircuitoBadge circuito={p.circuitoHabitual} /> · {p.contacto} · {p.telefono}
             <ClipContador cantidad={adjuntos.length} />
           </span>
         }

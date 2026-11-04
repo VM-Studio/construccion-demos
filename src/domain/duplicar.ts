@@ -81,9 +81,16 @@ export function nombreConVariante(base: string, sufijo: string): string {
 const normalizar = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 
 /** Otro artículo del mismo rubro con el mismo nombre (ignorando mayúsculas y espacios). */
-export function nombreRepetidoEnRubro(nombre: string, rubroId: string, productos: Pick<Producto, "id" | "nombre" | "rubroId">[], excluirId?: string) {
+export function nombreRepetidoEnRubro<T extends Pick<Producto, "id" | "nombre" | "rubroId">>(nombre: string, rubroId: string, productos: T[], excluirId?: string): T | undefined {
   const n = normalizar(nombre);
   return productos.find((p) => p.id !== excluirId && p.rubroId === rubroId && normalizar(p.nombre) === n);
+}
+
+/** Aviso de nombre repetido; si el que choca está inactivo, dice cómo liberarlo. */
+export function mensajeNombreRepetido(dup: Pick<Producto, "codigo" | "activo">): string {
+  return dup.activo
+    ? "Ya existe un artículo con ese nombre; cambiá el nombre o el diámetro/medida."
+    : `Ya existe un artículo inactivo con ese nombre (código ${dup.codigo}): reactivalo o eliminalo desde su ficha, o cambiá el nombre.`;
 }
 
 // ───────────────────────── Códigos ─────────────────────────

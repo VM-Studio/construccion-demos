@@ -48,13 +48,15 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
     e.preventDefault();
     const er: Record<string, string> = {};
     if (!f.razonSocial.trim()) er.razonSocial = "Ingresá la razón social.";
-    const c = validarCUIT(f.cuit);
-    if (c) er.cuit = c;
+    if (f.cuit.trim()) {
+      const c = validarCUIT(f.cuit);
+      if (c) er.cuit = c;
+    }
     if (duplicado) er.cuit = "Ya existe un proveedor con este CUIT.";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) er.email = "Email inválido.";
     setErr(er);
     if (Object.keys(er).length) return;
-    const r = await medir(proveedor ? "editarProveedor" : "crearProveedor", { proveedorId: proveedor?.id }, () => guardar({ ...f, cuit: formatearCUIT(f.cuit) }, proveedor?.id));
+    const r = await medir(proveedor ? "editarProveedor" : "crearProveedor", { proveedorId: proveedor?.id }, () => guardar({ ...f, cuit: f.cuit.trim() ? formatearCUIT(f.cuit) : "" }, proveedor?.id));
     if (r.ok) {
       toast.success(proveedor ? "Proveedor actualizado" : "Proveedor creado");
       onSaved(r.data);
@@ -65,7 +67,7 @@ export function FormProveedor({ proveedor, onSaved }: { proveedor?: Proveedor; o
   return (
     <form onSubmit={enviar} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <CuitPadron entidad="proveedor" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={proveedor?.id} disabled={ro} required error={err.cuit} autoFocus={!proveedor} />
+        <CuitPadron entidad="proveedor" value={f.cuit} onChange={(v) => set("cuit", v)} onDatos={aplicarPadron} onDuplicado={setDuplicado} excluirId={proveedor?.id} disabled={ro} error={err.cuit} autoFocus={!proveedor} />
         <FormField label="Razón social" required error={err.razonSocial} htmlFor="pv-rs" className="sm:col-span-2">
           <Input id="pv-rs" disabled={ro} value={f.razonSocial} onChange={(e) => set("razonSocial", e.target.value)} />
         </FormField>

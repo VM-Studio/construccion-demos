@@ -11,7 +11,7 @@ import { puede } from "@/domain/permisos";
 
 export const config = {
   runtime: "nodejs",
-  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico|robots.txt).*)"],
+  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico|robots.txt|logo-sistema.png|logo-sinfondo.png).*)"],
 };
 
 // /api/adjuntos/upload: el webhook firmado de Vercel Blob llega sin sesión; la ruta verifica la

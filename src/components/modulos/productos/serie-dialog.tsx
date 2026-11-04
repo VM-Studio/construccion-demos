@@ -92,7 +92,10 @@ export function SerieDialog({ origenId, onClose }: { origenId: string; onClose: 
     else if (db.productos.some((p) => p.codigo.toUpperCase() === codigo)) e.push("El código ya existe");
     else if (filas.some((g, j) => j < i && g.codigo.trim().toUpperCase() === codigo)) e.push("Código repetido en la serie");
     if (!nombre) e.push("Falta el nombre");
-    else if (nombreRepetidoEnRubro(nombre, origen.rubroId, db.productos)) e.push("Ya existe un artículo con ese nombre");
+    else if (nombreRepetidoEnRubro(nombre, origen.rubroId, db.productos)) {
+      const dup = nombreRepetidoEnRubro(nombre, origen.rubroId, db.productos)!;
+      e.push(dup.activo ? "Ya existe un artículo con ese nombre" : `Ya existe un artículo inactivo con ese nombre (${dup.codigo})`);
+    }
     else if (filas.some((g, j) => j < i && nombreDe(g).trim().toLowerCase() === nombre.toLowerCase())) e.push("Nombre repetido en la serie");
     if (!(f.costo > 0)) e.push("El costo tiene que ser mayor a 0");
     return e;

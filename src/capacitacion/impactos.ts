@@ -97,6 +97,15 @@ export const IMPACTOS: Record<string, Impacto> = {
     ],
     porQue: "Para cargar artículos parecidos (hierros, caños, ladrillos) sin volver a escribir todo: solo cambiás lo distinto.",
   },
+  eliminarProducto: {
+    titulo: "Eliminar artículo",
+    resumen: "Solo se pueden eliminar artículos que nunca se usaron (sin stock, ventas, compras ni movimientos); si ya operó, se desactiva.",
+    efectos: [
+      e("articulos", "desaparece del listado, de los buscadores y de las listas de precios", "baja"),
+      e("stock", "se borran sus filas de stock en cero", "baja"),
+    ],
+    porQue: "Un artículo con historia (ventas, compras, kardex) se desactiva para no perderla; uno de prueba se puede borrar del todo.",
+  },
   crearSerieProductos: {
     titulo: "Crear serie de artículos",
     resumen: "Crea varios artículos iguales al base que solo cambian medida, peso, costo y precio, todos juntos o ninguno.",

@@ -67,7 +67,7 @@ export async function descargarPdfCotizacion(cot: Cotizacion, db: Db) {
   const usd = cot.moneda === "USD" && !!cot.tipoCambioAplicado;
   const m = (n: number) => (usd ? formatUSD(aDolares(n, cot.tipoCambioAplicado)) : formatMoney(n));
   const neto = cot.subtotal * (1 - cot.descuentoPct / 100);
-  const blob = generarPdfDocumento({
+  const blob = await generarPdfDocumento({
     empresa: db.config.empresa,
     titulo: "Cotización",
     numero: cot.numero,

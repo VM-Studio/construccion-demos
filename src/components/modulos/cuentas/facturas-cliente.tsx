@@ -74,7 +74,7 @@ export function FacturasCliente({ clienteId }: { clienteId: string }) {
   const pdf = async () => {
     const { generarPdfDocumento, descargarBlob } = await import("@/lib/pdf/documento");
     descargarBlob(
-      generarPdfDocumento({
+      await generarPdfDocumento({
         empresa: db.config.empresa,
         titulo: "Facturas de clientes",
         fecha: formatDate(new Date()),

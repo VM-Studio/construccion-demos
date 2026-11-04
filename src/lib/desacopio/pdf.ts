@@ -8,11 +8,18 @@ import autoTable, { type RowInput } from "jspdf-autotable";
 import { BRAND } from "@/config/brand";
 import { formatDate } from "@/lib/format";
 import { cantidad3, dinero, type DocDesacopio } from "./datos";
+import { cargarLogoPdf } from "@/lib/pdf/logo";
 
 const MARGEN = 12;
 
-export function generarPdfDesacopio(doc: DocDesacopio): Blob {
+export async function generarPdfDesacopio(doc: DocDesacopio): Promise<Blob> {
+  const imagen = await cargarLogoPdf();
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  if (imagen) {
+    const alto = 16;
+    const ancho = alto * imagen.proporcion;
+    pdf.addImage(imagen.dataUrl, "PNG", pdf.internal.pageSize.getWidth() - MARGEN - ancho, MARGEN, ancho, alto);
+  }
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(9);
   let y = MARGEN + 3;

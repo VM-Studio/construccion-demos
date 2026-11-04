@@ -91,8 +91,10 @@ export function crearSliceImportacion(set: SetFn, get: GetFn) {
         const ids: string[] = [];
         for (let data of filas) {
           if (!data.razonSocial.trim()) throw new ErrorNegocio("Hay proveedores sin razón social.");
-          const err = validarCUIT(data.cuit);
-          if (err) throw new ErrorNegocio(`${data.razonSocial}: ${err}`);
+          if (data.cuit?.trim()) {
+            const err = validarCUIT(data.cuit);
+            if (err) throw new ErrorNegocio(`${data.razonSocial}: ${err}`);
+          }
           if (!data.codigo) {
             // Misma lógica que el alta individual; se saltean códigos ya usados.
             let n = tx.get("proveedores").length + 1;

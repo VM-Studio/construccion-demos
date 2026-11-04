@@ -2,7 +2,7 @@ import type { Cliente, ListaPrecios, Obra, PrecioProducto, Producto, Proveedor, 
 import { calcularPrecioDesdeMarkup, aplicarCambiosPrecio, calcularActualizacionMasiva, costoEnPesos, type CambioPrecio, type Redondeo } from "@/domain/precios";
 import { validarCUIT, buscarPorCuit } from "@/domain/cuit";
 import { errorUnidadAlternativa } from "@/domain/unidades";
-import { nombreRepetidoEnRubro, preciosParaCosto } from "@/domain/duplicar";
+import { mensajeNombreRepetido, nombreRepetidoEnRubro, preciosParaCosto } from "@/domain/duplicar";
 import { newId } from "@/lib/utils";
 import { ErrorNegocio, ejecutar, exigir } from "../helpers";
 import type { Tx } from "../tx";
@@ -59,7 +59,9 @@ function crearDerivado(tx: Tx, origen: Producto, c: DuplicarProductoInput, reser
   const dupCodigo = productos.find((p) => p.codigo.toUpperCase() === codigo);
   if (dupCodigo) throw new ErrorNegocio(`El código ${codigo} ya existe (${dupCodigo.nombre}).`);
   const clave = `${rubroId}|${nombre.toLowerCase()}`;
-  if (nombreRepetidoEnRubro(nombre, rubroId, productos) || reservadosNombres.has(clave)) throw new ErrorNegocio(`Ya existe un artículo con el nombre "${nombre}"; cambiá el nombre o el diámetro/medida.`);
+  const dupNombre = nombreRepetidoEnRubro(nombre, rubroId, productos);
+  if (dupNombre) throw new ErrorNegocio(`"${nombre}": ${mensajeNombreRepetido(dupNombre)}`);
+  if (reservadosNombres.has(clave)) throw new ErrorNegocio(`Ya existe un artículo con el nombre "${nombre}"; cambiá el nombre o el diámetro/medida.`);
   reservadosNombres.add(clave);
   const barras = (c.codigoBarras ?? "").replace(/\D/g, "");
   if (barras) {
@@ -167,6 +169,45 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
         return nuevo.id;
       }),
 
+    /**
+     * Elimina un artículo que nunca se usó (cargado por error o de prueba): sin stock, sin
+     * documentos y sin movimientos. Se borran sus precios, sus filas de stock en cero y su
+     * precio congelado en los acopios (cada acopio congela toda la lista de su unidad).
+     * Si ya operó, hay que desactivarlo.
+     */
+    eliminarProducto: (id: string) =>
+      ejecutar(get, set, (tx) => {
+        exigir(tx, "productos.editar");
+        const p = tx.must("productos", id);
+        const usa = (items: { productoId: string }[] | undefined) => !!items?.some((i) => i.productoId === id);
+        const cuenta = <T,>(lista: T[], f: (x: T) => boolean) => lista.filter(f).length;
+        const docs: [string, string, number][] = [
+          ["nota de pedido", "notas de pedido", cuenta(tx.get("notasPedido"), (x) => usa(x.items))],
+          ["cotización", "cotizaciones", cuenta(tx.get("cotizaciones"), (x) => usa(x.items))],
+          ["remito", "remitos", cuenta(tx.get("remitos"), (x) => usa(x.items))],
+          ["comprobante", "comprobantes", cuenta(tx.get("comprobantes"), (x) => usa(x.items))],
+          ["devolución", "devoluciones", cuenta(tx.get("devoluciones"), (x) => usa(x.items))],
+          ["despacho", "despachos", cuenta(tx.get("despachos"), (x) => usa(x.items))],
+          ["orden de compra", "órdenes de compra", cuenta(tx.get("ordenesCompra"), (x) => usa(x.items))],
+          ["recepción", "recepciones", cuenta(tx.get("recepciones"), (x) => usa(x.items))],
+          ["ajuste de stock", "ajustes de stock", cuenta(tx.get("ajustes"), (x) => usa(x.items))],
+          ["transferencia", "transferencias", cuenta(tx.get("transferencias"), (x) => usa(x.items))],
+          ["acopio con proveedor", "acopios con proveedores", cuenta(tx.get("acopiosProveedor"), (x) => usa(x.items))],
+        ];
+        const con = docs.filter(([, , n]) => n > 0).map(([uno, varios, n]) => `${n} ${n === 1 ? uno : varios}`);
+        if (con.length) throw new ErrorNegocio(`${p.nombre} ya tiene ${con.join(", ")}: no se puede eliminar. Desactivalo desde su ficha para que no aparezca al vender.`);
+        const stock = tx.get("stock").filter((s) => s.productoId === id);
+        if (stock.some((s) => Math.abs(s.cantidadFisica) > 1e-9)) throw new ErrorNegocio(`${p.nombre} tiene stock físico: no se puede eliminar. Desactivalo desde su ficha o ajustá el stock a 0 primero.`);
+        for (const s of stock) tx.remove("stock", s.id);
+        for (const pr of tx.get("precios").filter((x) => x.productoId === id)) tx.remove("precios", pr.id);
+        for (const a of tx.get("acopios").filter((x) => x.preciosCongelados.some((c) => c.productoId === id)))
+          tx.patch("acopios", a.id, { preciosCongelados: a.preciosCongelados.filter((c) => c.productoId !== id) });
+        for (const a of tx.get("acopiosProveedor").filter((x) => x.preciosCongelados.some((c) => c.productoId === id)))
+          tx.patch("acopiosProveedor", a.id, { preciosCongelados: a.preciosCongelados.filter((c) => c.productoId !== id) });
+        tx.remove("productos", id);
+        tx.auditar("Eliminó artículo", "Producto", id, `${p.codigo} · ${p.nombre}`);
+      }),
+
     /** Duplicar artículo: crea uno NUEVO a partir de otro (el origen no se modifica). */
     duplicarProducto: (origenId: string, cambios: DuplicarProductoInput) =>
       ejecutar(get, set, (tx) => {
@@ -263,8 +304,11 @@ export function crearSliceCatalogo(set: SetFn, get: GetFn) {
       ejecutar(get, set, (tx) => {
         exigir(tx, "proveedores.editar");
         if (!data.razonSocial.trim()) throw new ErrorNegocio("La razón social es obligatoria.");
-        const err = validarCUIT(data.cuit);
-        if (err) throw new ErrorNegocio(err);
+        // CUIT/CUIL opcional (proveedores sin factura); si se carga, tiene que ser válido.
+        if (data.cuit?.trim()) {
+          const err = validarCUIT(data.cuit);
+          if (err) throw new ErrorNegocio(err);
+        }
         const dupP = buscarPorCuit(tx.get("proveedores"), data.cuit, id);
         if (dupP) throw new ErrorNegocio(`Ya existe el proveedor ${dupP.razonSocial} con ese CUIT.`);
         if (!id && !data.codigo) data = { ...data, codigo: `P${String(tx.get("proveedores").length + 1).padStart(4, "0")}` };

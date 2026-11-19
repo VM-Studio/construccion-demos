@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  contactoEntrega,
   calcularRentabilidadACostoActual,
   calcularRentabilidadItem,
   calcularRentabilidadPedido,
@@ -221,5 +222,24 @@ describe("porcentajeEntregado", () => {
 
   it("nada entregado da 0", () => {
     expect(porcentajeEntregado({ items: [itemNP("i1", "p1", 7)] })).toBe(0);
+  });
+});
+
+describe("contactoEntrega (remito y hoja de ruta)", () => {
+  it("usa el contacto cargado en la venta", () => {
+    expect(contactoEntrega({ contacto: " Carlos 11 3333-2222 ", obraContacto: "Juan", telefonoCliente: "11 1111" })).toBe("Carlos 11 3333-2222");
+  });
+  it("si no hay, contacto de la obra y teléfono del cliente", () => {
+    expect(contactoEntrega({ obraContacto: "Juan (capataz)", telefonoCliente: "11 1111" })).toBe("Juan (capataz) · Tel. 11 1111");
+  });
+  it("sin obra: contacto del cliente o solo el teléfono", () => {
+    expect(contactoEntrega({ clienteContacto: "Marta", telefonoCliente: "11 1111" })).toBe("Marta · Tel. 11 1111");
+    expect(contactoEntrega({ telefonoCliente: "11 1111" })).toBe("Tel. 11 1111");
+  });
+  it("no repite el teléfono si ya está en el contacto de la obra", () => {
+    expect(contactoEntrega({ obraContacto: "Juan 11 1111", telefonoCliente: "11 1111" })).toBe("Juan 11 1111");
+  });
+  it("vacío si no hay datos", () => {
+    expect(contactoEntrega({})).toBe("");
   });
 });

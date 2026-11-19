@@ -115,6 +115,7 @@ export function crearRemitoNP(tx: Tx, npId: string, lineas: { itemId: string; ca
     depositoId: np.depositoId,
     fecha,
     direccionEntrega: np.direccionEntrega,
+    contactoEntrega: np.contactoEntrega,
     items,
     cantidadTotal: items.reduce((a, i) => a + i.cantidad, 0),
     pesoTotalKg: Math.round(items.reduce((a, i) => a + i.cantidad * (tx.find("productos", i.productoId)?.pesoKg ?? 0), 0)),
@@ -293,7 +294,15 @@ export function crearClienteDesdeVenta(tx: Tx, d: DatosClienteVenta): Cliente {
     const err = validarCUIT(cuit);
     if (err) throw new ErrorNegocio(err);
     const existente = buscarPorCuit(tx.get("clientes"), cuit);
-    if (existente) return existente;
+    if (existente) {
+      // Ya era cliente: si no tenía teléfono, se completa con el que se cargó en la venta.
+      const tel = d.telefono?.trim();
+      if (tel && !existente.telefono) {
+        tx.patch("clientes", existente.id, { telefono: tel });
+        return tx.must("clientes", existente.id);
+      }
+      return existente;
+    }
   }
   const tipo = d.tipo || (cuit ? "MAYORISTA" : "CONSUMIDOR_FINAL");
   const max = tx.get("clientes").reduce((m, c) => Math.max(m, Number(c.codigo.replace(/\D/g, "")) || 0), 0);

@@ -3,9 +3,9 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Info, Plus, Save, ShieldAlert, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Info, Plus, Save, ShieldAlert, Users } from "lucide-react";
 import { useStore } from "@/store";
-import { useAcopiosResumen, useDb, usePendientes, usePuede, useUnidadNegocio, useUsuario } from "@/store/selectors";
+import { posicionEn, useAcopiosResumen, useDb, usePendientes, usePosiciones, usePuede, useUnidadNegocio, useUsuario } from "@/store/selectors";
 import type { Circuito, FormaPagoVenta, ModalidadEntrega, Moneda, NotaPedido, OrigenVenta, Producto } from "@/domain/types";
 import { precioLista } from "@/domain/precios";
 import { calcularTotales } from "@/domain/ventas";
@@ -55,6 +55,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const usuario = useUsuario();
   const unActiva = useUnidadNegocio();
   const acopiosRes = useAcopiosResumen();
+  const posiciones = usePosiciones();
   const verMargen = usePuede("margenes.ver");
   const cotizacion = params.get("cotizacion") ? db.cotizaciones.find((c) => c.id === params.get("cotizacion")) : undefined;
 
@@ -74,6 +75,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const [fechaEntrega, setFechaEntrega] = React.useState(diaLocal(borrador?.fechaEntregaProgramada ?? new Date(Date.now() + 86_400_000)));
   const [obraEntrega, setObraEntrega] = React.useState("");
   const [direccion, setDireccion] = React.useState(borrador?.direccionEntrega ?? "");
+  const [contacto, setContacto] = React.useState(borrador?.contactoEntrega ?? "");
   const [descuento, setDescuento] = React.useState(borrador?.descuentoPct ?? cotizacion?.descuentoPct ?? 0);
   const [obs, setObs] = React.useState(borrador?.observaciones ?? "");
   const [moneda, setMoneda] = React.useState<Moneda>(borrador?.moneda ?? cotizacion?.moneda ?? "ARS");
@@ -168,7 +170,7 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
   const enUSD = usdHabilitado && moneda === "USD";
   const usd = (pesos: number) => formatUSD(aDolares(pesos, dolar));
 
-  const datos = () => ({
+  const datos = (pend = pendiente) => ({
     clienteId,
     sucursalId,
     depositoId,
@@ -180,10 +182,11 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     formaPago: (acopio ? "ACOPIO" : formaPago) as FormaPagoVenta,
     items: items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precioUnitario: i.precio ?? 0, descuentoPct: i.descuentoPct, unidadVenta: i.unidadVenta })),
     descuentoPct: acopio ? 0 : descuento,
-    pendienteEntrega: pendiente,
-    modalidadEntrega: pendiente ? modalidad : "RETIRA",
-    fechaEntregaProgramada: pendiente ? deInput(fechaEntrega) : undefined,
-    direccionEntrega: pendiente && modalidad === "ENVIO" ? direccion || [db.obras.find((o) => o.id === obraEntrega)?.direccion, db.obras.find((o) => o.id === obraEntrega)?.localidad].filter(Boolean).join(", ") || undefined : undefined,
+    pendienteEntrega: pend,
+    modalidadEntrega: pend ? modalidad : "RETIRA",
+    fechaEntregaProgramada: pend ? deInput(fechaEntrega) : undefined,
+    direccionEntrega: pend && modalidad === "ENVIO" ? direccion || [db.obras.find((o) => o.id === obraEntrega)?.direccion, db.obras.find((o) => o.id === obraEntrega)?.localidad].filter(Boolean).join(", ") || undefined : undefined,
+    contactoEntrega: pend && modalidad === "ENVIO" ? contacto.trim() || undefined : undefined,
     observaciones: obs || undefined,
     cotizacionId: cotizacion?.id,
     moneda: (enUSD ? "USD" : "ARS") as Moneda,
@@ -198,15 +201,20 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
     if (!borrador) router.replace(`/ventas/notas-pedido/${r.data}`);
   };
 
-  const confirmar = async (opts: OpcionesConfirmacion = {}) => {
+  /** `dejarPendiente`: lo que no tiene stock se vende igual y la NP queda pendiente de entrega. */
+  const confirmar = async (opts: OpcionesConfirmacion = {}, dejarPendiente = false) => {
     if (!clienteId) return toast.error("Elegí un cliente.");
     if (!items.length) return toast.error("Agregá al menos un artículo.");
     if (origen === "ACOPIO" && !acopio) return toast.error("Elegí el acopio del que se retira.");
     if (cobrar && cobrado <= 0) return toast.error("Cargá el importe cobrado o desactivá el cobro.");
-    const extras = { retiraAhora: !pendiente, facturar: !acopio && facturar, cobro: !acopio && facturar && cobrar ? { medios: mediosParaEnviar(medios) } : undefined };
-    const r = await medir(origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva", contextoMedir(), () => useStore.getState().crearVenta(datos(), opts, extras, borrador?.id));
+    const pend = pendiente || dejarPendiente;
+    if (pend !== pendiente) setPendiente(true);
+    // Pendiente de entrega: se puede vender aunque hoy no haya disponible (queda a la espera de mercadería).
+    const opciones: OpcionesConfirmacion = { ...opts, pendienteSinStock: pend || undefined };
+    const extras = { retiraAhora: !pend, facturar: !acopio && facturar, cobro: !acopio && facturar && cobrar ? { medios: mediosParaEnviar(medios) } : undefined };
+    const r = await medir(origen === "ACOPIO" ? "confirmarNotaPedidoAcopio" : "confirmarNotaPedidoNueva", contextoMedir(), () => useStore.getState().crearVenta(datos(pend), opciones, extras, borrador?.id));
     if (!r.ok) {
-      if (r.codigo && ["SIN_DISPONIBLE", "SALDO_ACOPIO", "IMPAGO", "CREDITO"].includes(r.codigo)) setBloqueo({ codigo: r.codigo, error: r.error, opts });
+      if (r.codigo && ["SIN_DISPONIBLE", "SIN_STOCK", "SALDO_ACOPIO", "IMPAGO", "CREDITO"].includes(r.codigo)) setBloqueo({ codigo: r.codigo, error: r.error, opts });
       else toast.error(r.error);
       return;
     }
@@ -352,6 +360,9 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                       <FormField label="Dirección" htmlFor="np-dir">
                         <Input id="np-dir" value={direccion} placeholder={db.obras.find((o) => o.id === obraEntrega)?.direccion ?? cliente?.direccion} onChange={(e) => setDireccion(e.target.value)} />
                       </FormField>
+                      <FormField label="Contacto para la entrega" htmlFor="np-con" className="sm:col-span-2" hint={`Sale impreso en el remito.${cliente?.telefono ? ` Si queda vacío sale ${db.obras.find((o) => o.id === obraEntrega)?.contacto ? "el contacto de la obra" : `el teléfono del cliente (${cliente.telefono})`}.` : ""}`}>
+                        <Input id="np-con" value={contacto} placeholder="Nombre y teléfono de quien recibe" onChange={(e) => setContacto(e.target.value)} />
+                      </FormField>
                     </>
                   )}
                 </div>
@@ -395,6 +406,8 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                     : []),
                 ]}
                 avisoLinea={(i, p) => {
+                  const disp = posicionEn(posiciones.get(p.id), depositoId).disponible;
+                  if (i.cantidad > disp + 1e-9) return pendiente ? { texto: "Sin disponible suficiente: queda pendiente de entrega hasta que ingrese mercadería", tono: "warning" } : { texto: "Sin disponible suficiente: elegí \"Pendiente de entrega\" para dejarla cargada", tono: "danger" };
                   const costoU = acopio ? precioCongelado(acopio, p.id)?.costoSnapshot : p.costoPromedio;
                   if (!acopio && verMargen && costoU && (i.precio ?? 0) * (1 - (i.descuentoPct ?? 0) / 100) < costoU) return { texto: "Precio por debajo del costo", tono: "warning" };
                   return undefined;
@@ -503,11 +516,14 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
         {bloqueo && (
           <DialogContent
             size="md"
-            title={bloqueo.codigo === "SIN_DISPONIBLE" ? "No hay disponible suficiente" : bloqueo.codigo === "CREDITO" ? "Supera el límite de crédito" : "Supera el saldo del acopio"}
+            title={bloqueo.codigo === "SIN_DISPONIBLE" ? "No hay disponible suficiente" : bloqueo.codigo === "SIN_STOCK" ? "No hay stock para entregar ahora" : bloqueo.codigo === "CREDITO" ? "Supera el límite de crédito" : "Supera el saldo del acopio"}
             footer={
               <>
                 <Button variant="secondary" onClick={() => setBloqueo(null)}>Volver</Button>
-                {bloqueo.codigo === "SIN_DISPONIBLE" && puede(usuario, "stock.forzarVenta") && (
+                {(bloqueo.codigo === "SIN_DISPONIBLE" || bloqueo.codigo === "SIN_STOCK") && (
+                  <Button onClick={() => confirmar(bloqueo.opts, true)}><Clock /> Dejarla pendiente de entrega</Button>
+                )}
+                {bloqueo.codigo === "SIN_DISPONIBLE" && !pendiente && puede(usuario, "stock.forzarVenta") && (
                   <Button variant="danger" onClick={() => confirmar({ ...bloqueo.opts, forzarSinDisponible: true })}><ShieldAlert /> Forzar venta (queda auditado)</Button>
                 )}
                 {(bloqueo.codigo === "SALDO_ACOPIO" || bloqueo.codigo === "IMPAGO") && puede(usuario, "acopios.autorizar") && (
@@ -526,7 +542,10 @@ export function NotaPedidoEditor({ borrador }: { borrador?: NotaPedido }) {
                   <Users /> Ver quién tiene pendiente
                 </Button>
               )}
-              {!puede(usuario, bloqueo.codigo === "SIN_DISPONIBLE" ? "stock.forzarVenta" : bloqueo.codigo === "CREDITO" ? "credito.autorizar" : "acopios.autorizar") && (
+              {(bloqueo.codigo === "SIN_DISPONIBLE" || bloqueo.codigo === "SIN_STOCK") && (
+                <p className="text-muted">Podés dejar la venta cargada como <b>pendiente de entrega</b>: queda confirmada (y facturada si corresponde) y se entrega cuando ingrese la mercadería.</p>
+              )}
+              {bloqueo.codigo !== "SIN_DISPONIBLE" && bloqueo.codigo !== "SIN_STOCK" && !puede(usuario, bloqueo.codigo === "CREDITO" ? "credito.autorizar" : "acopios.autorizar") && (
                 <p className="text-muted">Solo Dueño o Administración pueden autorizarlo. Pediles que confirmen esta nota de pedido.</p>
               )}
               {faltante.size > 0 && bloqueo.codigo === "SIN_DISPONIBLE" && <p className="text-[12px] text-muted">El disponible descuenta lo vendido o retirado de acopio que todavía no se entregó.</p>}

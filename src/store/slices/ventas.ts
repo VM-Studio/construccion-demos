@@ -67,6 +67,8 @@ export interface NotaPedidoInput {
   modalidadEntrega: ModalidadEntrega;
   fechaEntregaProgramada?: string;
   direccionEntrega?: string;
+  /** Persona / teléfono de contacto para la entrega (sale en el remito). */
+  contactoEntrega?: string;
   observaciones?: string;
   cotizacionId?: string;
   /** USD: la NP se presenta en dólares (importes en pesos; ver `monedaDocumento`). */
@@ -80,6 +82,11 @@ export interface OpcionesConfirmacion {
   autorizarSaldoNegativo?: boolean;
   /** Excepción de límite de crédito. */
   excepcionCredito?: boolean;
+  /**
+   * Venta (o presupuesto aceptado) de mercadería sin disponible: la NP queda pendiente de entrega
+   * hasta que ingrese. Cualquier vendedor puede hacerlo; solo vale si la NP queda pendiente de entrega.
+   */
+  pendienteSinStock?: boolean;
 }
 
 /** Lo que se hace en el mismo paso al confirmar la venta (como en el sistema anterior: guardar y listo). */
@@ -118,6 +125,7 @@ export interface AceptacionCotizacion {
   entrega: EntregaAceptacion;
   fechaEntregaProgramada?: string;
   direccionEntrega?: string;
+  contactoEntrega?: string;
   facturar: boolean;
   cobro?: { medios: MedioCobro[] };
   observaciones?: string;
@@ -215,6 +223,7 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
       modalidadEntrega: data.modalidadEntrega,
       fechaEntregaProgramada: data.fechaEntregaProgramada,
       direccionEntrega: data.direccionEntrega,
+      contactoEntrega: data.contactoEntrega?.trim() || undefined,
       observaciones: data.observaciones,
       moneda: monedaDocumento(c, data.moneda, data.origen === "ACOPIO"),
       tipoCambioAplicado: undefined,
@@ -244,9 +253,17 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
     const faltantes: string[] = [];
     for (const [pid, q] of porProducto) if (q > disponible(tx, pid, np.depositoId) + 1e-9) faltantes.push(pid);
     if (faltantes.length) {
-      if (!opts.forzarSinDisponible) throw new ErrorNegocio(mensajeSinDisponible(tx, faltantes[0], np.depositoId, porProducto.get(faltantes[0])!), "SIN_DISPONIBLE");
-      if (!puede(u, "stock.forzarVenta")) throw new ErrorNegocio("Solo Dueño o Administración pueden forzar una venta sin disponible.", "PERMISO");
-      tx.auditar("Forzó venta sin disponible", "NotaPedido", np.id, faltantes.map((p) => tx.find("productos", p)?.codigo).join(", "));
+      const codigos = faltantes.map((p) => tx.find("productos", p)?.codigo).join(", ");
+      if (opts.pendienteSinStock) {
+        // Se vende igual y queda pendiente de entrega hasta que ingrese la mercadería: el remito
+        // recién se puede hacer cuando haya stock físico (marcarHecho lo controla).
+        if (!np.pendienteEntrega) throw new ErrorNegocio("Para vender sin disponible la venta tiene que quedar pendiente de entrega.", "SIN_DISPONIBLE");
+        tx.auditar("Vendió sin disponible (pendiente de entrega)", "NotaPedido", np.id, codigos);
+      } else {
+        if (!opts.forzarSinDisponible) throw new ErrorNegocio(mensajeSinDisponible(tx, faltantes[0], np.depositoId, porProducto.get(faltantes[0])!), "SIN_DISPONIBLE");
+        if (!puede(u, "stock.forzarVenta")) throw new ErrorNegocio("Solo Dueño o Administración pueden forzar una venta sin disponible.", "PERMISO");
+        tx.auditar("Forzó venta sin disponible", "NotaPedido", np.id, codigos);
+      }
     }
     // Acopio: el retiro no puede superar el saldo.
     if (np.acopioId) {
@@ -896,7 +913,9 @@ export function crearSliceVentas(set: SetFn, get: GetFn) {
             pendienteEntrega: pendiente,
             modalidadEntrega: a.entrega === "ENVIO" ? "ENVIO" : "RETIRA",
             fechaEntregaProgramada: pendiente ? a.fechaEntregaProgramada : undefined,
-            direccionEntrega: a.entrega === "ENVIO" ? a.direccionEntrega : undefined,
+            // Envío sin dirección cargada: va a la dirección del cliente (la que se muestra de sugerencia).
+            direccionEntrega: a.entrega === "ENVIO" ? a.direccionEntrega?.trim() || [cli.direccion, cli.localidad].filter(Boolean).join(", ") || undefined : undefined,
+            contactoEntrega: a.contactoEntrega?.trim() || undefined,
             observaciones: [cot.observaciones, a.observaciones?.trim()].filter(Boolean).join(" · ") || undefined,
             cotizacionId: cot.id,
             moneda: cot.moneda,

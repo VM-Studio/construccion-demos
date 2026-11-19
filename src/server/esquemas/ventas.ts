@@ -28,6 +28,7 @@ const notaPedidoInput = z.object({
   modalidadEntrega,
   fechaEntregaProgramada: fechaOpcional,
   direccionEntrega: texto.optional(),
+  contactoEntrega: texto.optional(),
   observaciones: texto.optional(),
   cotizacionId: ref.optional(),
   moneda: moneda.optional(),
@@ -37,6 +38,7 @@ const opcionesConfirmacion = z.object({
   forzarSinDisponible: z.boolean().optional(),
   autorizarSaldoNegativo: z.boolean().optional(),
   excepcionCredito: z.boolean().optional(),
+  pendienteSinStock: z.boolean().optional(),
 });
 
 const cotizacionInput = z.object({
@@ -102,6 +104,7 @@ const aceptacion = z.object({
   entrega: z.enum(["RETIRA_AHORA", "RETIRA_DESPUES", "ENVIO"]),
   fechaEntregaProgramada: fechaOpcional,
   direccionEntrega: texto.optional(),
+  contactoEntrega: texto.optional(),
   facturar: z.boolean(),
   cobro: cobroVenta.optional(),
   observaciones: texto.optional(),

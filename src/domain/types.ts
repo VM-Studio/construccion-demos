@@ -402,6 +402,8 @@ export interface NotaPedido extends Entidad, ConTipoCambio {
   pendienteEntrega: boolean;
   modalidadEntrega: ModalidadEntrega;
   direccionEntrega?: string;
+  /** Persona y/o teléfono de contacto para la entrega (sale impreso en el remito). */
+  contactoEntrega?: string;
   fechaEntregaProgramada?: string;
   remitoIds: string[];
   comprobanteIds: string[];
@@ -523,6 +525,8 @@ export interface Remito extends Entidad {
   fecha: string;
   fechaEntrega?: string;
   direccionEntrega?: string;
+  /** Contacto para la entrega (copiado de la NP; sale impreso para el chofer). */
+  contactoEntrega?: string;
   items: ItemRemito[];
   cantidadTotal: number;
   pesoTotalKg: number;

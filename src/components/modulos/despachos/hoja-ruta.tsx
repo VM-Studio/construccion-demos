@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, CheckCheck, CheckCircle2, Play, Printer, Route, X }
 import { useStore } from "@/store";
 import { useDb, usePuede, useSucursalActiva } from "@/store/selectors";
 import type { HojaRuta } from "@/domain/types";
+import { contactoEntrega } from "@/domain/ventas";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -139,7 +140,17 @@ export function HojaRutaView() {
       {imprimir && (
         <PrintPreview open onOpenChange={(v) => !v && setImprimir(null)} titulo="Hoja de ruta">
           <PrintLayout titulo="Hoja de ruta" fecha={formatDate(imprimir.fecha)} subtitulo={<div className="text-[11px]"><b>Vehículo:</b> {db.vehiculos.find((v) => v.id === imprimir.vehiculoId)?.patente} · <b>Chofer:</b> {db.choferes.find((c) => c.id === imprimir.choferId)?.nombre}</div>} pie="Firmas de recepción en cada remito.">
-            <PrintTable head={["#", "Cliente", "Dirección", "Remito", "Kg", "Firma"]} rows={imprimir.despachoIds.map((id, i) => { const d = db.despachos.find((x) => x.id === id)!; return [i + 1, cli(d.clienteId)?.razonSocial, d.direccionEntrega, db.remitos.find((r) => r.id === d.remitoId)?.numero ?? "", formatNumber(pesoDespacho(d, db.productos), 0), ""]; })} />
+            <PrintTable
+              head={["#", "Cliente", "Dirección", "Contacto", "Remito", "Kg", "Firma"]}
+              rows={imprimir.despachoIds.map((id, i) => {
+                const d = db.despachos.find((x) => x.id === id)!;
+                const c = cli(d.clienteId);
+                const rem = db.remitos.find((r) => r.id === d.remitoId);
+                const np = db.notasPedido.find((n) => n.id === d.notaPedidoId);
+                const obra = db.obras.find((o) => o.id === (d.obraId ?? rem?.obraId));
+                return [i + 1, c?.razonSocial, d.direccionEntrega, contactoEntrega({ contacto: rem?.contactoEntrega ?? np?.contactoEntrega, obraContacto: obra?.contacto, clienteContacto: c?.contacto, telefonoCliente: c?.telefono }), rem?.numero ?? "", formatNumber(pesoDespacho(d, db.productos), 0), ""];
+              })}
+            />
           </PrintLayout>
         </PrintPreview>
       )}

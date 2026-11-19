@@ -2,6 +2,7 @@
 import { useDb } from "@/store/selectors";
 import type { Remito } from "@/domain/types";
 import { TIPO_REMITO_LABEL } from "@/domain/estados";
+import { contactoEntrega } from "@/domain/ventas";
 import { PrintLayout, PrintTable } from "@/components/shared/print-layout";
 import { formatDate, formatQty } from "@/lib/format";
 
@@ -12,6 +13,7 @@ export function RemitoDocumento({ remito: r, picking }: { remito: Remito; pickin
   const np = db.notasPedido.find((n) => n.id === r.notaPedidoId);
   const aco = db.acopios.find((a) => a.id === r.acopioId);
   const obra = db.obras.find((o) => o.id === r.obraId);
+  const contacto = contactoEntrega({ contacto: r.contactoEntrega ?? np?.contactoEntrega, obraContacto: obra?.contacto, clienteContacto: c?.contacto, telefonoCliente: c?.telefono });
   return (
     <PrintLayout
       titulo={picking ? "Orden de picking" : `Remito${r.tipo !== "VENTA" ? ` de ${TIPO_REMITO_LABEL[r.tipo].toLowerCase()}` : ""}`}
@@ -27,6 +29,7 @@ export function RemitoDocumento({ remito: r, picking }: { remito: Remito; pickin
           </div>
           <div>
             <b>Entrega:</b> {r.direccionEntrega ?? "Retira en mostrador"}<br />
+            <b>Contacto:</b> {contacto || "—"}<br />
             <b>Nota de pedido:</b> {np?.numero ?? "—"}{aco && <> · <b>Acopio:</b> {aco.numero}</>}<br />
             <b>Depósito:</b> {db.depositos.find((d) => d.id === r.depositoId)?.nombre} · {r.pesoTotalKg} kg
           </div>

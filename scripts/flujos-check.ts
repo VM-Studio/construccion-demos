@@ -365,6 +365,51 @@ console.log("\n10) Auditoría: anulaciones con devoluciones, recibos que pagan v
   }
 }
 
+console.log("\n11) Pedido de los dueños (11/2026): contacto en el remito, venta sin stock pendiente y descuento en la factura");
+{
+  const m = crearMotorMemoria(crearSeed(new Date()));
+  m.login("usr_lucas"); // vendedor: no puede forzar ventas
+  const dep = "dep_central";
+  const prod = m.db.productos.find((p) => p.activo && (posicionesDe(m.db).get(p.id)?.porDeposito[dep]?.disponible ?? 0) > 0)!;
+  const disp = posicionesDe(m.db).get(prod.id)!.porDeposito[dep].disponible;
+  const cant = disp + 25;
+  const cot = paso("Cotización rápida con más de lo que hay, descuento por línea 10 % y general 5 %", m.guardarCotizacion({ prospectoNombre: "Obra Gómez", prospectoTelefono: "11 4444-0000", sucursalId: "suc_central", circuito: 1, fecha: hoy, validezDias: 7, items: [{ id: "", productoId: prod.id, cantidad: cant, precioUnitario: 1000, costoUnitarioSnapshot: 0, descuentoPct: 10 }], descuentoPct: 5 }));
+  const aceptar = { cliente: { razonSocial: "Obra Gómez", condicionIVA: "CF" as const, telefono: "11 4444-0000" }, circuito: 1 as const, formaPago: "CONTADO" as const, entrega: "RETIRA_AHORA" as const, facturar: false };
+  paso("Se lo lleva ahora sin disponible: se bloquea", m.aceptarCotizacion(cot, aceptar), "SIN_DISPONIBLE");
+  const v = paso("Envío pendiente sin stock: se acepta igual (vendedor)", m.aceptarCotizacion(cot, { ...aceptar, entrega: "ENVIO", direccionEntrega: "Av. Siempreviva 742", contactoEntrega: "Carlos (capataz) 11 3333-2222", facturar: false, opciones: { pendienteSinStock: true } }));
+  const np = m.db.notasPedido.find((n) => n.id === v?.npId);
+  check("NP pendiente de entrega, marcada sin stock", !!np && np.pendienteEntrega && np.estado === "PENDIENTE" && !!np.forzadoSinDisponible);
+  check("NP guarda el contacto de entrega", np?.contactoEntrega === "Carlos (capataz) 11 3333-2222");
+  check("Disponible queda negativo (mercadería a reponer)", posicionesDe(m.db).get(prod.id)!.porDeposito[dep].disponible < 0);
+  check("El nuevo cliente quedó con el teléfono", m.db.clientes.find((c) => c.id === np?.clienteId)?.telefono === "11 4444-0000");
+  m.login("usr_felipe");
+  const f = paso("Administración factura la venta", m.facturarNotaPedido(np!.id));
+  m.login("usr_lucas");
+  const fac = m.db.comprobantes.find((c) => c.id === f?.id);
+  const esperadoNeto = Math.round(cant * 1000 * 0.9 * 0.95 * 100) / 100;
+  check("Factura con los dos descuentos aplicados", !!fac && Math.abs(fac.subtotal - esperadoNeto) < 0.01 && Math.abs(fac.total - Math.round(esperadoNeto * 1.21 * 100) / 100) < 0.02, `${fac?.subtotal} vs ${esperadoNeto}`);
+  check("Factura conserva el descuento de línea", fac?.items?.[0]?.descuentoPct === 10);
+  paso("Sin stock físico no se puede entregar todavía", m.retiroEnMostrador(np!.id), "SIN_STOCK");
+  m.login("usr_felipe");
+  paso("Ingresa la mercadería", m.crearAjuste({ depositoId: dep, items: [{ productoId: prod.id, cantidad: cant + 10, signo: 1, motivo: "SOBRANTE" }], observacion: "Reposición" }));
+  const rem = paso("Remito de la entrega", m.generarRemito(np!.id, { estado: "PICKING" }));
+  check("El remito lleva el contacto y la dirección", m.db.remitos.find((r) => r.id === rem?.id)?.contactoEntrega === "Carlos (capataz) 11 3333-2222" && m.db.remitos.find((r) => r.id === rem?.id)?.direccionEntrega === "Av. Siempreviva 742");
+  paso("Entregado", m.marcarRemitoHecho(rem.id));
+  check("NP entregada", m.db.notasPedido.find((n) => n.id === np!.id)?.estado === "ENTREGADA");
+  // Venta inmediata sin disponible desde la nota de pedido: el vendedor la deja pendiente.
+  m.login("usr_lucas");
+  const p2 = m.db.productos.find((p) => p.activo && p.id !== prod.id && (posicionesDe(m.db).get(p.id)?.porDeposito[dep]?.disponible ?? 0) > 0)!;
+  const venta = { clienteId: "cli_bencen", sucursalId: "suc_central", depositoId: dep, fecha: hoy, circuito: 2 as const, origen: "NUEVA" as const, formaPago: "CUENTA_CORRIENTE" as const, items: [{ productoId: p2.id, obraId: "obra_bencen_1", cantidad: posicionesDe(m.db).get(p2.id)!.porDeposito[dep].disponible + 5, precioUnitario: 100 }], descuentoPct: 0, pendienteEntrega: false, modalidadEntrega: "RETIRA" as const };
+  paso("Entrega inmediata sin disponible: se bloquea", m.crearVenta(venta, undefined, { retiraAhora: true }), "SIN_DISPONIBLE");
+  paso("Pedir 'pendiente sin stock' en una entrega inmediata no alcanza", m.crearVenta(venta, { pendienteSinStock: true }, { retiraAhora: true }), "SIN_DISPONIBLE");
+  paso("Sin elegir 'pendiente sin stock' la venta pendiente se bloquea", m.crearVenta({ ...venta, pendienteEntrega: true }, undefined, {}), "SIN_DISPONIBLE");
+  const v2 = paso("Pendiente de entrega sin stock: se confirma", m.crearVenta({ ...venta, pendienteEntrega: true }, { pendienteSinStock: true }, {}));
+  check("Queda pendiente", m.db.notasPedido.find((n) => n.id === v2?.npId)?.pendienteEntrega === true);
+  m.login("usr_felipe");
+  const integ = verificarIntegridad(m.db).chequeos;
+  check("Integridad sin errores", integ.every((c) => c.ok), integ.filter((c) => !c.ok).map((c) => `${c.nombre}: ${c.errores.slice(0, 2).join("; ")}`).join(" | "));
+}
+
 if (fallas) {
   console.error(`\n✘ ${fallas} verificaciones fallaron.\n`);
   process.exit(1);

@@ -12,7 +12,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Calculator, Check, Download, Eye, FileText, Plus, Save, Trash2, X, Zap } from "lucide-react";
 import { useStore } from "@/store";
-import { useDb, usePuede, useSucursalActiva, useUnidadNegocio, useUsuario, useVeCircuito2 } from "@/store/selectors";
+import { posicionEn, useDb, usePosiciones, usePuede, useSucursalActiva, useUnidadNegocio, useUsuario, useVeCircuito2 } from "@/store/selectors";
 import type { Circuito, CondicionIVA, Cotizacion, EstadoInicial, ItemVenta, Moneda, Producto } from "@/domain/types";
 import { precioLista } from "@/domain/precios";
 import { calcularTotales } from "@/domain/ventas";
@@ -343,7 +343,7 @@ function CotizacionDialog({ cot, rapida: rapidaInicial, clienteInicial, onClose,
   const [items, setItems] = React.useState<LineaCot[]>(cot?.items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId, cantidad: i.cantidad, precio: i.precioUnitario, descuentoPct: i.descuentoPct, unidadVenta: i.unidadVenta })) ?? []);
   const [moneda, setMoneda] = React.useState<Moneda>(cot?.moneda ?? "ARS");
   const [calc, setCalc] = React.useState(false);
-  const [guardando, setGuardando] = React.useState<"BORRADOR" | "PENDIENTE" | null>(null);
+  const [guardando, setGuardando] = React.useState<"BORRADOR" | "PENDIENTE" | "ACEPTAR" | null>(null);
   const { valor: dolar } = useTipoCambio();
   const enUSD = !!cliente?.facturaEnUSD && moneda === "USD";
   const editable = !cot || cot.estado === "BORRADOR" || cot.estado === "ENVIADA" || cot.estado === "PENDIENTE";
@@ -359,11 +359,12 @@ function CotizacionDialog({ cot, rapida: rapidaInicial, clienteInicial, onClose,
     setObraId("");
     repreciar(c?.listaPreciosId ?? "lst_gen");
   };
-  const guardar = async (estado: "BORRADOR" | "PENDIENTE") => {
+  /** `aceptar`: guarda lo que está en pantalla (descuentos, cantidades, precios) y recién ahí abre "Aceptar". */
+  const guardar = async (estado: "BORRADOR" | "PENDIENTE", aceptar = false) => {
     if (rapida && !prospecto.nombre.trim()) return toast.error("Cargá el nombre de quien consulta.");
     if (!rapida && !clienteId) return toast.error("Elegí un cliente.");
     if (!items.length) return toast.error("Agregá al menos un artículo.");
-    setGuardando(estado);
+    setGuardando(aceptar ? "ACEPTAR" : estado);
     const its: ItemVenta[] = items.map((i) => ({ id: i.id, productoId: i.productoId, obraId: i.obraId ?? (obraId || undefined), cantidad: i.cantidad, precioUnitario: i.precio ?? 0, costoUnitarioSnapshot: 0, descuentoPct: i.descuentoPct ?? 0, unidadVenta: i.unidadVenta }));
     const r = await useStore.getState().guardarCotizacion(
       {
@@ -382,6 +383,10 @@ function CotizacionDialog({ cot, rapida: rapidaInicial, clienteInicial, onClose,
     );
     setGuardando(null);
     if (!r.ok) return toast.error(r.error);
+    if (aceptar) {
+      const guardada = obtenerDb().cotizaciones.find((c) => c.id === r.data);
+      if (guardada) return onAceptar(guardada);
+    }
     onClose();
   };
   const agregarDeCalculadora = (lineas: { productoId: string; barras: number }[]) => {
@@ -411,7 +416,7 @@ function CotizacionDialog({ cot, rapida: rapidaInicial, clienteInicial, onClose,
             <>
               <Button variant="secondary" onClick={onClose}>Cancelar</Button>
               {(!cot || cot.estado === "BORRADOR") && <Button variant="secondary" loading={guardando === "BORRADOR"} onClick={() => guardar("BORRADOR")}><Save /> Guardar borrador</Button>}
-              {actual && actual.estado !== "BORRADOR" && puede(usuario, "ventas.confirmar") && <Button variant="secondary" onClick={() => onAceptar(actual)}><Check /> Aceptar</Button>}
+              {puede(usuario, "ventas.confirmar") && <Button variant="secondary" loading={guardando === "ACEPTAR"} disabled={!!guardando} onClick={() => guardar("PENDIENTE", true)}><Check /> {cot ? "Guardar y aceptar" : "Crear y aceptar"}</Button>}
               <Button loading={guardando === "PENDIENTE"} onClick={() => guardar("PENDIENTE")}>{cot && cot.estado !== "BORRADOR" ? "Guardar cambios" : "Crear"}</Button>
             </>
           ) : (
@@ -599,6 +604,7 @@ export function AceptarCotizacionDialog({ cot, onClose }: { cot: Cotizacion; onC
   const [entrega, setEntrega] = React.useState<"RETIRA_AHORA" | "RETIRA_DESPUES" | "ENVIO">("RETIRA_AHORA");
   const [fechaEntrega, setFechaEntrega] = React.useState("");
   const [direccion, setDireccion] = React.useState("");
+  const [contacto, setContacto] = React.useState("");
   const [facturar, setFacturar] = React.useState(puedeFacturar);
   const ivaPct = circuito === 1 ? db.config.ivaPct : 0;
   const t = calcularTotales(cot.items.map((i) => ({ cantidad: i.cantidad, precioUnitario: i.precioUnitario, descuentoPct: i.descuentoPct })), cot.descuentoPct, ivaPct);
@@ -614,20 +620,32 @@ export function AceptarCotizacionDialog({ cot, onClose }: { cot: Cotizacion; onC
     setMedios((ms) => (ms.length === 1 && ms[0].medio === "EFECTIVO" && ms[0].moneda !== "USD" ? [{ ...ms[0], importe: t.total }] : ms));
   }, [t.total]);
   const cobrado = medios.reduce((a, m) => a + pesosDe(m), 0);
-  const enviar = async (opciones?: { forzarSinDisponible?: boolean; excepcionCredito?: boolean }) => {
+  // Artículos sin disponible en el depósito de la sucursal: la venta tiene que quedar pendiente de entrega.
+  const posiciones = usePosiciones();
+  const depositoVenta = db.sucursales.find((s) => s.id === cot.sucursalId)?.depositoId ?? null;
+  const sinStock = (() => {
+    const q = new Map<string, number>();
+    for (const i of cot.items) q.set(i.productoId, (q.get(i.productoId) ?? 0) + i.cantidad);
+    return [...q].filter(([pid, c]) => c > posicionEn(posiciones.get(pid), depositoVenta).disponible + 1e-9).map(([pid]) => db.productos.find((p) => p.id === pid)?.nombre ?? pid);
+  })();
+  /** `ent`: entrega a usar; permite reintentar con otra entrega sin esperar el render (ej. "Dejarla pendiente de entrega"). */
+  const enviar = async (opciones?: { forzarSinDisponible?: boolean; excepcionCredito?: boolean }, ent: typeof entrega = entrega) => {
     if (editarDatos && !datos.razonSocial.trim()) return toast.error("Cargá el nombre o razón social.");
+    if (ent !== entrega) setEntrega(ent);
     setCargando(true);
     const r = await useStore.getState().aceptarCotizacion(cot.id, {
       cliente: editarDatos ? { razonSocial: datos.razonSocial, cuit: datos.cuit || undefined, condicionIVA: datos.condicionIVA, tipo: datos.tipo, telefono: datos.telefono || undefined } : undefined,
       circuito,
       formaPago,
-      entrega,
-      fechaEntregaProgramada: entrega !== "RETIRA_AHORA" && fechaEntrega ? new Date(`${fechaEntrega}T12:00:00`).toISOString() : undefined,
-      direccionEntrega: entrega === "ENVIO" ? direccion || undefined : undefined,
+      entrega: ent,
+      fechaEntregaProgramada: ent !== "RETIRA_AHORA" && fechaEntrega ? new Date(`${fechaEntrega}T12:00:00`).toISOString() : undefined,
+      direccionEntrega: ent === "ENVIO" ? direccion || undefined : undefined,
+      contactoEntrega: ent !== "RETIRA_AHORA" ? contacto.trim() || undefined : undefined,
       facturar,
       cobro: cobrar ? { medios: mediosParaEnviar(medios) } : undefined,
       observaciones: obs || undefined,
-      opciones,
+      // Si queda pendiente de entrega se vende aunque hoy no haya stock: se entrega cuando ingrese.
+      opciones: { ...opciones, pendienteSinStock: ent !== "RETIRA_AHORA" || undefined },
     });
     setCargando(false);
     if (!r.ok) {
@@ -716,11 +734,22 @@ export function AceptarCotizacionDialog({ cot, onClose }: { cot: Cotizacion; onC
             <FormField label="Entrega" className="sm:col-span-2">
               <Segmented value={entrega} onChange={setEntrega} options={[{ value: "RETIRA_AHORA", label: "Se lo lleva ahora" }, { value: "RETIRA_DESPUES", label: "Retira después" }, { value: "ENVIO", label: "Envío" }]} />
             </FormField>
+            {sinStock.length > 0 && (
+              <p className={cn("rounded-control border p-2.5 text-[12px] sm:col-span-2", entrega === "RETIRA_AHORA" ? "border-warning/40 bg-warning-soft text-ink" : "border-border text-muted")}>
+                Sin disponible ahora: {sinStock.join(", ")}.{" "}
+                {entrega === "RETIRA_AHORA" ? "Elegí \"Retira después\" o \"Envío\" para dejar la venta pendiente de entrega hasta que ingrese la mercadería." : "La venta queda pendiente de entrega hasta que ingrese la mercadería."}
+              </p>
+            )}
             {entrega !== "RETIRA_AHORA" && (
               <FormField label="Fecha de entrega" htmlFor="ac-fe"><Input id="ac-fe" type="date" value={fechaEntrega} onChange={(e) => setFechaEntrega(e.target.value)} /></FormField>
             )}
             {entrega === "ENVIO" && (
-              <FormField label="Dirección de entrega" htmlFor="ac-dir"><Input id="ac-dir" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder={cli?.direccion} /></FormField>
+              <FormField label="Dirección de entrega" htmlFor="ac-dir"><Input id="ac-dir" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder={[cli?.direccion, cli?.localidad].filter(Boolean).join(", ") || undefined} /></FormField>
+            )}
+            {entrega !== "RETIRA_AHORA" && (
+              <FormField label="Contacto para la entrega" htmlFor="ac-con" hint={`Sale impreso en el remito.${(editarDatos ? datos.telefono : cli?.telefono) ? ` Si queda vacío sale el teléfono del cliente (${editarDatos ? datos.telefono : cli?.telefono}).` : ""}`} className={entrega === "ENVIO" ? "sm:col-span-2" : undefined}>
+                <Input id="ac-con" value={contacto} onChange={(e) => setContacto(e.target.value)} placeholder="Nombre y teléfono de quien recibe" />
+              </FormField>
             )}
           </div>
           {puedeFacturar && (
@@ -749,7 +778,7 @@ export function AceptarCotizacionDialog({ cot, onClose }: { cot: Cotizacion; onC
             <div className="rounded-control border border-danger/30 bg-danger-soft p-3 text-[13px] text-danger">
               <p>{bloqueo.error}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {bloqueo.codigo === "SIN_STOCK" && <Button size="sm" variant="secondary" onClick={() => { setEntrega("RETIRA_DESPUES"); setBloqueo(null); }}>Dejarlo pendiente de entrega</Button>}
+                {(bloqueo.codigo === "SIN_STOCK" || bloqueo.codigo === "SIN_DISPONIBLE") && <Button size="sm" variant="secondary" onClick={() => { setBloqueo(null); enviar(undefined, "RETIRA_DESPUES"); }}>Dejarla pendiente de entrega</Button>}
                 {bloqueo.codigo === "SIN_DISPONIBLE" && puede(usuario, "stock.forzarVenta") && <Button size="sm" variant="danger" onClick={() => enviar({ forzarSinDisponible: true })}>Vender igual (queda registrado)</Button>}
                 {bloqueo.codigo === "CREDITO" && puede(usuario, "credito.autorizar") && <Button size="sm" variant="danger" onClick={() => enviar({ excepcionCredito: true })}>Autorizar excepción de crédito</Button>}
               </div>

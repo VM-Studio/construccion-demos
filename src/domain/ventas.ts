@@ -101,3 +101,15 @@ export function porcentajeEntregado(np: Pick<Pedido, "items">): number {
   const ent = np.items.reduce((a, i) => a + Math.min(i.cantidad, i.entregados), 0);
   return total > 0 ? Math.min(1, ent / total) : 1;
 }
+
+/**
+ * Contacto para la entrega que sale impreso en el remito y la hoja de ruta: el cargado en la venta
+ * (persona y/o teléfono) o, si no hay, el contacto de la obra y el teléfono del cliente.
+ */
+export function contactoEntrega(o: { contacto?: string; obraContacto?: string; clienteContacto?: string; telefonoCliente?: string }): string {
+  const explicito = o.contacto?.trim();
+  if (explicito) return explicito;
+  const tel = o.telefonoCliente?.trim();
+  const obra = o.obraContacto?.trim() || o.clienteContacto?.trim();
+  return [obra, tel && !(obra ?? "").includes(tel) ? `Tel. ${tel}` : ""].filter(Boolean).join(" · ");
+}

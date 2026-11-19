@@ -216,6 +216,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                 {filasPend.some((f) => f.despacho) ? `Despacho asignado: ${[...new Set(filasPend.filter((f) => f.despacho).map((f) => f.despacho!.numero))].join(", ")}` : "Sin despacho programado"}
                 {np.fechaEntregaProgramada && ` · programada para el ${formatDate(np.fechaEntregaProgramada)}`}
                 {np.direccionEntrega && ` · ${np.direccionEntrega}`}
+                {np.contactoEntrega && ` · Contacto: ${np.contactoEntrega}`}
               </p>
             )}
           </TabsContent>
@@ -314,7 +315,7 @@ export function NotaPedidoDetalle({ np }: { np: NotaPedido }) {
                 </button>
               )}
               {np.cotizacionId && <p className="text-[12px] text-muted">Desde la cotización {db.cotizaciones.find((c) => c.id === np.cotizacionId)?.numero}</p>}
-              {np.forzadoSinDisponible && <Badge variant="danger">Venta forzada sin disponible</Badge>}
+              {np.forzadoSinDisponible && <Badge variant="warning">{np.pendienteEntrega ? "Vendida sin stock · se entrega cuando ingrese" : "Confirmada sin stock disponible"}</Badge>}
               {np.autorizadoSaldoNegativo && <Badge variant="danger">Retiro autorizado sin saldo</Badge>}
               {np.observaciones && <p className="text-[12px] text-muted">{np.observaciones}</p>}
             </CardContent>

@@ -7,6 +7,7 @@ import { ArrowLeft, Calendar, Check, ClipboardList, Eye, History, List, MessageS
 import { useStore } from "@/store";
 import { useDb, usePosiciones, usePuede } from "@/store/selectors";
 import { TIPO_REMITO_LABEL } from "@/domain/estados";
+import { contactoEntrega } from "@/domain/ventas";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CircuitoBadge } from "@/components/shared/circuito-badge";
@@ -196,7 +197,7 @@ export function RemitoDetalle({ id }: { id: string }) {
               <dl className="space-y-2">
                 <div><dt className="text-muted">Dirección de entrega</dt><dd>{r.direccionEntrega ?? "Retira en mostrador"}</dd></div>
                 <div><dt className="text-muted">Obra</dt><dd>{obra ? `${obra.nombre} · ${[obra.direccion, obra.localidad].filter(Boolean).join(", ")}` : "—"}</dd></div>
-                <div><dt className="text-muted">Contacto en obra</dt><dd>{obra?.contacto ?? c?.contacto ?? c?.telefono ?? "—"}</dd></div>
+                <div><dt className="text-muted">Contacto para la entrega</dt><dd>{contactoEntrega({ contacto: r.contactoEntrega ?? db.notasPedido.find((n) => n.id === r.notaPedidoId)?.contactoEntrega, obraContacto: obra?.contacto, clienteContacto: c?.contacto, telefonoCliente: c?.telefono }) || "—"}</dd></div>
                 <div><dt className="text-muted">Horario</dt><dd>Lunes a viernes de 8 a 17 h</dd></div>
               </dl>
             </Card>

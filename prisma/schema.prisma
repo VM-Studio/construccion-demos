@@ -756,6 +756,7 @@ model NotaPedido {
   pendienteEntrega        Boolean
   modalidadEntrega        ModalidadEntrega
   direccionEntrega        String?
+  contactoEntrega         String?
   fechaEntregaProgramada  DateTime?
   remitoIds               String[]
   comprobanteIds          String[]
@@ -858,6 +859,7 @@ model Remito {
   fecha            DateTime
   fechaEntrega     DateTime?
   direccionEntrega String?
+  contactoEntrega  String?
   items            ItemRemito[]
   cantidadTotal    Decimal      @db.Decimal(14, 3)
   pesoTotalKg      Decimal      @db.Decimal(14, 3)

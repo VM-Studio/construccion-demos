@@ -3,6 +3,8 @@
 import { useDb } from "@/store/selectors";
 import type { Cobranza, Comprobante, PagoProveedor, Unidad } from "@/domain/types";
 import { presentarLinea } from "@/lib/lineas";
+import { importeLinea } from "@/domain/ventas";
+import { round2 } from "@/lib/utils";
 import { urlQrArca } from "@/lib/arca-qr";
 import { QrArca } from "@/components/shared/qr-arca";
 import { PrintLayout, PrintTable } from "@/components/shared/print-layout";
@@ -119,6 +121,11 @@ export function ComprobanteDocumento({ comprobante: c }: { comprobante: Comproba
   const leyenda = c.estado === "ANULADO" ? "ANULADO" : c.circuito === 2 ? "Documento interno" : autorizado ? "Factura electrónica" : "Pendiente de autorización ARCA";
   const items: { productoId: string; cantidad: number; precioUnitario: number; descuentoPct?: number; unidadVenta?: Unidad }[] = c.items ?? [];
   const cli = db.clientes.find((x) => x.id === c.clienteId);
+  // Descuento general de la venta: las líneas suman más que el neto facturado.
+  const sumaLineas = round2(items.reduce((a, i) => a + importeLinea(i), 0));
+  const descuentoGeneral = items.length ? round2(sumaLineas - c.subtotal) : 0;
+  const pctGeneral = pedido?.descuentoPct || (sumaLineas ? (descuentoGeneral / sumaLineas) * 100 : 0);
+  const conDescuento = descuentoGeneral > 0.009 && (!!pedido?.descuentoPct || descuentoGeneral >= Math.max(1, sumaLineas * 0.001));
   const qr = autorizado && c.cae && c.arcaNumero && c.arcaPuntoVenta && c.arcaTipo
     ? urlQrArca({ fecha: c.fecha, cuitEmisor: db.config.empresa.cuit, puntoVenta: c.arcaPuntoVenta, tipo: c.arcaTipo, numero: c.arcaNumero, importe: c.total, ...docReceptor(c.compradorDoc || cli?.cuit), cae: c.cae })
     : null;
@@ -146,13 +153,19 @@ export function ComprobanteDocumento({ comprobante: c }: { comprobante: Comproba
           rows={items.map((i) => {
             const p = prod(i.productoId);
             const l = presentarLinea(i, p);
-            return [p?.codigo, p?.nombre, l.texto, formatMoney(l.precio), `${i.descuentoPct ?? 0} %`, formatMoney(i.cantidad * i.precioUnitario * (1 - (i.descuentoPct ?? 0) / 100))];
+            return [p?.codigo, p?.nombre, l.texto, formatMoney(l.precio), `${i.descuentoPct ?? 0} %`, formatMoney(importeLinea(i))];
           })}
         />
       ) : (
         <p>{c.observaciones}</p>
       )}
       <div className="mt-4 ml-auto w-64 space-y-1 text-[12px]">
+        {conDescuento && (
+          <>
+            <div className="flex justify-between"><span>Subtotal</span><span className="tnum">{formatMoney(sumaLineas)}</span></div>
+            <div className="flex justify-between"><span>Descuento {formatNumber(pctGeneral, pctGeneral % 1 ? 2 : 0)} %</span><span className="tnum">− {formatMoney(descuentoGeneral)}</span></div>
+          </>
+        )}
         <div className="flex justify-between"><span>Neto gravado</span><span className="tnum">{formatMoney(c.subtotal)}</span></div>
         {c.iva > 0 && <div className="flex justify-between"><span>IVA 21 %</span><span className="tnum">{formatMoney(c.iva)}</span></div>}
         <div className="flex justify-between border-t border-ink pt-1 text-[13px] font-semibold"><span>Total</span><span className="tnum">{formatMoney(c.total)}</span></div>
